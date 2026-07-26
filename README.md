@@ -1,26 +1,114 @@
 # ESAPI Registration Quantitative Audit (ESAPI_RegistrationQA)
 
-Professional C#.NET / WPF plugin script developed for the **Varian Eclipse Treatment Planning System** (ESAPI and VMS.IRS architecture) to automate the quantitative audit and quality assurance of image registrations.
+Plugin C# / WPF para el **Varian Eclipse Treatment Planning System** (arquitectura ESAPI y
+VMS.IRS) que automatiza la auditoría cuantitativa de registros de imagen.
 
-## 🌟 Key Features
-* **Multi-Registration Support:** Automatically detects and parses Rigid, Deformable (DIR), and Identity registrations (`MIRSRegistration`) from `VMS.IRS`.
-* **Intensity Similarity Metrics:** Evaluates Normalized Mutual Information (NMI), Normalized Cross Correlation (NCC), and Sum of Squared Differences (SSD) directly from image voxel buffers.
-* **Topological & Biomechanical Analysis:** Computes Jacobian determinant folding ($|J| \le 0$), maximum displacement vectors, and vector field smoothness (AAPM TG-233 compliance).
-* **Anatomical Structure QA:** Automatically evaluates volumetric overlap (Dice Similarity Coefficient - $DSC$) and surface distance (95% Hausdorff Distance - $HD95$) from active patient `StructureSets`.
-* **Site-Specific Clinical Profiles:** Customizable anatomical threshold profiles (ART Head & Neck, Brain/SRS, Pelvis/Prostate, Thorax/Lung) with real-time dynamic threshold evaluation.
-* **Clinical Advisories Engine:** Automated rule-based system generating AAPM guideline warnings and clinical recommendations.
-* **Professional Reporting:** Export audit findings into a clean, print-ready A4 HTML technical report complete with status badges and signature lines.
+## Qué mide realmente
 
-## 🛠️ Requirements
-* Varian Eclipse TPS (v15.5 / v16.1 / v18.0 compatible)
+Esta sección es deliberadamente explícita sobre el alcance. El plugin genera un reporte
+destinado a ser firmado por un físico médico, y por tanto **nunca sustituye una métrica que
+no pudo medir por un valor plausible**: la marca como *N/A* con el motivo concreto, visible
+tanto en la interfaz como en el reporte.
+
+| Métrica | Estado | Cómo se obtiene |
+|---|---|---|
+| **NCC** | ✅ Medida | Correlación de Pearson sobre pares de vóxeles emparejados aplicando la transformación del registro. Con signo, rango [-1, 1]. |
+| **NMI** | ✅ Medida | NMI de Studholme, `(H(A)+H(B))/H(A,B)`, sobre el histograma conjunto real. El número de bins se adapta al tamaño de la muestra. |
+| **SSD** | ✅ Medida | Diferencia cuadrática media normalizada por el cuadrado del rango robusto (P1–P99) de la imagen de referencia. Adimensional y comparable entre modalidades. |
+| **Traslaciones y ángulos de Euler** | ✅ Medidos | De la matriz del registro, con detección automática de la convención (traslación en fila o en columna), verificación de ortonormalidad y tratamiento explícito del bloqueo de cardán. |
+| **Desplazamiento máximo** | ✅ Medido (registro rígido) | Máximo exacto sobre los ocho vértices del FOV. |
+| **Jacobiano < 0** | ✅ Exacto por definición (registro rígido) | 0 % — una transformación rígida tiene \|J\| = 1 en todo punto. |
+| **Suavidad** | ✅ Exacta por definición (registro rígido) | 1.0 — el gradiente del campo es constante. |
+| **Jacobiano, desplazamiento y suavidad** | ❌ **N/A en registros deformables** | Requieren recorrer el campo de vectores de deformación (DVF), que la API de scripting de Varian no expone. |
+| **DSC** | ❌ **N/A** | Requiere rasterizar un par de contornos emparejado por identificador sobre una rejilla común. No implementado. |
+| **HD95** | ❌ **N/A** | Ídem. |
+
+En registros **deformables**, si la API expone un método de mapeo punto a punto
+(`TransformPoint` o equivalente), las métricas de intensidad se calculan atravesando el
+campo de deformación. Si no lo expone, se marcan como N/A: aplicar sólo la componente
+lineal describiría una transformación distinta de la que se está auditando.
+
+## Características
+
+* **Emparejamiento espacial correcto:** los vóxeles se comparan tras llevarlos a coordenadas
+  de paciente y aplicar la transformación, con interpolación trilineal. Origen, espaciado y
+  cosenos directores se respetan, de modo que un CT de planificación y un CBCT con distinto
+  FOV se comparan de forma válida.
+* **Escalado a HU:** la rampa vóxel→display se determina sondeando la API y verificando su
+  linealidad, en lugar de asumir un rango fijo.
+* **Perfiles anatómicos:** ART Head & Neck, Brain/SRS, Pelvis/Prostate y Thorax/Lung.
+  Cambiar de perfil sólo reclasifica los valores ya medidos; no vuelve a leer la imagen.
+* **Motor de avisos ligado al perfil:** todos los umbrales de los avisos salen del perfil
+  activo, de modo que la tabla y las recomendaciones no pueden contradecirse.
+* **Diagnóstico visible:** cada propiedad de la API que no se pudo leer queda registrada con
+  la operación y la excepción concretas, en una pestaña propia y en el reporte.
+* **Reporte HTML A4:** con escape HTML, formato numérico en cultura invariante, sección de
+  procedencia del dato y versión del ensamblado que lo generó.
+
+## Requisitos
+
+* Varian Eclipse TPS (v15.5 / v16.1 / v18.0)
 * .NET Framework 4.8
-* Eclipse Automation & ESAPI Research/Clinical license
+* Licencia de scripting ESAPI (investigación o clínica)
 
-## 🚀 Installation & Usage
-1. Compile the solution using Visual Studio (x64 platform target).
-2. Place the compiled assembly or script into your application's scripts directory (or System Scripts).
-3. Launch from **Contouring / Registration > Tools > Scripts**.
+## Compilación
 
-## 📄 License
+Los ensamblados de Varian se localizan mediante la propiedad `VarianScriptingPath`, cuyo
+valor por defecto es
+`C:\Program Files (x86)\Varian\ProductLine\Workspaces\VMS.IRS.Workspace`.
 
-This project is open-source and available under the [MIT License](LICENSE).
+Para una ruta distinta, cualquiera de estas tres opciones:
+
+```powershell
+# variable de entorno
+$env:VarianScriptingPath = "D:\Program Files (x86)\Varian\...\VMS.IRS.Workspace"
+
+# o por línea de comandos
+msbuild ESAPI_RegistrationQA.csproj /p:VarianScriptingPath="D:\..."
+```
+
+O bien un `Directory.Build.props` junto a la solución (conviene no versionarlo):
+
+```xml
+<Project>
+  <PropertyGroup>
+    <VarianScriptingPath>D:\Program Files (x86)\Varian\...\VMS.IRS.Workspace</VarianScriptingPath>
+  </PropertyGroup>
+</Project>
+```
+
+El proyecto compila como **x64**, que es lo que requiere Eclipse 15.6 y posteriores.
+
+## Uso
+
+1. Compilar en Release.
+2. Copiar el ensamblado al directorio de scripts de la aplicación (o a System Scripts).
+3. Lanzar desde **Contouring / Registration → Tools → Scripts**.
+
+## Interpretación del veredicto
+
+El estado global distingue cinco situaciones, y nunca declara un registro verificado si
+quedaron métricas sin evaluar:
+
+| Veredicto | Significado |
+|---|---|
+| **CONFORME** | Todas las métricas se midieron y todas cumplen el perfil. |
+| **CONFORME PARCIAL** | Lo medido cumple, pero hubo métricas que no se pudieron medir. La verificación no es completa. |
+| **REVISIÓN REQUERIDA** | Alguna métrica cayó en zona de atención (amarillo). |
+| **NO CONFORME** | Alguna métrica incumple el criterio del perfil (rojo). |
+| **SIN EVIDENCIA** | No se pudo evaluar ninguna métrica. Consulte la pestaña de diagnóstico. |
+
+## Limitaciones conocidas
+
+* DSC y HD95 no están implementados (ver tabla de alcance).
+* Las métricas topológicas de registros deformables dependen del DVF, no accesible desde la
+  API de scripting.
+* El cálculo se ejecuta de forma síncrona en el hilo de interfaz. El muestreo está acotado a
+  ~2·10⁶ pares de vóxeles para mantener el tiempo de respuesta, y la resolución efectiva
+  resultante se reporta junto a las métricas.
+* La similitud se calcula sobre volúmenes submuestreados; el reporte indica la resolución
+  efectiva empleada.
+
+## Licencia
+
+[MIT](LICENSE).
