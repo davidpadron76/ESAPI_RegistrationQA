@@ -6,7 +6,6 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using Microsoft.Win32;
-using VMS.IRS.Scripting;
 using ESAPI_RegistrationQA.Models;
 using ESAPI_RegistrationQA.Services;
 
@@ -14,7 +13,18 @@ namespace ESAPI_RegistrationQA.ViewModels
 {
     public class MainViewModel : INotifyPropertyChanged
     {
-        private readonly ScriptContext _context;
+        /// <summary>
+        /// The Eclipse script context, held as <c>dynamic</c>.
+        ///
+        /// It is deliberately untyped here so that this class does not depend on the Varian
+        /// assemblies at all: the only file that names <c>ScriptContext</c> is the script
+        /// entry point, which must. Everything the analyzer reads from the context already
+        /// goes through <see cref="Dyn"/>, so a static type would buy nothing and would add
+        /// a compile-time dependency on VMS.IRS.Scripting resolving correctly from this
+        /// namespace.
+        /// </summary>
+        private readonly dynamic _context;
+
         private readonly DiagnosticLog _log = new DiagnosticLog();
 
         /// <summary>
@@ -29,7 +39,11 @@ namespace ESAPI_RegistrationQA.ViewModels
         private RegistrationContext _regContext;
         private ThresholdProfile _activeProfile;
 
-        public MainViewModel(ScriptContext context)
+        /// <param name="context">
+        /// The Eclipse <c>ScriptContext</c>. Typed as <see cref="object"/> so this assembly's
+        /// view layer stays independent of the Varian scripting assemblies.
+        /// </param>
+        public MainViewModel(object context)
         {
             _context = context ?? throw new ArgumentNullException(nameof(context));
 

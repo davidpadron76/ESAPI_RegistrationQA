@@ -6,15 +6,37 @@
     Path to the Varian assemblies.
 
     This used to be hard-coded as an absolute path in every <HintPath>, so the project only
-    built on one specific machine. It is now a property with a default value that can be
-    overridden without touching this file, in three ways:
-      1. a Directory.Build.props next to the solution (unversioned), or
-      2. the VarianScriptingPath environment variable, or
-      3. passing /p:VarianScriptingPath=... to MSBuild.
+    built on the one machine where Varian happened to be installed on that drive.
+
+    It can be set explicitly in three ways, in order of precedence:
+      1. /p:VarianScriptingPath=... on the MSBuild command line,
+      2. a Directory.Build.props next to the solution (best left unversioned),
+      3. the VarianScriptingPath environment variable.
+
+    If none is set, the usual install locations are probed and the first one that actually
+    contains VMS.IRS.Scripting.dll wins. Probing beats a single hard-coded default: an
+    unresolved reference does not fail loudly, it makes ScriptContext vanish and surfaces as
+    a confusing CS0246 in whichever file happens to name the type.
   -->
   <PropertyGroup>
     <VarianScriptingPath Condition=" '$(VarianScriptingPath)' == '' AND '$(VARIANSCRIPTINGPATH)' != '' ">$(VARIANSCRIPTINGPATH)</VarianScriptingPath>
-    <VarianScriptingPath Condition=" '$(VarianScriptingPath)' == '' ">C:\Program Files (x86)\Varian\ProductLine\Workspaces\VMS.IRS.Workspace</VarianScriptingPath>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(VarianScriptingPath)' == '' ">
+    <_VarianProbe1>D:\Program Files (x86)\Varian\ProductLine\Workspaces\VMS.IRS.Workspace</_VarianProbe1>
+    <_VarianProbe2>C:\Program Files (x86)\Varian\ProductLine\Workspaces\VMS.IRS.Workspace</_VarianProbe2>
+    <_VarianProbe3>$(ProgramFiles) (x86)\Varian\ProductLine\Workspaces\VMS.IRS.Workspace</_VarianProbe3>
+    <_VarianProbe4>D:\Program Files\Varian\ProductLine\Workspaces\VMS.IRS.Workspace</_VarianProbe4>
+    <_VarianProbe5>C:\Program Files\Varian\ProductLine\Workspaces\VMS.IRS.Workspace</_VarianProbe5>
+
+    <VarianScriptingPath Condition=" Exists('$(_VarianProbe1)\VMS.IRS.Scripting.dll') ">$(_VarianProbe1)</VarianScriptingPath>
+    <VarianScriptingPath Condition=" '$(VarianScriptingPath)' == '' AND Exists('$(_VarianProbe2)\VMS.IRS.Scripting.dll') ">$(_VarianProbe2)</VarianScriptingPath>
+    <VarianScriptingPath Condition=" '$(VarianScriptingPath)' == '' AND Exists('$(_VarianProbe3)\VMS.IRS.Scripting.dll') ">$(_VarianProbe3)</VarianScriptingPath>
+    <VarianScriptingPath Condition=" '$(VarianScriptingPath)' == '' AND Exists('$(_VarianProbe4)\VMS.IRS.Scripting.dll') ">$(_VarianProbe4)</VarianScriptingPath>
+    <VarianScriptingPath Condition=" '$(VarianScriptingPath)' == '' AND Exists('$(_VarianProbe5)\VMS.IRS.Scripting.dll') ">$(_VarianProbe5)</VarianScriptingPath>
+
+    <!-- Nothing found: keep the historical path so the error message names a real candidate. -->
+    <VarianScriptingPath Condition=" '$(VarianScriptingPath)' == '' ">$(_VarianProbe1)</VarianScriptingPath>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -126,8 +148,19 @@
 
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 
-  <Target Name="WarnIfVarianAssembliesMissing" BeforeTargets="ResolveAssemblyReferences">
-    <Warning Condition="!Exists('$(VarianScriptingPath)\VMS.IRS.Scripting.dll')"
-             Text="VMS.IRS.Scripting.dll was not found in '$(VarianScriptingPath)'. Set VarianScriptingPath (environment variable, Directory.Build.props or /p:VarianScriptingPath=...) to the Varian workspace." />
+  <!--
+    Fail loudly when the Varian assemblies are missing.
+
+    This is an Error, not a Warning, on purpose: a missing reference does not stop the build
+    on its own, it just removes ScriptContext from the compilation and produces CS0246
+    ("type or namespace not found") in whichever file names the type. That error points at
+    the wrong place and sends you looking for a missing using directive. Naming the real
+    cause here saves that detour.
+  -->
+  <Target Name="CheckVarianAssemblies" BeforeTargets="ResolveAssemblyReferences;CoreCompile">
+    <Error Condition="!Exists('$(VarianScriptingPath)\VMS.IRS.Scripting.dll')"
+           Text="VMS.IRS.Scripting.dll was not found in '$(VarianScriptingPath)'. Set VarianScriptingPath to the Varian workspace directory via /p:VarianScriptingPath=..., a Directory.Build.props next to the solution, or the VarianScriptingPath environment variable. Without it ScriptContext cannot resolve and the build fails with a misleading CS0246." />
+    <Warning Condition="!Exists('$(VarianScriptingPath)\VMS.CA.Scripting.dll')"
+             Text="VMS.CA.Scripting.dll was not found in '$(VarianScriptingPath)'. The build may still succeed if no type from that assembly is used." />
   </Target>
 </Project>
