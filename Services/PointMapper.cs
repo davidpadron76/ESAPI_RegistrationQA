@@ -4,29 +4,29 @@ using ESAPI_RegistrationQA.Models;
 namespace ESAPI_RegistrationQA.Services
 {
     /// <summary>
-    /// Lleva un punto en coordenadas de paciente de la imagen origen a la imagen destino
-    /// según el registro.
+    /// Maps a point in patient coordinates from the source image to the target image
+    /// according to the registration.
     ///
-    /// La abstracción existe porque un registro rígido y uno deformable se evalúan igual
-    /// una vez que se dispone del mapeo: lo que cambia es cómo se obtiene. Aplicar sólo la
-    /// componente lineal a un registro deformable produciría métricas que no describen el
-    /// registro evaluado.
+    /// The abstraction exists because a rigid and a deformable registration are evaluated
+    /// identically once the mapping is available: what differs is how it is obtained.
+    /// Applying only the linear component to a deformable registration would produce metrics
+    /// that do not describe the registration under audit.
     /// </summary>
     public interface IPointMapper
     {
         bool TryMap(Vec3 source, out Vec3 target);
 
-        /// <summary>Descripción de la procedencia del mapeo, para el reporte.</summary>
+        /// <summary>Where the mapping came from, for the report.</summary>
         string Description { get; }
 
         /// <summary>
-        /// Presupuesto razonable de puntos a mapear. Un mapeo por matriz es prácticamente
-        /// gratuito; uno que invoca la API por cada punto no lo es.
+        /// A sensible budget of points to map. Matrix mapping is essentially free; mapping
+        /// that invokes the API per point is not.
         /// </summary>
         int RecommendedSampleBudget { get; }
     }
 
-    /// <summary>Mapeo por matriz rígida: aritmética pura, sin coste de invocación.</summary>
+    /// <summary>Rigid matrix mapping: pure arithmetic, no invocation cost.</summary>
     public sealed class RigidPointMapper : IPointMapper
     {
         private readonly RigidTransform _transform;
@@ -50,15 +50,15 @@ namespace ESAPI_RegistrationQA.Services
     }
 
     /// <summary>
-    /// Mapeo delegado a la API de Varian punto a punto. Es el único camino correcto para un
-    /// registro deformable, pero cada invocación dinámica cuesta órdenes de magnitud más que
-    /// una multiplicación de matrices, de ahí el presupuesto de muestras reducido.
+    /// Mapping delegated to the Varian API point by point. This is the only correct route
+    /// for a deformable registration, but each dynamic invocation costs orders of magnitude
+    /// more than a matrix multiplication, hence the reduced sample budget.
     /// </summary>
     public sealed class DynamicPointMapper : IPointMapper
     {
         /// <summary>
-        /// Suficiente para un NCC estable y para un histograma conjunto de 32x32 con ~50
-        /// muestras por celda, manteniendo el tiempo total en el orden de segundos.
+        /// Enough for a stable NCC and for a 32x32 joint histogram with ~50 samples per
+        /// cell, while keeping total runtime in the order of seconds.
         /// </summary>
         public const int PointBudget = 60000;
 
@@ -76,7 +76,7 @@ namespace ESAPI_RegistrationQA.Services
 
         public int RecommendedSampleBudget { get { return PointBudget; } }
 
-        /// <summary>true si el mapeo falló de forma sostenida y no merece seguir intentándolo.</summary>
+        /// <summary>true when mapping has failed persistently and is not worth retrying.</summary>
         public bool HasCollapsed { get { return _consecutiveFailures > 200; } }
 
         public bool TryMap(Vec3 source, out Vec3 target)
@@ -99,8 +99,8 @@ namespace ESAPI_RegistrationQA.Services
             }
             catch
             {
-                // El detalle ya se registró al construir el mapeador; aquí sólo se cuenta
-                // para poder abortar si la API falla sistemáticamente.
+                // The detail was already recorded when the mapper was built; here we only
+                // count so we can abort if the API fails systematically.
                 _consecutiveFailures++;
                 return false;
             }

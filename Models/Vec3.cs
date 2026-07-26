@@ -4,11 +4,11 @@ using System.Globalization;
 namespace ESAPI_RegistrationQA.Models
 {
     /// <summary>
-    /// Vector/punto 3D en coordenadas de paciente DICOM (mm).
+    /// A 3D vector/point in DICOM patient coordinates (mm).
     ///
-    /// Se define un tipo propio en lugar de reutilizar System.Windows.Media.Media3D para
-    /// que toda la capa de cálculo quede libre de dependencias de WPF y sea verificable
-    /// de forma aislada.
+    /// A dedicated type is defined rather than reusing System.Windows.Media.Media3D so that
+    /// the whole computation layer stays free of WPF dependencies and can be verified in
+    /// isolation.
     /// </summary>
     public struct Vec3 : IEquatable<Vec3>
     {

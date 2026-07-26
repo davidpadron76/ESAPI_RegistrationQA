@@ -3,14 +3,14 @@
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
 
   <!--
-    Ruta a los ensamblados de Varian.
+    Path to the Varian assemblies.
 
-    Antes estaba incrustada como ruta absoluta en cada <HintPath>, de modo que el proyecto
-    sólo compilaba en una máquina concreta. Ahora es una propiedad con un valor por defecto
-    que puede sobreescribirse sin tocar este archivo, de tres formas:
-      1. creando un Directory.Build.props junto a la solución (no versionado), o
-      2. definiendo la variable de entorno VarianScriptingPath, o
-      3. pasando /p:VarianScriptingPath=... a MSBuild.
+    This used to be hard-coded as an absolute path in every <HintPath>, so the project only
+    built on one specific machine. It is now a property with a default value that can be
+    overridden without touching this file, in three ways:
+      1. a Directory.Build.props next to the solution (unversioned), or
+      2. the VarianScriptingPath environment variable, or
+      3. passing /p:VarianScriptingPath=... to MSBuild.
   -->
   <PropertyGroup>
     <VarianScriptingPath Condition=" '$(VarianScriptingPath)' == '' AND '$(VARIANSCRIPTINGPATH)' != '' ">$(VARIANSCRIPTINGPATH)</VarianScriptingPath>
@@ -28,14 +28,14 @@
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
-    <!-- Fijado explícitamente: el código usa construcciones de C# 7 (out inline, throw
-         expressions, descartes). Sin esta línea la versión del lenguaje depende de la
-         instalación de Visual Studio. -->
+    <!-- Pinned explicitly: the code uses C# 7 constructs (inline out, throw expressions,
+         discards). Without this line the language version depends on the Visual Studio
+         installation. -->
     <LangVersion>7.3</LangVersion>
   </PropertyGroup>
 
-  <!-- Eclipse 15.6 y posteriores son procesos de 64 bits: el plugin debe coincidir.
-       El README indicaba x64 mientras el proyecto compilaba como AnyCPU. -->
+  <!-- Eclipse 15.6 and later are 64-bit processes: the plugin must match.
+       The README said x64 while the project built as AnyCPU. -->
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
     <PlatformTarget>x64</PlatformTarget>
     <DebugSymbols>true</DebugSymbols>
@@ -128,6 +128,6 @@
 
   <Target Name="WarnIfVarianAssembliesMissing" BeforeTargets="ResolveAssemblyReferences">
     <Warning Condition="!Exists('$(VarianScriptingPath)\VMS.IRS.Scripting.dll')"
-             Text="No se encontró VMS.IRS.Scripting.dll en '$(VarianScriptingPath)'. Defina VarianScriptingPath (variable de entorno, Directory.Build.props o /p:VarianScriptingPath=...) apuntando al workspace de Varian." />
+             Text="VMS.IRS.Scripting.dll was not found in '$(VarianScriptingPath)'. Set VarianScriptingPath (environment variable, Directory.Build.props or /p:VarianScriptingPath=...) to the Varian workspace." />
   </Target>
 </Project>

@@ -24,7 +24,7 @@ namespace ESAPI_RegistrationQA.ViewModels
             remove => CommandManager.RequerySuggested -= value;
         }
 
-        /// <summary>Fuerza la reevaluación de CanExecute tras un cambio de estado del ViewModel.</summary>
+        /// <summary>Forces CanExecute to be re-evaluated after a ViewModel state change.</summary>
         public void RaiseCanExecuteChanged() => CommandManager.InvalidateRequerySuggested();
     }
 }

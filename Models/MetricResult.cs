@@ -6,21 +6,21 @@ namespace ESAPI_RegistrationQA.Models
     public enum QASemaphore { Green, Yellow, Red, NotAvailable }
 
     /// <summary>
-    /// Resultado evaluado de una métrica: el valor medido más su clasificación frente al
-    /// perfil de tolerancia activo.
+    /// The evaluated result of a metric: the measured value plus its classification against
+    /// the active tolerance profile.
     ///
-    /// Una métrica que no se pudo medir se representa con <see cref="Value"/> nulo,
-    /// <see cref="Status"/> igual a <see cref="QASemaphore.NotAvailable"/> y un
-    /// <see cref="UnavailableReason"/> que explica por qué. Nunca debe sustituirse por un
-    /// valor plausible inventado: un reporte de QA firmado no puede contener números que
-    /// no procedan de una medición.
+    /// A metric that could not be measured is represented with a null <see cref="Value"/>,
+    /// a <see cref="Status"/> of <see cref="QASemaphore.NotAvailable"/> and an
+    /// <see cref="UnavailableReason"/> explaining why. It must never be substituted with a
+    /// plausible-looking value: a signed QA report cannot contain numbers that did not come
+    /// from a measurement.
     /// </summary>
     public sealed class MetricResult
     {
-        /// <summary>Clave canónica (ver <see cref="MetricKeys"/>). Estable frente a cambios de UI.</summary>
+        /// <summary>Canonical key (see <see cref="MetricKeys"/>). Stable across UI changes.</summary>
         public string MetricKey { get; set; }
 
-        /// <summary>Nombre mostrado en pantalla. Puramente cosmético.</summary>
+        /// <summary>Name shown on screen. Purely cosmetic.</summary>
         public string MetricName { get; set; }
 
         public double? Value { get; set; }
@@ -28,10 +28,10 @@ namespace ESAPI_RegistrationQA.Models
         public QASemaphore Status { get; set; }
         public string ThresholdCriteria { get; set; }
 
-        /// <summary>Motivo por el que la métrica no está disponible. Nulo si sí lo está.</summary>
+        /// <summary>Why the metric is unavailable. Null when it is available.</summary>
         public string UnavailableReason { get; set; }
 
-        /// <summary>Aclaración sobre cómo se obtuvo el valor (p. ej. "exacto por definición").</summary>
+        /// <summary>How the value was obtained (e.g. "exact by definition").</summary>
         public string MeasurementNote { get; set; }
 
         public DateTime Timestamp { get; set; }
@@ -49,8 +49,8 @@ namespace ESAPI_RegistrationQA.Models
         }
 
         /// <summary>
-        /// Texto del valor para UI y reporte. Cultura invariante: el punto decimal no debe
-        /// depender de la configuración regional de la estación de planificación.
+        /// Value text for the UI and the report. Invariant culture: the decimal separator
+        /// must not depend on the regional settings of the planning workstation.
         /// </summary>
         public string DisplayValue
         {
@@ -67,7 +67,7 @@ namespace ESAPI_RegistrationQA.Models
             get { return Status == QASemaphore.NotAvailable ? "N/A" : Status.ToString(); }
         }
 
-        /// <summary>Tooltip combinado: definición de la métrica, motivo de indisponibilidad y notas.</summary>
+        /// <summary>Combined tooltip: metric definition, unavailability reason and notes.</summary>
         public string Tooltip
         {
             get
@@ -78,10 +78,10 @@ namespace ESAPI_RegistrationQA.Models
                     : MetricName;
 
                 if (!string.IsNullOrEmpty(MeasurementNote))
-                    text += Environment.NewLine + Environment.NewLine + "Nota: " + MeasurementNote;
+                    text += Environment.NewLine + Environment.NewLine + "Note: " + MeasurementNote;
 
                 if (!IsAvailable && !string.IsNullOrEmpty(UnavailableReason))
-                    text += Environment.NewLine + Environment.NewLine + "No disponible: " + UnavailableReason;
+                    text += Environment.NewLine + Environment.NewLine + "Not available: " + UnavailableReason;
 
                 return text;
             }

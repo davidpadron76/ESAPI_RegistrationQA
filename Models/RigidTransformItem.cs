@@ -4,11 +4,11 @@ using System.Globalization;
 namespace ESAPI_RegistrationQA.Models
 {
     /// <summary>
-    /// Una fila de la tabla de parámetros rígidos.
+    /// One row of the rigid parameter table.
     ///
-    /// El valor es anulable porque la transformación puede no haberse podido leer, y en ese
-    /// caso la fila debe decir "N/A" en lugar de mostrar un cero que se confundiría con una
-    /// traslación nula real.
+    /// The value is nullable because the transform may not have been readable, and in that
+    /// case the row must read "N/A" rather than show a zero that would be mistaken for a
+    /// genuine null translation.
     /// </summary>
     public sealed class RigidTransformItem
     {

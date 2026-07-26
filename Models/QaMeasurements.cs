@@ -4,18 +4,18 @@ using System.Collections.Generic;
 namespace ESAPI_RegistrationQA.Models
 {
     /// <summary>
-    /// Valor medido de una métrica, o la ausencia justificada del mismo.
+    /// A measured metric value, or its justified absence.
     ///
-    /// Es deliberadamente imposible construir un valor sin decidir si existe o no: no hay
-    /// constructor público que acepte un double "por si acaso". Esto es lo que evita que
-    /// vuelvan a colarse números de relleno en un reporte firmado.
+    /// It is deliberately impossible to construct a value without deciding whether it
+    /// exists: there is no public constructor taking a "just in case" double. This is what
+    /// stops filler numbers from creeping back into a signed report.
     /// </summary>
     public sealed class MeasuredValue
     {
         public double? Value { get; private set; }
         public string UnavailableReason { get; private set; }
 
-        /// <summary>Aclaración sobre la procedencia del valor cuando sí existe.</summary>
+        /// <summary>How the value was obtained, when it does exist.</summary>
         public string Note { get; private set; }
 
         private MeasuredValue(double? value, string unavailableReason, string note)
@@ -30,23 +30,24 @@ namespace ESAPI_RegistrationQA.Models
         public static MeasuredValue Measured(double value, string note = null)
         {
             if (double.IsNaN(value) || double.IsInfinity(value))
-                return Unavailable("el cálculo produjo un valor no finito");
+                return Unavailable("the computation produced a non-finite value");
 
             return new MeasuredValue(value, null, note);
         }
 
         public static MeasuredValue Unavailable(string reason)
         {
-            return new MeasuredValue(null, reason ?? "motivo no especificado", null);
+            return new MeasuredValue(null, reason ?? "reason not specified", null);
         }
     }
 
     /// <summary>
-    /// Resultado completo de una pasada de medición sobre un registro. Es independiente del
-    /// perfil de tolerancia activo: contiene sólo lo medido, nunca lo evaluado.
+    /// The complete result of one measurement pass over a registration. It is independent
+    /// of the active tolerance profile: it holds only what was measured, never what was
+    /// evaluated.
     ///
-    /// Cambiar de perfil anatómico reevalúa umbrales sobre este mismo objeto y no vuelve a
-    /// tocar la imagen ni las estructuras.
+    /// Switching anatomical profile re-evaluates thresholds against this same object and
+    /// does not touch the image or the structures again.
     /// </summary>
     public sealed class QaMeasurements
     {
@@ -57,26 +58,26 @@ namespace ESAPI_RegistrationQA.Models
         public ImageModality FixedModality { get; set; }
         public ImageModality MovingModality { get; set; }
 
-        // Similitud de intensidad
+        // Intensity similarity
         public MeasuredValue Nmi { get; set; }
         public MeasuredValue Ncc { get; set; }
         public MeasuredValue Ssd { get; set; }
 
-        // Deformación / topología
+        // Deformation / topology
         public MeasuredValue JacobianNegativePercent { get; set; }
         public MeasuredValue MaxDisplacement { get; set; }
         public MeasuredValue Smoothness { get; set; }
 
-        // Estructuras
+        // Structures
         public MeasuredValue Dsc { get; set; }
         public MeasuredValue Hd95 { get; set; }
 
-        // Transformación rígida
+        // Rigid transform
         public RigidTransform Transform { get; set; }
         public string TransformSource { get; set; }
         public EulerAngles? RigidEulerAngles { get; set; }
 
-        // Trazabilidad del muestreo
+        // Sampling traceability
         public long SampleCount { get; set; }
         public double? OverlapFraction { get; set; }
         public double? EffectiveSamplingMm { get; set; }
@@ -90,7 +91,7 @@ namespace ESAPI_RegistrationQA.Models
             FixedModality = ImageModality.Unknown;
             MovingModality = ImageModality.Unknown;
 
-            const string notMeasured = "no medido";
+            const string notMeasured = "not measured";
             Nmi = MeasuredValue.Unavailable(notMeasured);
             Ncc = MeasuredValue.Unavailable(notMeasured);
             Ssd = MeasuredValue.Unavailable(notMeasured);
@@ -113,7 +114,7 @@ namespace ESAPI_RegistrationQA.Models
                 case MetricKeys.Smoothness: return Smoothness;
                 case MetricKeys.Dsc: return Dsc;
                 case MetricKeys.Hd95: return Hd95;
-                default: return MeasuredValue.Unavailable("métrica desconocida: " + metricKey);
+                default: return MeasuredValue.Unavailable("unknown metric: " + metricKey);
             }
         }
     }

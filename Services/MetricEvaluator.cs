@@ -6,12 +6,12 @@ using ESAPI_RegistrationQA.Models;
 namespace ESAPI_RegistrationQA.Services
 {
     /// <summary>
-    /// Convierte mediciones crudas en resultados evaluados frente a un perfil de tolerancia.
+    /// Converts raw measurements into results evaluated against a tolerance profile.
     ///
-    /// Es una función pura de (mediciones, perfil) → resultados: no toca la API, no lee
-    /// vóxeles y no recorre estructuras. Ésa es exactamente la separación que faltaba: antes,
-    /// cambiar el perfil anatómico en el desplegable volvía a ejecutar todo el pipeline de
-    /// medición para obtener los mismos números y clasificarlos de otra forma.
+    /// This is a pure function of (measurements, profile) → results: it does not touch the
+    /// API, read voxels or walk structures. That is exactly the separation that was missing:
+    /// previously, changing the anatomical profile in the dropdown re-ran the entire
+    /// measurement pipeline to obtain the same numbers and classify them differently.
     /// </summary>
     public static class MetricEvaluator
     {
@@ -52,14 +52,15 @@ namespace ESAPI_RegistrationQA.Services
             string unit = definition != null ? definition.Unit : string.Empty;
 
             if (measurements == null)
-                return MetricResult.Unavailable(key, "no se ejecutó ninguna medición");
+                return MetricResult.Unavailable(key, "no measurement was performed");
 
             MeasuredValue measured = measurements.ForKey(key);
 
             if (!measured.IsAvailable)
             {
                 MetricResult unavailable = MetricResult.Unavailable(key, measured.UnavailableReason);
-                // El criterio del perfil se sigue mostrando: informa de qué se habría exigido.
+                // The profile criterion is still shown: it tells the reader what would have
+                // been required.
                 unavailable.ThresholdCriteria = profile != null ? profile.DescribeCriteria(key) : "—";
                 return unavailable;
             }
@@ -77,16 +78,16 @@ namespace ESAPI_RegistrationQA.Services
                 MeasurementNote = measured.Note,
                 UnavailableReason = profile != null && profile.TryGetLimits(key, out _)
                     ? null
-                    : "el perfil activo no define un umbral para esta métrica"
+                    : "the active profile defines no threshold for this metric"
             };
         }
 
         /// <summary>
-        /// Filas de la transformación rígida.
+        /// Rows for the rigid transform table.
         ///
-        /// Las etiquetas de eje siguen la convención de coordenadas de paciente DICOM: la
-        /// versión anterior rotulaba Y como cráneo-caudal y Z como anteroposterior, que es
-        /// justo al revés.
+        /// The axis labels follow the DICOM patient coordinate convention: the previous
+        /// version labelled Y as cranio-caudal and Z as anterior-posterior, which is the
+        /// other way round.
         /// </summary>
         public static List<RigidTransformItem> BuildRigidTransformRows(QaMeasurements measurements)
         {
@@ -98,25 +99,25 @@ namespace ESAPI_RegistrationQA.Services
             Vec3? translation = transform != null ? transform.Translation : (Vec3?)null;
             string source = measurements != null ? measurements.TransformSource : null;
 
-            rows.Add(Row("Traslación X (LR)", translation.HasValue ? translation.Value.X : (double?)null, "mm", source));
-            rows.Add(Row("Traslación Y (AP)", translation.HasValue ? translation.Value.Y : (double?)null, "mm", source));
-            rows.Add(Row("Traslación Z (CC)", translation.HasValue ? translation.Value.Z : (double?)null, "mm", source));
+            rows.Add(Row("Translation X (LR)", translation.HasValue ? translation.Value.X : (double?)null, "mm", source));
+            rows.Add(Row("Translation Y (AP)", translation.HasValue ? translation.Value.Y : (double?)null, "mm", source));
+            rows.Add(Row("Translation Z (CC)", translation.HasValue ? translation.Value.Z : (double?)null, "mm", source));
 
             string angleNote = source;
             if (angles.HasValue && angles.Value.GimbalLock)
             {
-                angleNote = "Bloqueo de cardán: cabeceo ≈ ±90°, la guiñada no es separable y se reporta como 0. " +
+                angleNote = "Gimbal lock: pitch ≈ ±90°, yaw is not separable and is reported as 0. " +
                             (source ?? string.Empty);
             }
 
-            rows.Add(Row("Rotación cabeceo (X)", angles.HasValue ? angles.Value.PitchX : (double?)null, "°", angleNote));
-            rows.Add(Row("Rotación alabeo (Y)", angles.HasValue ? angles.Value.RollY : (double?)null, "°", angleNote));
-            rows.Add(Row("Rotación guiñada (Z)", angles.HasValue ? angles.Value.YawZ : (double?)null, "°", angleNote));
+            rows.Add(Row("Rotation pitch (X)", angles.HasValue ? angles.Value.PitchX : (double?)null, "°", angleNote));
+            rows.Add(Row("Rotation roll (Y)", angles.HasValue ? angles.Value.RollY : (double?)null, "°", angleNote));
+            rows.Add(Row("Rotation yaw (Z)", angles.HasValue ? angles.Value.YawZ : (double?)null, "°", angleNote));
 
             if (translation.HasValue)
             {
-                rows.Add(Row("Magnitud de traslación", translation.Value.Length, "mm",
-                    "Norma euclídea del vector de traslación."));
+                rows.Add(Row("Translation magnitude", translation.Value.Length, "mm",
+                    "Euclidean norm of the translation vector."));
             }
 
             return rows;
@@ -129,7 +130,7 @@ namespace ESAPI_RegistrationQA.Services
                 Parameter = parameter,
                 Value = value,
                 Unit = unit,
-                Note = value.HasValue ? note : "No se pudo obtener la transformación del registro."
+                Note = value.HasValue ? note : "The registration transform could not be obtained."
             };
         }
     }

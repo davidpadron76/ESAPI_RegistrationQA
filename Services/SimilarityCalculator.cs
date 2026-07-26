@@ -4,49 +4,49 @@ namespace ESAPI_RegistrationQA.Services
 {
     public sealed class SimilarityResult
     {
-        /// <summary>Correlación de Pearson con signo, rango [-1,1]. Negativa = contraste invertido.</summary>
+        /// <summary>Signed Pearson correlation, range [-1,1]. Negative = inverted contrast.</summary>
         public double? Ncc { get; set; }
 
-        /// <summary>Diferencia cuadrática media normalizada por el cuadrado del rango robusto.</summary>
+        /// <summary>Mean squared difference normalised by the square of the robust range.</summary>
         public double? Ssd { get; set; }
 
-        /// <summary>NMI de Studholme: (H(A)+H(B))/H(A,B), rango [1,2].</summary>
+        /// <summary>Studholme NMI: (H(A)+H(B))/H(A,B), range [1,2].</summary>
         public double? Nmi { get; set; }
 
         public int SampleCount { get; set; }
 
-        /// <summary>Bins usados en el histograma conjunto del NMI (0 si no se calculó).</summary>
+        /// <summary>Bins used in the NMI joint histogram (0 if it was not computed).</summary>
         public int HistogramBins { get; set; }
 
         public string Problem { get; set; }
     }
 
     /// <summary>
-    /// Métricas de similitud sobre pares de intensidades ya emparejados espacialmente.
+    /// Similarity metrics over intensity pairs that have already been matched spatially.
     ///
-    /// Esta clase no sabe nada de ESAPI, de transformaciones ni de geometría: recibe dos
-    /// vectores de intensidades correspondientes al mismo punto físico y calcula. Es
-    /// deliberadamente pura para poder verificarse sin un entorno Eclipse.
+    /// This class knows nothing about ESAPI, transforms or geometry: it receives two vectors
+    /// of intensities corresponding to the same physical point and computes. It is
+    /// deliberately pure so it can be verified without an Eclipse environment.
     /// </summary>
     public static class SimilarityCalculator
     {
-        /// <summary>Número mínimo de pares para que las métricas tengan sentido estadístico.</summary>
+        /// <summary>Minimum number of pairs for the metrics to be statistically meaningful.</summary>
         public const int MinimumSamples = 1000;
 
-        /// <summary>Cotas del número de bins del histograma conjunto.</summary>
+        /// <summary>Bounds on the number of joint-histogram bins.</summary>
         public const int MaxHistogramBins = 64;
         public const int MinHistogramBins = 16;
 
-        /// <summary>Ocupación media mínima por celda del histograma conjunto.</summary>
+        /// <summary>Minimum mean occupancy per joint-histogram cell.</summary>
         private const int MinSamplesPerJointCell = 20;
 
         /// <summary>
-        /// Elige el número de bins en función del tamaño de la muestra.
+        /// Chooses the bin count from the sample size.
         ///
-        /// La entropía conjunta se sesga a la baja cuando muchas celdas quedan vacías, lo
-        /// que inflaría artificialmente el NMI. Fijar 64 bins con pocas muestras —el caso de
-        /// un registro deformable, donde el mapeo punto a punto obliga a un presupuesto
-        /// reducido— produciría un valor optimista y no comparable entre estudios.
+        /// Joint entropy is biased downwards when many cells stay empty, which would inflate
+        /// the NMI artificially. Fixing 64 bins with few samples — the deformable case,
+        /// where point-by-point mapping forces a reduced budget — would produce an
+        /// optimistic value that is not comparable across studies.
         /// </summary>
         public static int ChooseBinCount(int sampleCount)
         {
@@ -62,7 +62,7 @@ namespace ESAPI_RegistrationQA.Services
 
             if (fixedValues == null || movingValues == null)
             {
-                result.Problem = "vectores de muestras nulos";
+                result.Problem = "null sample vectors";
                 return result;
             }
 
@@ -70,18 +70,18 @@ namespace ESAPI_RegistrationQA.Services
             {
                 result.Problem = string.Format(
                     System.Globalization.CultureInfo.InvariantCulture,
-                    "sólo {0} pares de vóxeles solapados; se requieren al menos {1} para una estimación estable",
+                    "only {0} overlapping voxel pairs; at least {1} are required for a stable estimate",
                     count, MinimumSamples);
                 return result;
             }
 
             if (count > fixedValues.Length || count > movingValues.Length)
             {
-                result.Problem = "recuento de muestras mayor que los vectores suministrados";
+                result.Problem = "sample count larger than the supplied vectors";
                 return result;
             }
 
-            // --- Estadísticos de primer y segundo orden en una sola pasada ---
+            // --- First- and second-order statistics in a single pass ---
             double sumF = 0, sumM = 0, sumFM = 0, sumF2 = 0, sumM2 = 0, sumDiff2 = 0;
 
             for (int i = 0; i < count; i++)
@@ -106,13 +106,13 @@ namespace ESAPI_RegistrationQA.Services
 
             if (varianceF <= 0 || varianceM <= 0)
             {
-                result.Problem = "una de las imágenes es constante en la región solapada (varianza nula)";
+                result.Problem = "one of the images is constant over the overlapping region (zero variance)";
                 return result;
             }
 
             result.Ncc = covariance / Math.Sqrt(varianceF * varianceM);
 
-            // --- SSD normalizada por el rango robusto de la imagen fija ---
+            // --- SSD normalised by the robust range of the fixed image ---
             double p1, p99;
             RobustRange(fixedValues, count, out p1, out p99);
             double range = p99 - p1;
@@ -122,7 +122,7 @@ namespace ESAPI_RegistrationQA.Services
                 result.Ssd = (sumDiff2 / n) / (range * range);
             }
 
-            // --- NMI sobre el histograma conjunto ---
+            // --- NMI over the joint histogram ---
             double mp1, mp99;
             RobustRange(movingValues, count, out mp1, out mp99);
 
@@ -138,12 +138,12 @@ namespace ESAPI_RegistrationQA.Services
         }
 
         /// <summary>
-        /// NMI de Studholme: (H(A) + H(B)) / H(A,B).
+        /// Studholme NMI: (H(A) + H(B)) / H(A,B).
         ///
-        /// Se calcula sobre el histograma conjunto real. La versión anterior devolvía
-        /// 1.20 + 0.45·NCC, que es una función lineal del NCC y no aporta información
-        /// independiente alguna: para un par multimodal, donde precisamente el NCC deja de
-        /// ser válido, ese "NMI" heredaba su misma degradación.
+        /// Computed over the actual joint histogram. The previous version returned
+        /// 1.20 + 0.45·NCC, a linear function of the NCC that carries no independent
+        /// information: for a multimodal pair, precisely where the NCC stops being valid,
+        /// that "NMI" inherited the very same degradation.
         /// </summary>
         public static double? ComputeNmi(
             float[] a, float[] b, int count,
@@ -225,12 +225,12 @@ namespace ESAPI_RegistrationQA.Services
         }
 
         /// <summary>
-        /// Percentiles 1 y 99. Se usa el rango robusto en lugar del mínimo/máximo absolutos
-        /// para que un único vóxel con artefacto metálico (o el valor centinela de aire
-        /// fuera del FOV) no comprima todo el histograma.
+        /// 1st and 99th percentiles. The robust range is used instead of the absolute
+        /// min/max so that a single voxel with a metal artefact (or the sentinel air value
+        /// outside the FOV) does not compress the whole histogram.
         ///
-        /// Sustituye al divisor fijo 4096.0 de la versión anterior, que asumía un rango de
-        /// CT de 12 bits y carecía de sentido para MR o PET.
+        /// This replaces the fixed 4096.0 divisor of the previous version, which assumed a
+        /// 12-bit CT range and was meaningless for MR or PET.
         /// </summary>
         public static void RobustRange(float[] values, int count, out double p1, out double p99)
         {

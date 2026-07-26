@@ -4,22 +4,23 @@ using System.Globalization;
 namespace ESAPI_RegistrationQA.Services
 {
     /// <summary>
-    /// Acceso tolerante a objetos <c>dynamic</c> de la API de Varian.
+    /// Tolerant access to <c>dynamic</c> objects from the Varian API.
     ///
-    /// La API se consulta de forma dinámica porque la superficie de VMS.IRS varía entre
-    /// versiones de Eclipse y no todas las propiedades existen en todas ellas. Lo que no es
-    /// aceptable es que esa tolerancia sea silenciosa: cada intento fallido queda anotado en
-    /// el <see cref="DiagnosticLog"/> con la operación y la excepción concreta, de modo que
-    /// el físico pueda ver por qué una métrica salió como no disponible.
+    /// The API is queried dynamically because the VMS.IRS surface varies between Eclipse
+    /// versions and not every property exists in all of them. What is not acceptable is for
+    /// that tolerance to be silent: every failed attempt is recorded in the
+    /// <see cref="DiagnosticLog"/> with the operation and the specific exception, so the
+    /// physicist can see why a metric came out unavailable.
     ///
-    /// Todos los helpers reciben el acceso envuelto en un delegado para poder encadenar
-    /// propiedades (<c>() =&gt; reg.SourceImage.Frame.Origin</c>) sin que una excepción a
-    /// mitad de la cadena se pierda.
+    /// All helpers take the access wrapped in a delegate so that property chains
+    /// (<c>() =&gt; reg.SourceImage.Frame.Origin</c>) can be used without losing an
+    /// exception thrown partway along the chain.
     /// </summary>
     public static class Dyn
     {
         /// <summary>
-        /// Evalúa el acceso y devuelve true si no lanzó excepción y el resultado no es nulo.
+        /// Evaluates the accessor and returns true if it did not throw and the result is
+        /// not null.
         /// </summary>
         public static bool TryGet(string operation, Func<object> accessor, DiagnosticLog log, out dynamic value)
         {
@@ -29,7 +30,7 @@ namespace ESAPI_RegistrationQA.Services
                 object result = accessor();
                 if (result == null)
                 {
-                    if (log != null) log.Info(operation, "la propiedad existe pero es nula");
+                    if (log != null) log.Info(operation, "the property exists but is null");
                     return false;
                 }
                 value = result;
@@ -50,7 +51,7 @@ namespace ESAPI_RegistrationQA.Services
                 object result = accessor();
                 if (result == null)
                 {
-                    if (log != null) log.Info(operation, "la propiedad existe pero es nula");
+                    if (log != null) log.Info(operation, "the property exists but is null");
                     return false;
                 }
 
@@ -58,7 +59,7 @@ namespace ESAPI_RegistrationQA.Services
 
                 if (double.IsNaN(value) || double.IsInfinity(value))
                 {
-                    if (log != null) log.Warning(operation, "valor no finito: " + value.ToString(CultureInfo.InvariantCulture));
+                    if (log != null) log.Warning(operation, "non-finite value: " + value.ToString(CultureInfo.InvariantCulture));
                     return false;
                 }
                 return true;
@@ -78,7 +79,7 @@ namespace ESAPI_RegistrationQA.Services
                 object result = accessor();
                 if (result == null)
                 {
-                    if (log != null) log.Info(operation, "la propiedad existe pero es nula");
+                    if (log != null) log.Info(operation, "the property exists but is null");
                     return false;
                 }
                 value = Convert.ToInt32(result, CultureInfo.InvariantCulture);
@@ -99,7 +100,7 @@ namespace ESAPI_RegistrationQA.Services
                 object result = accessor();
                 if (result == null)
                 {
-                    if (log != null) log.Info(operation, "la propiedad existe pero es nula");
+                    if (log != null) log.Info(operation, "the property exists but is null");
                     return false;
                 }
 
@@ -114,8 +115,8 @@ namespace ESAPI_RegistrationQA.Services
         }
 
         /// <summary>
-        /// Ejecuta una acción sobre la API tolerando el fallo pero dejándolo registrado.
-        /// Devuelve true si se completó.
+        /// Runs an action against the API, tolerating failure but recording it. Returns true
+        /// if it completed.
         /// </summary>
         public static bool TryInvoke(string operation, Action action, DiagnosticLog log)
         {
@@ -132,9 +133,9 @@ namespace ESAPI_RegistrationQA.Services
         }
 
         /// <summary>
-        /// Devuelve el primer acceso que tenga éxito de una lista de alternativas, anotando
-        /// cuál funcionó. Útil cuando la misma información vive en propiedades con nombres
-        /// distintos según la versión de la API.
+        /// Returns the first accessor that succeeds from a list of alternatives, recording
+        /// which one worked. Useful when the same information lives under different property
+        /// names depending on the API version.
         /// </summary>
         public static bool TryGetFirst(
             string operation,

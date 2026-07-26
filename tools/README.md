@@ -2,27 +2,27 @@
 
 ## `verify_math.py`
 
-Porta a Python los algoritmos numéricos de `RigidTransform`, `ImageGeometry` y
-`SimilarityCalculator` y los contrasta contra resultados analíticos conocidos.
+Ports the numerical algorithms of `RigidTransform`, `ImageGeometry` and
+`SimilarityCalculator` to Python and checks them against known analytic results.
 
-Existe porque el proyecto sólo compila en Windows con las DLL de Varian instaladas, de modo
-que la lógica de cálculo no puede ejecutarse en un entorno de integración continua ordinario.
-Estos algoritmos son puros —no dependen de ESAPI ni de WPF—, así que su corrección sí puede
-verificarse de forma independiente.
+It exists because the project only builds on Windows with the Varian DLLs installed, so the
+computation logic cannot run in an ordinary CI environment. These algorithms are pure — they
+depend on neither ESAPI nor WPF — so their correctness can be verified independently.
 
 ```bash
 python3 tools/verify_math.py
 ```
 
-Cubre, entre otras cosas:
+Among other things it covers:
 
-* recuperación de los ángulos de Euler en 2000 rotaciones aleatorias;
-* comportamiento bajo bloqueo de cardán, incluida la reconstrucción de la rotación;
-* detección de la convención fila/columna de la matriz 4x4, y por qué la ortonormalidad
-  no basta para discriminarla;
-* exactitud del máximo desplazamiento evaluado en los vértices del FOV, y su convexidad;
-* ida y vuelta vóxel ↔ paciente en geometría oblicua;
-* NCC, NMI y SSD contra sus valores teóricos (incluido el NMI de una gaussiana bivariante).
+* recovery of Euler angles across 2000 random rotations;
+* behaviour under gimbal lock, including reconstruction of the rotation;
+* detection of the row/column convention of the 4x4 matrix, and why orthonormality is not
+  enough to discriminate between them;
+* exactness of the maximum displacement evaluated at the FOV corners, and its convexity;
+* voxel ↔ patient round-trip on an oblique geometry;
+* NCC, NMI and SSD against their theoretical values (including the NMI of a bivariate
+  Gaussian).
 
-**Si se modifica alguno de esos algoritmos en C#, hay que reflejar el cambio aquí y volver
-a ejecutarlo.** El script no se compila con el plugin ni se distribuye con él.
+**If any of those algorithms change in C#, mirror the change here and re-run it.** The script
+is not compiled into the plugin and is not distributed with it.

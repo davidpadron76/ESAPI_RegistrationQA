@@ -4,13 +4,13 @@ using ESAPI_RegistrationQA.Models;
 namespace ESAPI_RegistrationQA.Services
 {
     /// <summary>
-    /// Volumen de imagen submuestreado y ya convertido a valores de display (HU en CT),
-    /// residente en memoria, junto con la geometría que le corresponde.
+    /// A subsampled image volume, already converted to display values (HU for CT), held in
+    /// memory together with its matching geometry.
     ///
-    /// Se submuestrea en la carga por dos razones: acotar la memoria (un CT 512x512x200 en
-    /// ushort ocupa 100 MB) y acotar el tiempo de cálculo para que la UI no se bloquee. La
-    /// resolución efectiva resultante se reporta explícitamente junto a las métricas, porque
-    /// condiciona su interpretación.
+    /// Subsampling happens at load time for two reasons: to bound memory (a 512x512x200 CT
+    /// takes 100 MB as ushort) and to bound computation time so the UI does not block. The
+    /// resulting effective resolution is reported explicitly alongside the metrics, because
+    /// it conditions their interpretation.
     /// </summary>
     public sealed class SampledVolume
     {
@@ -25,7 +25,7 @@ namespace ESAPI_RegistrationQA.Services
 
             long expected = (long)geometry.XSize * geometry.YSize * geometry.ZSize;
             if (data.LongLength != expected)
-                throw new ArgumentException("El tamaño del búfer no concuerda con la geometría.", "data");
+                throw new ArgumentException("Buffer size does not match the geometry.", "data");
 
             Geometry = geometry;
             _data = data;
@@ -38,8 +38,8 @@ namespace ESAPI_RegistrationQA.Services
 
         private int Index(int i, int j, int k)
         {
-            // El submuestreo de carga acota las dimensiones muy por debajo de int.MaxValue,
-            // y el constructor ya verificó que el búfer concuerda con la geometría.
+            // Load-time subsampling keeps the dimensions well below int.MaxValue, and the
+            // constructor has already verified that the buffer matches the geometry.
             return i + Geometry.XSize * (j + Geometry.YSize * k);
         }
 
@@ -51,10 +51,10 @@ namespace ESAPI_RegistrationQA.Services
         }
 
         /// <summary>
-        /// Interpolación trilineal en coordenadas de vóxel continuas. Devuelve false si el
-        /// punto cae fuera del volumen, que es la señal de que ese vóxel de la imagen fija
-        /// no tiene correspondencia y debe excluirse del cálculo en lugar de contribuir con
-        /// un cero.
+        /// Trilinear interpolation at continuous voxel coordinates. Returns false when the
+        /// point falls outside the volume, which signals that this fixed-image voxel has no
+        /// correspondence and must be excluded from the computation rather than contribute
+        /// a zero.
         /// </summary>
         public bool TrySample(double i, double j, double k, out float value)
         {

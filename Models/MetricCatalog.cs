@@ -4,9 +4,9 @@ using System.Collections.Generic;
 namespace ESAPI_RegistrationQA.Models
 {
     /// <summary>
-    /// Claves estables de métrica. Son el identificador canónico usado por los perfiles de
-    /// tolerancia, el motor de avisos y el reporte. NUNCA deben derivarse del texto mostrado
-    /// en pantalla: renombrar una etiqueta de la UI no debe alterar la lógica de evaluación.
+    /// Stable metric keys. These are the canonical identifiers used by the tolerance
+    /// profiles, the advisory engine and the report. They must NEVER be derived from the
+    /// text shown on screen: renaming a UI label must not alter evaluation logic.
     /// </summary>
     public static class MetricKeys
     {
@@ -21,9 +21,9 @@ namespace ESAPI_RegistrationQA.Models
     }
 
     /// <summary>
-    /// Metadatos de presentación y semántica de una métrica. Centraliza la unidad y la
-    /// dirección de bondad, que antes se infería con comparaciones de subcadena sobre el
-    /// nombre visible.
+    /// Presentation and semantic metadata for a metric. Centralises the unit and the
+    /// direction of goodness, which used to be inferred with substring comparisons against
+    /// the display name.
     /// </summary>
     public sealed class MetricDefinition
     {
@@ -31,7 +31,7 @@ namespace ESAPI_RegistrationQA.Models
         public string DisplayName { get; private set; }
         public string Unit { get; private set; }
 
-        /// <summary>true si un valor mayor es mejor (NMI, NCC, DSC, Smoothness).</summary>
+        /// <summary>true when a higher value is better (NMI, NCC, DSC, Smoothness).</summary>
         public bool HigherIsBetter { get; private set; }
 
         public string Description { get; private set; }
@@ -55,51 +55,51 @@ namespace ESAPI_RegistrationQA.Models
         {
             Register(new MetricDefinition(
                 MetricKeys.Nmi, "NMI", string.Empty, true,
-                "Normalized Mutual Information (Studholme): (H(A)+H(B))/H(A,B) calculada sobre el " +
-                "histograma conjunto de las intensidades emparejadas tras aplicar la transformación. " +
-                "Rango [1,2]; 1 indica independencia estadística. Es la métrica de referencia para " +
-                "registros multimodales (CT-MR, CT-PET)."));
+                "Normalized Mutual Information (Studholme): (H(A)+H(B))/H(A,B), computed over the " +
+                "joint histogram of intensity pairs after applying the registration transform. " +
+                "Range [1,2]; 1 means statistical independence. This is the reference metric for " +
+                "multimodal registrations (CT-MR, CT-PET)."));
 
             Register(new MetricDefinition(
                 MetricKeys.Ncc, "NCC", string.Empty, true,
-                "Normalized Cross Correlation (Pearson) entre las intensidades emparejadas. " +
-                "Rango [-1,1]. Es la métrica de referencia para registros monomodales (CT-CT, CT-CBCT). " +
-                "Valores negativos indican contraste invertido."));
+                "Normalized Cross Correlation (Pearson) between paired intensities. Range [-1,1]. " +
+                "This is the reference metric for monomodal registrations (CT-CT, CT-CBCT). " +
+                "Negative values indicate inverted contrast."));
 
             Register(new MetricDefinition(
                 MetricKeys.Ssd, "SSD", string.Empty, false,
-                "Suma de diferencias cuadráticas normalizada: media((a-b)^2) dividida por el cuadrado " +
-                "del rango robusto (P1-P99) de la imagen fija. Adimensional y comparable entre " +
-                "modalidades. Sensible a diferencias de contraste y a errores geométricos locales."));
+                "Normalized sum of squared differences: mean((a-b)^2) divided by the square of the " +
+                "robust range (P1-P99) of the fixed image. Dimensionless and comparable across " +
+                "modalities. Sensitive to contrast differences and to local geometric errors."));
 
             Register(new MetricDefinition(
                 MetricKeys.JacobianNegative, "Jacobian < 0", "%", false,
-                "Porcentaje de vóxeles del campo de deformación con determinante jacobiano no positivo, " +
-                "es decir, plegamiento topológico no físico. Para una transformación rígida es 0 por " +
-                "definición (|J| = 1 en todo punto)."));
+                "Percentage of deformation field voxels with a non-positive Jacobian determinant, " +
+                "i.e. unphysical topological folding. For a rigid transform this is 0 by definition " +
+                "(|J| = 1 everywhere)."));
 
             Register(new MetricDefinition(
                 MetricKeys.MaxDisplacement, "Max Displacement", "mm", false,
-                "Máximo desplazamiento espacial aplicado a un punto dentro del campo de visión. " +
-                "Para una transformación rígida se evalúa de forma exacta sobre los ocho vértices del " +
-                "volumen, ya que el módulo del desplazamiento de una aplicación afín es convexo y " +
-                "alcanza su máximo en un vértice."));
+                "Largest spatial displacement applied to any point within the field of view. For a " +
+                "rigid transform it is evaluated exactly over the eight corners of the volume, since " +
+                "the displacement magnitude of an affine map is convex and attains its maximum at a " +
+                "vertex."));
 
             Register(new MetricDefinition(
                 MetricKeys.Smoothness, "Smoothness", string.Empty, true,
-                "Regularidad del campo de vectores de deformación. Para una transformación rígida es " +
-                "1.0 por definición: el gradiente del campo es constante."));
+                "Regularity of the deformation vector field. For a rigid transform it is 1.0 by " +
+                "definition: the gradient of the field is constant."));
 
             Register(new MetricDefinition(
                 MetricKeys.Dsc, "DSC (Dice Overlap)", string.Empty, true,
-                "Coeficiente de similitud de Dice: 2|A∩B| / (|A|+|B|) entre un contorno de referencia y " +
-                "el mismo contorno propagado. Requiere un par de structure sets emparejado por " +
-                "identificador de estructura."));
+                "Dice Similarity Coefficient: 2|A∩B| / (|A|+|B|) between a reference contour and the " +
+                "same contour after propagation. Requires a structure set pair matched by structure " +
+                "identifier."));
 
             Register(new MetricDefinition(
                 MetricKeys.Hd95, "HD95 (Hausdorff)", "mm", false,
-                "Distancia de Hausdorff al percentil 95 entre las superficies de referencia y propagada. " +
-                "Excluye el 5 % de puntos más desviados. Requiere el mismo par emparejado que el DSC."));
+                "95th-percentile Hausdorff distance between the reference and propagated surfaces. " +
+                "Excludes the 5% most deviant points. Requires the same matched pair as the DSC."));
         }
 
         private static void Register(MetricDefinition definition)
@@ -121,7 +121,7 @@ namespace ESAPI_RegistrationQA.Models
         {
             MetricDefinition definition;
             if (TryGet(key, out definition)) return definition;
-            throw new ArgumentException("Métrica desconocida: " + key, "key");
+            throw new ArgumentException("Unknown metric: " + key, "key");
         }
 
         public static string DisplayName(string key)

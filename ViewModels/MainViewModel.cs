@@ -18,8 +18,8 @@ namespace ESAPI_RegistrationQA.ViewModels
         private readonly DiagnosticLog _log = new DiagnosticLog();
 
         /// <summary>
-        /// Mediciones crudas. Se calculan una sola vez: cambiar de perfil anatómico no
-        /// vuelve a leer imagen ni estructuras, sólo reclasifica estos mismos valores.
+        /// Raw measurements. Computed exactly once: switching anatomical profile does not
+        /// re-read the image or the structures, it only reclassifies these same values.
         /// </summary>
         private QaMeasurements _measurements;
 
@@ -42,8 +42,8 @@ namespace ESAPI_RegistrationQA.ViewModels
 
             AvailableProfiles = ThresholdProfile.GetAllProfiles().AsReadOnly();
 
-            // Asignación directa al campo: en construcción todavía no hay mediciones que
-            // reevaluar, y el disparo del setter sería prematuro.
+            // Assigned directly to the field: during construction there are no measurements
+            // to re-evaluate yet, so firing the setter would be premature.
             _activeProfile = AvailableProfiles.FirstOrDefault();
 
             RegContext = new RegistrationContext();
@@ -53,7 +53,7 @@ namespace ESAPI_RegistrationQA.ViewModels
             RunMeasurement();
         }
 
-        // ------------------------------------------------------------------ propiedades
+        // ------------------------------------------------------------------ properties
 
         public string PatientId
         {
@@ -90,7 +90,7 @@ namespace ESAPI_RegistrationQA.ViewModels
                 _activeProfile = value;
                 OnPropertyChanged();
 
-                // Sólo se reclasifica. Los valores medidos no dependen del perfil.
+                // Reclassification only. The measured values do not depend on the profile.
                 ReevaluateThresholds();
             }
         }
@@ -112,9 +112,9 @@ namespace ESAPI_RegistrationQA.ViewModels
                 int warnings = Diagnostics.Count(d => d.Level == DiagnosticLevel.Warning);
 
                 if (failures == 0 && warnings == 0)
-                    return "Sin incidencias durante la lectura de datos.";
+                    return "No issues while reading data.";
 
-                return $"{failures} fallo(s) y {warnings} aviso(s) durante la lectura de datos de la API.";
+                return $"{failures} failure(s) and {warnings} warning(s) while reading data from the API.";
             }
         }
 
@@ -122,38 +122,38 @@ namespace ESAPI_RegistrationQA.ViewModels
         {
             get
             {
-                if (_measurements == null) return "Sin mediciones.";
+                if (_measurements == null) return "No measurements.";
 
                 var parts = new List<string>();
 
                 if (!string.IsNullOrEmpty(_measurements.TransformSource))
-                    parts.Add("Transformación: " + _measurements.TransformSource);
+                    parts.Add("Transform: " + _measurements.TransformSource);
 
                 if (_measurements.SampleCount > 0)
-                    parts.Add($"{_measurements.SampleCount:N0} pares de vóxeles evaluados");
+                    parts.Add($"{_measurements.SampleCount:N0} voxel pairs evaluated");
 
                 if (_measurements.OverlapFraction.HasValue)
-                    parts.Add($"solapamiento {_measurements.OverlapFraction.Value:P1}");
+                    parts.Add($"{_measurements.OverlapFraction.Value:P1} overlap");
 
                 if (_measurements.EffectiveSamplingMm.HasValue)
-                    parts.Add($"muestreo efectivo {_measurements.EffectiveSamplingMm.Value:F1} mm");
+                    parts.Add($"{_measurements.EffectiveSamplingMm.Value:F1} mm effective sampling");
 
-                return parts.Count > 0 ? string.Join(" · ", parts) : "Sin mediciones.";
+                return parts.Count > 0 ? string.Join(" · ", parts) : "No measurements.";
             }
         }
 
-        // ------------------------------------------------------------------ medición
+        // ------------------------------------------------------------------ measurement
 
         /// <summary>
-        /// Ejecuta la medición completa. Caro: lee vóxeles de ambos volúmenes. Se invoca una
-        /// vez por sesión.
+        /// Runs the full measurement. Expensive: it reads voxels from both volumes. Invoked
+        /// once per session.
         /// </summary>
         private void RunMeasurement()
         {
             _log.Clear();
 
-            // Se lee después de limpiar la bitácora para que un fallo al obtener el
-            // identificador quede reflejado en la pestaña de diagnóstico.
+            // Read after clearing the log so that a failure to obtain the identifier shows
+            // up in the diagnostics tab.
             PatientId = ReadPatientId();
 
             try
@@ -163,11 +163,11 @@ namespace ESAPI_RegistrationQA.ViewModels
             }
             catch (Exception ex)
             {
-                // Una excepción aquí no puede dejar la ventana en un estado ambiguo: se
-                // registra y se continúa con un conjunto de mediciones vacío, que la capa
-                // de evaluación traducirá en métricas no disponibles.
-                _log.Failure("medición", ex);
-                _measurements = new QaMeasurements { RegistrationId = "(medición interrumpida)" };
+                // An exception here must not leave the window in an ambiguous state: it is
+                // recorded and we continue with an empty measurement set, which the
+                // evaluation layer will translate into unavailable metrics.
+                _log.Failure("measurement", ex);
+                _measurements = new QaMeasurements { RegistrationId = "(measurement interrupted)" };
             }
 
             RegContext = new RegistrationContext
@@ -189,8 +189,8 @@ namespace ESAPI_RegistrationQA.ViewModels
         }
 
         /// <summary>
-        /// Reclasifica las mediciones existentes frente al perfil activo. Barato: no toca la
-        /// API. Es lo único que ocurre al cambiar de perfil anatómico.
+        /// Reclassifies the existing measurements against the active profile. Cheap: it does
+        /// not touch the API. This is all that happens when the anatomical profile changes.
         /// </summary>
         private void ReevaluateThresholds()
         {
@@ -230,21 +230,21 @@ namespace ESAPI_RegistrationQA.ViewModels
         private string ReadPatientId()
         {
             string id;
-            if (Dyn.TryGetString("contexto: identificador de paciente", () => _context.Patient.Id, _log, out id))
+            if (Dyn.TryGetString("context: patient identifier", () => _context.Patient.Id, _log, out id))
                 return id;
 
-            return "(paciente sin identificador)";
+            return "(unidentified patient)";
         }
 
-        // ------------------------------------------------------------------ exportación
+        // ------------------------------------------------------------------ export
 
         private void ExecuteExportReport(object parameter)
         {
             var dialog = new SaveFileDialog
             {
-                Filter = "Documento HTML (*.html)|*.html",
+                Filter = "HTML document (*.html)|*.html",
                 DefaultExt = "html",
-                Title = "Guardar reporte de auditoría de registro",
+                Title = "Save registration audit report",
                 FileName = HtmlReportBuilder.SanitizeFileName(
                     $"RegistrationQA_{PatientId}_{DateTime.Now:yyyyMMdd_HHmm}")
             };
@@ -272,14 +272,14 @@ namespace ESAPI_RegistrationQA.ViewModels
                 HtmlReportBuilder.Save(data, dialog.FileName);
 
                 MessageBox.Show(
-                    "Reporte exportado correctamente.",
-                    "Exportación completada", MessageBoxButton.OK, MessageBoxImage.Information);
+                    "Report exported successfully.",
+                    "Export complete", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    $"No se pudo generar el reporte:{Environment.NewLine}{DiagnosticLog.Describe(ex)}",
-                    "Error de exportación", MessageBoxButton.OK, MessageBoxImage.Error);
+                    $"The report could not be generated:{Environment.NewLine}{DiagnosticLog.Describe(ex)}",
+                    "Export error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
