@@ -1,6 +1,6 @@
 using System;
 using System.Windows;
-using VMS.IRS.Scripting;
+using ESAPI_RegistrationQA.Services;
 
 namespace VMS.IRS.Scripting
 {
@@ -8,13 +8,23 @@ namespace VMS.IRS.Scripting
     {
         public Script() { }
 
-        [STAThread]
+        // Nota: [STAThread] sólo tiene efecto sobre el Main de un ejecutable. Eclipse ya
+        // invoca los scripts desde un hilo STA, de modo que el atributo era inocuo aquí.
         public void Execute(ScriptContext context)
         {
+            if (context == null)
+            {
+                MessageBox.Show(
+                    "Eclipse no proporcionó contexto de script.",
+                    "Registration QA", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
             if (context.Patient == null)
             {
-                MessageBox.Show("No active patient found in Eclipse. Please open a patient before running this QA script.",
-                                "Registration QA", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(
+                    "No hay ningún paciente abierto en Eclipse. Abra un paciente antes de ejecutar este script de QA.",
+                    "Registration QA", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -23,12 +33,14 @@ namespace VMS.IRS.Scripting
                 var viewModel = new ESAPI_RegistrationQA.ViewModels.MainViewModel(context);
                 var mainControl = new ESAPI_RegistrationQA.UI.MainControl(viewModel);
 
-                Window window = new Window
+                var window = new Window
                 {
-                    Title = "ESAPI Registration QA - Technical Audit",
+                    Title = "ESAPI Registration QA — Auditoría técnica v" + HtmlReportBuilder.AssemblyVersion(),
                     Content = mainControl,
-                    Width = 880,
-                    Height = 650,
+                    Width = 1020,
+                    Height = 700,
+                    MinWidth = 820,
+                    MinHeight = 560,
                     WindowStartupLocation = WindowStartupLocation.CenterScreen
                 };
 
@@ -36,8 +48,11 @@ namespace VMS.IRS.Scripting
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Runtime Error: {ex.Message}\n{ex.StackTrace}",
-                                "ESAPI Registration QA Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(
+                    "Error en tiempo de ejecución:" + Environment.NewLine +
+                    DiagnosticLog.Describe(ex) + Environment.NewLine + Environment.NewLine +
+                    ex.StackTrace,
+                    "ESAPI Registration QA", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }
