@@ -243,8 +243,7 @@ namespace ESAPI_RegistrationQA.ViewModels
 
         private string ReadPatientId()
         {
-            string id;
-            if (Dyn.TryGetString("context: patient identifier", () => _context.Patient.Id, _log, out id))
+            if (Dyn.TryGetString("context: patient identifier", () => _context.Patient.Id, _log, out string id))
                 return id;
 
             return "(unidentified patient)";
