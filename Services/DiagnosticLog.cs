@@ -12,7 +12,7 @@ namespace ESAPI_RegistrationQA.Services
         public DateTime Timestamp { get; private set; }
         public DiagnosticLevel Level { get; private set; }
 
-        /// <summary>Qué se intentaba hacer, en lenguaje del dominio.</summary>
+        /// <summary>What was being attempted, in domain terms.</summary>
         public string Operation { get; private set; }
 
         public string Detail { get; private set; }
@@ -31,8 +31,8 @@ namespace ESAPI_RegistrationQA.Services
             {
                 switch (Level)
                 {
-                    case DiagnosticLevel.Failure: return "FALLO";
-                    case DiagnosticLevel.Warning: return "AVISO";
+                    case DiagnosticLevel.Failure: return "FAILURE";
+                    case DiagnosticLevel.Warning: return "WARNING";
                     default: return "INFO";
                 }
             }
@@ -48,12 +48,12 @@ namespace ESAPI_RegistrationQA.Services
     }
 
     /// <summary>
-    /// Bitácora de todo lo que se intentó leer de la API y no salió como se esperaba.
+    /// A record of everything that was attempted against the API and did not go as expected.
     ///
-    /// Reemplaza los bloques catch vacíos de la versión anterior. En una herramienta de QA
-    /// un fallo silencioso es peor que un error visible: produce un reporte firmado cuyos
-    /// datos de respaldo nadie sabe que lo son. Todo lo que se registra aquí acaba siendo
-    /// visible en la pestaña de diagnóstico y en el reporte exportado.
+    /// This replaces the empty catch blocks of the previous version. In a QA tool a silent
+    /// failure is worse than a visible error: it produces a signed report whose fallback
+    /// data nobody knows is fallback. Everything logged here ends up visible in the
+    /// diagnostics tab and in the exported report.
     /// </summary>
     public sealed class DiagnosticLog
     {
@@ -91,7 +91,7 @@ namespace ESAPI_RegistrationQA.Services
 
         public static string Describe(Exception exception)
         {
-            if (exception == null) return "excepción nula";
+            if (exception == null) return "null exception";
 
             string text = exception.GetType().Name + ": " + exception.Message;
             if (exception.InnerException != null)

@@ -1,73 +1,72 @@
 # ESAPI Registration Quantitative Audit (ESAPI_RegistrationQA)
 
-Plugin C# / WPF para el **Varian Eclipse Treatment Planning System** (arquitectura ESAPI y
-VMS.IRS) que automatiza la auditoría cuantitativa de registros de imagen.
+A C# / WPF plugin for the **Varian Eclipse Treatment Planning System** (ESAPI and VMS.IRS
+architecture) that automates the quantitative audit of image registrations.
 
-## Qué mide realmente
+## What it actually measures
 
-Esta sección es deliberadamente explícita sobre el alcance. El plugin genera un reporte
-destinado a ser firmado por un físico médico, y por tanto **nunca sustituye una métrica que
-no pudo medir por un valor plausible**: la marca como *N/A* con el motivo concreto, visible
-tanto en la interfaz como en el reporte.
+This section is deliberately explicit about scope. The plugin produces a report intended to
+be signed by a medical physicist, and therefore it **never substitutes a metric it could not
+measure with a plausible-looking value**: it marks it *N/A* with the specific reason, visible
+both in the interface and in the report.
 
-| Métrica | Estado | Cómo se obtiene |
+| Metric | Status | How it is obtained |
 |---|---|---|
-| **NCC** | ✅ Medida | Correlación de Pearson sobre pares de vóxeles emparejados aplicando la transformación del registro. Con signo, rango [-1, 1]. |
-| **NMI** | ✅ Medida | NMI de Studholme, `(H(A)+H(B))/H(A,B)`, sobre el histograma conjunto real. El número de bins se adapta al tamaño de la muestra. |
-| **SSD** | ✅ Medida | Diferencia cuadrática media normalizada por el cuadrado del rango robusto (P1–P99) de la imagen de referencia. Adimensional y comparable entre modalidades. |
-| **Traslaciones y ángulos de Euler** | ✅ Medidos | De la matriz del registro, con detección automática de la convención (traslación en fila o en columna), verificación de ortonormalidad y tratamiento explícito del bloqueo de cardán. |
-| **Desplazamiento máximo** | ✅ Medido (registro rígido) | Máximo exacto sobre los ocho vértices del FOV. |
-| **Jacobiano < 0** | ✅ Exacto por definición (registro rígido) | 0 % — una transformación rígida tiene \|J\| = 1 en todo punto. |
-| **Suavidad** | ✅ Exacta por definición (registro rígido) | 1.0 — el gradiente del campo es constante. |
-| **Jacobiano, desplazamiento y suavidad** | ❌ **N/A en registros deformables** | Requieren recorrer el campo de vectores de deformación (DVF), que la API de scripting de Varian no expone. |
-| **DSC** | ❌ **N/A** | Requiere rasterizar un par de contornos emparejado por identificador sobre una rejilla común. No implementado. |
-| **HD95** | ❌ **N/A** | Ídem. |
+| **NCC** | ✅ Measured | Pearson correlation over voxel pairs matched by applying the registration transform. Signed, range [-1, 1]. |
+| **NMI** | ✅ Measured | Studholme NMI, `(H(A)+H(B))/H(A,B)`, over the actual joint histogram. Bin count adapts to sample size. |
+| **SSD** | ✅ Measured | Mean squared difference normalised by the square of the robust range (P1–P99) of the reference image. Dimensionless and comparable across modalities. |
+| **Translations and Euler angles** | ✅ Measured | From the registration matrix, with automatic convention detection (translation in row or column), orthonormality verification and explicit gimbal-lock handling. |
+| **Max displacement** | ✅ Measured (rigid) | Exact maximum over the eight FOV corners. |
+| **Jacobian < 0** | ✅ Exact by definition (rigid) | 0% — a rigid transform has \|J\| = 1 everywhere. |
+| **Smoothness** | ✅ Exact by definition (rigid) | 1.0 — the field gradient is constant. |
+| **Jacobian, displacement and smoothness** | ❌ **N/A for deformable** | Require traversing the deformation vector field (DVF), which the Varian scripting API does not expose. |
+| **DSC** | ❌ **N/A** | Requires rasterising a structure pair matched by identifier onto a common grid. Not implemented. |
+| **HD95** | ❌ **N/A** | Same. |
 
-En registros **deformables**, si la API expone un método de mapeo punto a punto
-(`TransformPoint` o equivalente), las métricas de intensidad se calculan atravesando el
-campo de deformación. Si no lo expone, se marcan como N/A: aplicar sólo la componente
-lineal describiría una transformación distinta de la que se está auditando.
+For **deformable** registrations, if the API exposes a point-by-point mapping method
+(`TransformPoint` or equivalent), the intensity metrics are computed by traversing the
+deformation field. If it does not, they are marked N/A: applying only the linear component
+would describe a different transform from the one under audit.
 
-## Características
+## Features
 
-* **Emparejamiento espacial correcto:** los vóxeles se comparan tras llevarlos a coordenadas
-  de paciente y aplicar la transformación, con interpolación trilineal. Origen, espaciado y
-  cosenos directores se respetan, de modo que un CT de planificación y un CBCT con distinto
-  FOV se comparan de forma válida.
-* **Escalado a HU:** la rampa vóxel→display se determina sondeando la API y verificando su
-  linealidad, en lugar de asumir un rango fijo.
-* **Perfiles anatómicos:** ART Head & Neck, Brain/SRS, Pelvis/Prostate y Thorax/Lung.
-  Cambiar de perfil sólo reclasifica los valores ya medidos; no vuelve a leer la imagen.
-* **Motor de avisos ligado al perfil:** todos los umbrales de los avisos salen del perfil
-  activo, de modo que la tabla y las recomendaciones no pueden contradecirse.
-* **Diagnóstico visible:** cada propiedad de la API que no se pudo leer queda registrada con
-  la operación y la excepción concretas, en una pestaña propia y en el reporte.
-* **Reporte HTML A4:** con escape HTML, formato numérico en cultura invariante, sección de
-  procedencia del dato y versión del ensamblado que lo generó.
+* **Correct spatial matching:** voxels are compared after conversion to patient coordinates
+  and application of the transform, with trilinear interpolation. Origin, spacing and
+  direction cosines are honoured, so a planning CT and a CBCT with different FOV are compared
+  meaningfully.
+* **HU scaling:** the voxel→display ramp is determined by probing the API and verifying its
+  linearity, rather than assuming a fixed range.
+* **Anatomical profiles:** ART Head & Neck, Brain/SRS, Pelvis/Prostate and Thorax/Lung.
+  Changing profile only reclassifies values already measured; it does not re-read the image.
+* **Profile-driven advisory engine:** every advisory threshold comes from the active profile,
+  so the table and the recommendations cannot contradict each other.
+* **Visible diagnostics:** every API property that could not be read is recorded with the
+  specific operation and exception, in a dedicated tab and in the report.
+* **A4 HTML report:** with HTML escaping, invariant-culture number formatting, a data
+  provenance section, and the assembly version that generated it.
 
-## Requisitos
+## Requirements
 
 * Varian Eclipse TPS (v15.5 / v16.1 / v18.0)
 * .NET Framework 4.8
-* Licencia de scripting ESAPI (investigación o clínica)
+* ESAPI scripting licence (research or clinical)
 
-## Compilación
+## Building
 
-Los ensamblados de Varian se localizan mediante la propiedad `VarianScriptingPath`, cuyo
-valor por defecto es
-`C:\Program Files (x86)\Varian\ProductLine\Workspaces\VMS.IRS.Workspace`.
+The Varian assemblies are located through the `VarianScriptingPath` property, which defaults
+to `C:\Program Files (x86)\Varian\ProductLine\Workspaces\VMS.IRS.Workspace`.
 
-Para una ruta distinta, cualquiera de estas tres opciones:
+For a different path, use any of these three options:
 
 ```powershell
-# variable de entorno
+# environment variable
 $env:VarianScriptingPath = "D:\Program Files (x86)\Varian\...\VMS.IRS.Workspace"
 
-# o por línea de comandos
+# or on the command line
 msbuild ESAPI_RegistrationQA.csproj /p:VarianScriptingPath="D:\..."
 ```
 
-O bien un `Directory.Build.props` junto a la solución (conviene no versionarlo):
+Or a `Directory.Build.props` next to the solution (best left unversioned):
 
 ```xml
 <Project>
@@ -77,38 +76,38 @@ O bien un `Directory.Build.props` junto a la solución (conviene no versionarlo)
 </Project>
 ```
 
-El proyecto compila como **x64**, que es lo que requiere Eclipse 15.6 y posteriores.
+The project builds as **x64**, which is what Eclipse 15.6 and later require.
 
-## Uso
+## Usage
 
-1. Compilar en Release.
-2. Copiar el ensamblado al directorio de scripts de la aplicación (o a System Scripts).
-3. Lanzar desde **Contouring / Registration → Tools → Scripts**.
+1. Build in Release.
+2. Copy the assembly to the application's scripts directory (or to System Scripts).
+3. Launch from **Contouring / Registration → Tools → Scripts**.
 
-## Interpretación del veredicto
+## Reading the verdict
 
-El estado global distingue cinco situaciones, y nunca declara un registro verificado si
-quedaron métricas sin evaluar:
+The overall status distinguishes five situations, and never declares a registration verified
+while metrics remain unevaluated:
 
-| Veredicto | Significado |
+| Verdict | Meaning |
 |---|---|
-| **CONFORME** | Todas las métricas se midieron y todas cumplen el perfil. |
-| **CONFORME PARCIAL** | Lo medido cumple, pero hubo métricas que no se pudieron medir. La verificación no es completa. |
-| **REVISIÓN REQUERIDA** | Alguna métrica cayó en zona de atención (amarillo). |
-| **NO CONFORME** | Alguna métrica incumple el criterio del perfil (rojo). |
-| **SIN EVIDENCIA** | No se pudo evaluar ninguna métrica. Consulte la pestaña de diagnóstico. |
+| **COMPLIANT** | Every metric was measured and every one meets the profile. |
+| **PARTIALLY COMPLIANT** | What was measured passes, but some metrics could not be measured. Verification is not complete. |
+| **REVIEW REQUIRED** | A metric fell into the attention zone (yellow). |
+| **NOT COMPLIANT** | A metric breaches the profile criterion (red). |
+| **NO EVIDENCE** | No metric could be evaluated. See the diagnostics tab. |
 
-## Limitaciones conocidas
+## Known limitations
 
-* DSC y HD95 no están implementados (ver tabla de alcance).
-* Las métricas topológicas de registros deformables dependen del DVF, no accesible desde la
-  API de scripting.
-* El cálculo se ejecuta de forma síncrona en el hilo de interfaz. El muestreo está acotado a
-  ~2·10⁶ pares de vóxeles para mantener el tiempo de respuesta, y la resolución efectiva
-  resultante se reporta junto a las métricas.
-* La similitud se calcula sobre volúmenes submuestreados; el reporte indica la resolución
-  efectiva empleada.
+* DSC and HD95 are not implemented (see the scope table).
+* Topological metrics for deformable registrations depend on the DVF, which is not
+  accessible from the scripting API.
+* Computation runs synchronously on the UI thread. Sampling is capped at ~2·10⁶ voxel pairs
+  to keep the interface responsive, and the resulting effective resolution is reported
+  alongside the metrics.
+* Similarity is computed on subsampled volumes; the report states the effective resolution
+  used.
 
-## Licencia
+## Licence
 
 [MIT](LICENSE).

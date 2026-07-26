@@ -8,7 +8,7 @@
 
     <UserControl.Resources>
 
-        <!-- Paleta del semáforo. Un único punto de definición para las tres tablas. -->
+        <!-- Semaphore palette. A single point of definition for all three tables. -->
         <SolidColorBrush x:Key="StatusGreenBg"  Color="#C8E6C9"/>
         <SolidColorBrush x:Key="StatusGreenFg"  Color="#2E7D32"/>
         <SolidColorBrush x:Key="StatusYellowBg" Color="#FFF9C4"/>
@@ -20,12 +20,12 @@
         <SolidColorBrush x:Key="Accent"         Color="#005A9C"/>
 
         <!--
-            Insignia de estado.
+            Status badge.
 
-            Antes este bloque estaba duplicado literalmente en las tres tablas (unas 165 de
-            las 307 líneas del archivo), con el riesgo de que las copias divergieran. Ahora
-            es una única plantilla referenciada por CellTemplate. Incluye el estado
-            NotAvailable, que la versión anterior no contemplaba.
+            This block used to be duplicated verbatim across the three tables (roughly 165 of
+            the file's 307 lines), with the risk of the copies drifting apart. It is now a
+            single template referenced through CellTemplate. It includes the NotAvailable
+            state, which the previous version did not cover.
         -->
         <DataTemplate x:Key="StatusBadgeTemplate">
             <Border CornerRadius="3" Padding="6,2" HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -68,11 +68,11 @@
         </DataTemplate>
 
         <!--
-            Nombre de métrica.
+            Metric name.
 
-            El tooltip se enlaza a la propiedad Tooltip del modelo, que lo compone a partir
-            del catálogo de métricas. Antes eran ocho DataTrigger comparando el texto exacto
-            del nombre visible: renombrar una etiqueta hacía desaparecer su tooltip sin aviso.
+            The tooltip binds to the model's Tooltip property, which composes it from the
+            metric catalog. It used to be eight DataTriggers comparing the exact display
+            name: renaming a label made its tooltip disappear without warning.
         -->
         <DataTemplate x:Key="MetricNameTemplate">
             <TextBlock Text="{Binding MetricName}" FontWeight="SemiBold" VerticalAlignment="Center"
@@ -90,7 +90,7 @@
             </TextBlock>
         </DataTemplate>
 
-        <!-- Valor medido. Muestra "N/A" cuando no hay medición, nunca un cero de relleno. -->
+        <!-- Measured value. Shows "N/A" when there is no measurement, never a filler zero. -->
         <DataTemplate x:Key="MetricValueTemplate">
             <TextBlock Text="{Binding DisplayValue}" VerticalAlignment="Center"
                        HorizontalAlignment="Right" ToolTip="{Binding Tooltip}">
@@ -135,7 +135,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Cabecera con selector de perfil anatómico -->
+        <!-- Header with anatomical profile selector -->
         <Border Grid.Row="0" Background="{StaticResource Accent}" Padding="12,10" CornerRadius="5" Margin="0,0,0,12">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -144,20 +144,20 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBlock Text="AUDITORÍA CUANTITATIVA DE REGISTRO (AAPM TG-132 / TG-233)"
+                    <TextBlock Text="REGISTRATION QUANTITATIVE AUDIT (AAPM TG-132 / TG-233)"
                                Foreground="White" FontSize="14" FontWeight="Bold"/>
                     <TextBlock Foreground="#DDE7F0" FontSize="11.5" Margin="0,3,0,0">
-                        <Run Text="Paciente:"/>
+                        <Run Text="Patient:"/>
                         <Run Text="{Binding PatientId, Mode=OneWay}" FontWeight="SemiBold"/>
-                        <Run Text="  ·  Modalidades:"/>
+                        <Run Text="  ·  Modalities:"/>
                         <Run Text="{Binding RegContext.ModalityPair, Mode=OneWay}" FontWeight="SemiBold"/>
-                        <Run Text="  ·  Tipo:"/>
+                        <Run Text="  ·  Type:"/>
                         <Run Text="{Binding RegContext.RegType, Mode=OneWay}" FontWeight="SemiBold"/>
                     </TextBlock>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="Perfil anatómico:" Foreground="White" FontWeight="SemiBold"
+                    <TextBlock Text="Anatomical profile:" Foreground="White" FontWeight="SemiBold"
                                VerticalAlignment="Center" Margin="0,0,8,0" FontSize="12.5"/>
                     <ComboBox ItemsSource="{Binding AvailableProfiles}"
                               SelectedItem="{Binding ActiveProfile, Mode=TwoWay}"
@@ -165,12 +165,12 @@
                               Width="175" Height="28"
                               VerticalContentAlignment="Center"
                               FontWeight="Bold" Foreground="{StaticResource Accent}" Background="White"
-                              ToolTip="Cambiar de perfil sólo reclasifica los valores ya medidos; no vuelve a leer la imagen."/>
+                              ToolTip="Changing profile only reclassifies the values already measured; it does not re-read the image."/>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <!-- Veredicto global, coloreado según severidad -->
+        <!-- Overall verdict, coloured by severity -->
         <Border Grid.Row="1" BorderThickness="1" CornerRadius="5" Padding="12" Margin="0,0,0,12">
             <Border.Style>
                 <Style TargetType="Border">
@@ -209,8 +209,8 @@
                 </Style>
             </TabControl.Resources>
 
-            <!-- Similitud y topología -->
-            <TabItem Header="Métricas de QA">
+            <!-- Similarity and topology -->
+            <TabItem Header="QA Metrics">
                 <Grid Margin="0,10,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -218,29 +218,29 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
-                    <GroupBox Grid.Column="0" Header="Similitud de intensidad">
+                    <GroupBox Grid.Column="0" Header="Intensity similarity">
                         <DataGrid ItemsSource="{Binding IntensityMetrics}" Style="{StaticResource MetricGridStyle}">
                             <DataGrid.Columns>
-                                <DataGridTemplateColumn Header="Métrica" Width="*"
+                                <DataGridTemplateColumn Header="Metric" Width="*"
                                                         CellTemplate="{StaticResource MetricNameTemplate}"/>
-                                <DataGridTemplateColumn Header="Valor" Width="80"
+                                <DataGridTemplateColumn Header="Value" Width="80"
                                                         CellTemplate="{StaticResource MetricValueTemplate}"/>
-                                <DataGridTextColumn Header="Criterio" Binding="{Binding ThresholdCriteria}" Width="130"/>
-                                <DataGridTemplateColumn Header="Estado" Width="80"
+                                <DataGridTextColumn Header="Criterion" Binding="{Binding ThresholdCriteria}" Width="130"/>
+                                <DataGridTemplateColumn Header="Status" Width="80"
                                                         CellTemplate="{StaticResource StatusBadgeTemplate}"/>
                             </DataGrid.Columns>
                         </DataGrid>
                     </GroupBox>
 
-                    <GroupBox Grid.Column="2" Header="Deformación y topología">
+                    <GroupBox Grid.Column="2" Header="Deformation and topology">
                         <DataGrid ItemsSource="{Binding DeformationMetrics}" Style="{StaticResource MetricGridStyle}">
                             <DataGrid.Columns>
-                                <DataGridTemplateColumn Header="Métrica" Width="*"
+                                <DataGridTemplateColumn Header="Metric" Width="*"
                                                         CellTemplate="{StaticResource MetricNameTemplate}"/>
-                                <DataGridTemplateColumn Header="Valor" Width="80"
+                                <DataGridTemplateColumn Header="Value" Width="80"
                                                         CellTemplate="{StaticResource MetricValueTemplate}"/>
-                                <DataGridTextColumn Header="Criterio" Binding="{Binding ThresholdCriteria}" Width="130"/>
-                                <DataGridTemplateColumn Header="Estado" Width="80"
+                                <DataGridTextColumn Header="Criterion" Binding="{Binding ThresholdCriteria}" Width="130"/>
+                                <DataGridTemplateColumn Header="Status" Width="80"
                                                         CellTemplate="{StaticResource StatusBadgeTemplate}"/>
                             </DataGrid.Columns>
                         </DataGrid>
@@ -248,19 +248,19 @@
                 </Grid>
             </TabItem>
 
-            <!-- Estructuras -->
-            <TabItem Header="Estructuras y superficie">
-                <GroupBox Header="Alineamiento anatómico (DSC / HD95)" Margin="0,10,0,0">
+            <!-- Structures -->
+            <TabItem Header="Structures &amp; Surface">
+                <GroupBox Header="Anatomical alignment (DSC / HD95)" Margin="0,10,0,0">
                     <DataGrid ItemsSource="{Binding StructureQAMetrics}" Style="{StaticResource MetricGridStyle}">
                         <DataGrid.Columns>
-                            <DataGridTemplateColumn Header="Índice anatómico" Width="2*"
+                            <DataGridTemplateColumn Header="Anatomical index" Width="2*"
                                                     CellTemplate="{StaticResource MetricNameTemplate}"/>
-                            <DataGridTemplateColumn Header="Valor" Width="100"
+                            <DataGridTemplateColumn Header="Value" Width="100"
                                                     CellTemplate="{StaticResource MetricValueTemplate}"/>
-                            <DataGridTextColumn Header="Criterio" Binding="{Binding ThresholdCriteria}" Width="160"/>
-                            <DataGridTemplateColumn Header="Estado" Width="80"
+                            <DataGridTextColumn Header="Criterion" Binding="{Binding ThresholdCriteria}" Width="160"/>
+                            <DataGridTemplateColumn Header="Status" Width="80"
                                                     CellTemplate="{StaticResource StatusBadgeTemplate}"/>
-                            <DataGridTextColumn Header="Motivo" Binding="{Binding UnavailableReason}" Width="3*">
+                            <DataGridTextColumn Header="Reason" Binding="{Binding UnavailableReason}" Width="3*">
                                 <DataGridTextColumn.ElementStyle>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="TextWrapping" Value="Wrap"/>
@@ -275,19 +275,19 @@
                 </GroupBox>
             </TabItem>
 
-            <!-- Transformación rígida -->
-            <TabItem Header="Transformación rígida">
-                <GroupBox Header="Parámetros espaciales (coordenadas de paciente DICOM)" Margin="0,10,0,0">
+            <!-- Rigid transform -->
+            <TabItem Header="Rigid Transform">
+                <GroupBox Header="Spatial parameters (DICOM patient coordinates)" Margin="0,10,0,0">
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Top" Margin="10,6,10,0" TextWrapping="Wrap"
                                    FontWeight="Normal" FontSize="10.5" Foreground="#607D8B"
-                                   Text="X = izquierda-derecha (LR) · Y = anterior-posterior (AP) · Z = cráneo-caudal (CC). Ángulos de Euler en convención intrínseca Rz·Ry·Rx."/>
+                                   Text="X = left-right (LR) · Y = anterior-posterior (AP) · Z = cranio-caudal (CC). Euler angles in the intrinsic Rz·Ry·Rx convention."/>
                         <DataGrid ItemsSource="{Binding RigidTransformData}" Style="{StaticResource MetricGridStyle}">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Parámetro" Binding="{Binding Parameter}" Width="2*"/>
-                                <DataGridTextColumn Header="Valor" Binding="{Binding DisplayValue}" Width="1*"/>
-                                <DataGridTextColumn Header="Unidad" Binding="{Binding Unit}" Width="80"/>
-                                <DataGridTextColumn Header="Procedencia" Binding="{Binding Note}" Width="3*">
+                                <DataGridTextColumn Header="Parameter" Binding="{Binding Parameter}" Width="2*"/>
+                                <DataGridTextColumn Header="Value" Binding="{Binding DisplayValue}" Width="1*"/>
+                                <DataGridTextColumn Header="Unit" Binding="{Binding Unit}" Width="80"/>
+                                <DataGridTextColumn Header="Provenance" Binding="{Binding Note}" Width="3*">
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="TextWrapping" Value="Wrap"/>
@@ -303,15 +303,15 @@
                 </GroupBox>
             </TabItem>
 
-            <!-- Recomendaciones clínicas -->
-            <TabItem Header="Recomendaciones">
-                <GroupBox Header="Recomendaciones clínicas según el perfil activo" Margin="0,10,0,0">
+            <!-- Clinical advisories -->
+            <TabItem Header="Advisories">
+                <GroupBox Header="Clinical advisories for the active profile" Margin="0,10,0,0">
                     <DataGrid ItemsSource="{Binding Advisories}" Style="{StaticResource MetricGridStyle}"
                               RowHeight="NaN">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Nivel" Binding="{Binding SeverityText}" Width="90"/>
-                            <DataGridTextColumn Header="Ámbito" Binding="{Binding Category}" Width="180"/>
-                            <DataGridTextColumn Header="Observación" Binding="{Binding Message}" Width="*">
+                            <DataGridTextColumn Header="Level" Binding="{Binding SeverityText}" Width="90"/>
+                            <DataGridTextColumn Header="Scope" Binding="{Binding Category}" Width="180"/>
+                            <DataGridTextColumn Header="Observation" Binding="{Binding Message}" Width="*">
                                 <DataGridTextColumn.ElementStyle>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="TextWrapping" Value="Wrap"/>
@@ -325,14 +325,14 @@
             </TabItem>
 
             <!--
-                Diagnóstico.
+                Diagnostics.
 
-                Pestaña nueva: hace visible todo lo que la versión anterior se tragaba en
-                bloques catch vacíos. Es lo que permite saber por qué una métrica salió
-                como no disponible.
+                A new tab: it surfaces everything the previous version swallowed in empty
+                catch blocks. This is what lets the user find out why a metric came out
+                unavailable.
             -->
-            <TabItem Header="Diagnóstico">
-                <GroupBox Header="Acceso a la API de Varian" Margin="0,10,0,0">
+            <TabItem Header="Diagnostics">
+                <GroupBox Header="Varian API access" Margin="0,10,0,0">
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Top" Text="{Binding DiagnosticsSummary}"
                                    Margin="10,6,10,0" FontWeight="SemiBold" FontSize="11"
@@ -340,9 +340,9 @@
                         <DataGrid ItemsSource="{Binding Diagnostics}" Style="{StaticResource MetricGridStyle}"
                                   RowHeight="NaN">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Nivel" Binding="{Binding LevelText}" Width="80"/>
-                                <DataGridTextColumn Header="Operación" Binding="{Binding Operation}" Width="2*"/>
-                                <DataGridTextColumn Header="Detalle" Binding="{Binding Detail}" Width="3*">
+                                <DataGridTextColumn Header="Level" Binding="{Binding LevelText}" Width="80"/>
+                                <DataGridTextColumn Header="Operation" Binding="{Binding Operation}" Width="2*"/>
+                                <DataGridTextColumn Header="Detail" Binding="{Binding Detail}" Width="3*">
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="TextWrapping" Value="Wrap"/>
@@ -359,7 +359,7 @@
         </TabControl>
 
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-            <Button Content="Exportar reporte técnico (HTML)" Command="{Binding ExportReportCommand}"
+            <Button Content="Export technical report (HTML)" Command="{Binding ExportReportCommand}"
                     Width="240" Height="35" Background="{StaticResource Accent}" Foreground="White"
                     FontWeight="Bold" BorderThickness="0"/>
         </StackPanel>

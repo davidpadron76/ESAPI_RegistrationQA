@@ -3,15 +3,15 @@ using System;
 namespace ESAPI_RegistrationQA.Models
 {
     /// <summary>
-    /// Geometría de un volumen de imagen: origen, cosenos directores, tamaño de vóxel y
-    /// dimensiones. Permite convertir entre índices de vóxel y coordenadas de paciente,
-    /// que es exactamente lo que faltaba en la versión anterior: allí se comparaban
-    /// vóxeles por índice, ignorando origen, espaciado y orientación.
+    /// Geometry of an image volume: origin, direction cosines, voxel size and dimensions.
+    /// Allows conversion between voxel indices and patient coordinates, which is exactly
+    /// what the previous version lacked: it compared voxels by index, ignoring origin,
+    /// spacing and orientation.
     ///
-    /// Convención de ejes en coordenadas de paciente DICOM (orientación HFS):
-    ///   X → izquierda-derecha  (LR)
+    /// Axis convention in DICOM patient coordinates (HFS orientation):
+    ///   X → left-right        (LR)
     ///   Y → anterior-posterior (AP)
-    ///   Z → cráneo-caudal      (CC)
+    ///   Z → cranio-caudal      (CC)
     /// </summary>
     public sealed class ImageGeometry
     {
@@ -20,7 +20,7 @@ namespace ESAPI_RegistrationQA.Models
         public Vec3 YDirection { get; private set; }
         public Vec3 ZDirection { get; private set; }
 
-        /// <summary>Tamaño de vóxel en mm a lo largo de cada eje del volumen.</summary>
+        /// <summary>Voxel size in mm along each volume axis.</summary>
         public double XRes { get; private set; }
         public double YRes { get; private set; }
         public double ZRes { get; private set; }
@@ -52,21 +52,21 @@ namespace ESAPI_RegistrationQA.Models
             get { return (long)XSize * YSize * ZSize; }
         }
 
-        /// <summary>Resolución isotrópica equivalente, usada para informar del muestreo efectivo.</summary>
+        /// <summary>Equivalent isotropic resolution, used to report the effective sampling.</summary>
         public double CoarsestResolution
         {
             get { return Math.Max(XRes, Math.Max(YRes, ZRes)); }
         }
 
         /// <summary>
-        /// Comprueba que la geometría es utilizable: dimensiones positivas, resoluciones
-        /// positivas y finitas, y cosenos directores mutuamente ortogonales.
+        /// Checks that the geometry is usable: positive dimensions, positive and finite
+        /// resolutions, and mutually orthogonal direction cosines.
         /// </summary>
         public bool IsUsable(out string problem)
         {
             if (XSize <= 0 || YSize <= 0 || ZSize <= 0)
             {
-                problem = "dimensiones de volumen no positivas";
+                problem = "non-positive volume dimensions";
                 return false;
             }
 
@@ -74,13 +74,13 @@ namespace ESAPI_RegistrationQA.Models
                 double.IsNaN(XRes) || double.IsNaN(YRes) || double.IsNaN(ZRes) ||
                 double.IsInfinity(XRes) || double.IsInfinity(YRes) || double.IsInfinity(ZRes))
             {
-                problem = "tamaño de vóxel no positivo o no finito";
+                problem = "non-positive or non-finite voxel size";
                 return false;
             }
 
             if (!Origin.IsFinite)
             {
-                problem = "origen no finito";
+                problem = "non-finite origin";
                 return false;
             }
 
@@ -89,7 +89,7 @@ namespace ESAPI_RegistrationQA.Models
                 Math.Abs(XDirection.Dot(ZDirection)) > tolerance ||
                 Math.Abs(YDirection.Dot(ZDirection)) > tolerance)
             {
-                problem = "los cosenos directores no son mutuamente ortogonales";
+                problem = "direction cosines are not mutually orthogonal";
                 return false;
             }
 
@@ -97,7 +97,7 @@ namespace ESAPI_RegistrationQA.Models
                 Math.Abs(YDirection.Length - 1.0) > tolerance ||
                 Math.Abs(ZDirection.Length - 1.0) > tolerance)
             {
-                problem = "los cosenos directores no son unitarios";
+                problem = "direction cosines are not unit vectors";
                 return false;
             }
 
@@ -105,7 +105,7 @@ namespace ESAPI_RegistrationQA.Models
             return true;
         }
 
-        /// <summary>Índice de vóxel (continuo) → coordenada de paciente en mm.</summary>
+        /// <summary>Continuous voxel index → patient coordinate in mm.</summary>
         public Vec3 VoxelToPatient(double i, double j, double k)
         {
             return Origin
@@ -115,9 +115,9 @@ namespace ESAPI_RegistrationQA.Models
         }
 
         /// <summary>
-        /// Coordenada de paciente → índice de vóxel (continuo). Se apoya en que los cosenos
-        /// directores son ortonormales, por lo que la inversa de la matriz de orientación es
-        /// su traspuesta y basta con proyectar sobre cada eje.
+        /// Patient coordinate → continuous voxel index. Relies on the direction cosines
+        /// being orthonormal, so that the inverse of the orientation matrix is its transpose
+        /// and projecting onto each axis suffices.
         /// </summary>
         public void PatientToVoxel(Vec3 point, out double i, out double j, out double k)
         {
@@ -127,7 +127,7 @@ namespace ESAPI_RegistrationQA.Models
             k = delta.Dot(ZDirection) / ZRes;
         }
 
-        /// <summary>Los ocho vértices del volumen en coordenadas de paciente.</summary>
+        /// <summary>The eight corners of the volume in patient coordinates.</summary>
         public Vec3[] BoundingBoxCorners()
         {
             double maxI = XSize - 1;
@@ -148,8 +148,8 @@ namespace ESAPI_RegistrationQA.Models
         }
 
         /// <summary>
-        /// Geometría equivalente tras submuestrear por un paso entero en cada eje. El origen
-        /// no cambia (el vóxel 0,0,0 se conserva) y el tamaño de vóxel se escala.
+        /// Equivalent geometry after subsampling by an integer step on each axis. The origin
+        /// is unchanged (voxel 0,0,0 is preserved) and the voxel size is scaled.
         /// </summary>
         public ImageGeometry Subsampled(int stepX, int stepY, int stepZ, int newXSize, int newYSize, int newZSize)
         {

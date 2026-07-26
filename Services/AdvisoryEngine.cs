@@ -27,8 +27,8 @@ namespace ESAPI_RegistrationQA.Services
             {
                 switch (Severity)
                 {
-                    case AdvisorySeverity.Critical: return "CRÍTICO";
-                    case AdvisorySeverity.Warning: return "REVISAR";
+                    case AdvisorySeverity.Critical: return "CRITICAL";
+                    case AdvisorySeverity.Warning: return "REVIEW";
                     case AdvisorySeverity.Info: return "INFO";
                     default: return "OK";
                 }
@@ -54,13 +54,13 @@ namespace ESAPI_RegistrationQA.Services
     }
 
     /// <summary>
-    /// Traduce métricas evaluadas en recomendaciones clínicas.
+    /// Turns evaluated metrics into clinical recommendations.
     ///
-    /// Todos los umbrales salen del perfil activo. La versión anterior comparaba contra
-    /// constantes (1.0 % de jacobiano, 15 mm de desplazamiento) mientras las tablas usaban
-    /// los límites del perfil, de modo que con el perfil Brain/SRS un jacobiano del 0,5 %
-    /// se pintaba en rojo pero no generaba aviso, y con el de Tórax un 1,5 % generaba un
-    /// aviso crítico aunque el perfil lo aceptase.
+    /// Every threshold comes from the active profile. The previous version compared against
+    /// constants (1.0% Jacobian, 15 mm displacement) while the tables used the profile
+    /// limits, so under the Brain/SRS profile a 0.5% Jacobian was painted red but raised no
+    /// advisory, and under Thorax a 1.5% Jacobian raised a critical advisory even though the
+    /// profile accepted it.
     /// </summary>
     public static class AdvisoryEngine
     {
@@ -71,16 +71,16 @@ namespace ESAPI_RegistrationQA.Services
         {
             var set = new AdvisorySet();
             List<MetricResult> metrics = (allMetrics ?? Enumerable.Empty<MetricResult>()).ToList();
-            string profileName = profile != null ? profile.ProfileName : "(sin perfil)";
+            string profileName = profile != null ? profile.ProfileName : "(no profile)";
 
-            // --- Métricas fuera de tolerancia ------------------------------------------
+            // --- Metrics out of tolerance ----------------------------------------------
             foreach (MetricResult metric in metrics.Where(m => m.Status == QASemaphore.Red))
                 set.Advisories.Add(BuildBreachAdvisory(metric, profile, profileName, AdvisorySeverity.Critical));
 
             foreach (MetricResult metric in metrics.Where(m => m.Status == QASemaphore.Yellow))
                 set.Advisories.Add(BuildBreachAdvisory(metric, profile, profileName, AdvisorySeverity.Warning));
 
-            // --- Métricas no evaluadas ---------------------------------------------------
+            // --- Metrics that were not evaluated -----------------------------------------
             List<MetricResult> unavailable = metrics
                 .Where(m => m.Status == QASemaphore.NotAvailable)
                 .ToList();
@@ -89,38 +89,37 @@ namespace ESAPI_RegistrationQA.Services
             {
                 set.Advisories.Add(new Advisory(
                     AdvisorySeverity.Info,
-                    "MÉTRICA NO EVALUADA",
-                    metric.MetricName + " no se pudo medir: " + metric.UnavailableReason +
-                    " Esta métrica no respalda ni contradice la aceptación del registro."));
+                    "METRIC NOT EVALUATED",
+                    metric.MetricName + " could not be measured: " + metric.UnavailableReason +
+                    " This metric neither supports nor contradicts acceptance of the registration."));
             }
 
-            // --- Contexto de modalidad ---------------------------------------------------
+            // --- Modality context --------------------------------------------------------
             AddModalityAdvisory(set, measurements);
 
-            // --- Calidad del muestreo ----------------------------------------------------
+            // --- Sampling quality --------------------------------------------------------
             AddSamplingAdvisory(set, measurements);
 
-            // --- Procedencia de la transformación ----------------------------------------
+            // --- Transform provenance ----------------------------------------------------
             if (measurements != null && measurements.Transform == null)
             {
                 set.Advisories.Add(new Advisory(
                     AdvisorySeverity.Warning,
-                    "TRANSFORMACIÓN",
-                    "No se pudo obtener la transformación del registro. Los parámetros rígidos " +
-                    "mostrados no proceden de una lectura válida."));
+                    "TRANSFORM",
+                    "The registration transform could not be obtained. The rigid parameters shown do " +
+                    "not come from a valid reading."));
             }
             else if (measurements != null && measurements.RigidEulerAngles.HasValue &&
                      measurements.RigidEulerAngles.Value.GimbalLock)
             {
                 set.Advisories.Add(new Advisory(
                     AdvisorySeverity.Warning,
-                    "TRANSFORMACIÓN",
-                    "La descomposición en ángulos de Euler cayó en bloqueo de cardán (cabeceo ≈ ±90°). " +
-                    "Cabeceo y guiñada no son separables en esta orientación; interprete los tres " +
-                    "ángulos como un conjunto, no de forma individual."));
+                    "TRANSFORM",
+                    "The Euler decomposition hit gimbal lock (pitch ≈ ±90°). Pitch and yaw are not " +
+                    "separable at this orientation; read the three angles as a set, not individually."));
             }
 
-            // --- Veredicto global --------------------------------------------------------
+            // --- Overall verdict ---------------------------------------------------------
             BuildVerdict(set, metrics, unavailable.Count, profileName, measurements);
 
             return set;
@@ -136,16 +135,16 @@ namespace ESAPI_RegistrationQA.Services
 
             return new Advisory(
                 severity,
-                severity == AdvisorySeverity.Critical ? "FUERA DE TOLERANCIA" : "EN ZONA DE ATENCIÓN",
+                severity == AdvisorySeverity.Critical ? "OUT OF TOLERANCE" : "IN ATTENTION ZONE",
                 string.Format(CultureInfo.InvariantCulture,
-                    "{0} = {1} frente al criterio {2} del perfil [{3}] ({4}). {5}",
+                    "{0} = {1} against the {2} criterion of the [{3}] profile ({4}). {5}",
                     metric.MetricName, measured, limit, profileName, metric.ThresholdCriteria, interpretation));
         }
 
         /// <summary>
-        /// Interpretación clínica asociada a cada métrica. Se selecciona por clave canónica,
-        /// no por subcadena del nombre visible: renombrar una etiqueta en la UI no puede
-        /// hacer que un aviso deje de dispararse en silencio.
+        /// Clinical interpretation attached to each metric. Selected by canonical key, not
+        /// by substring of the display name: renaming a UI label must not silently stop an
+        /// advisory from firing.
         /// </summary>
         private static string InterpretBreach(string metricKey, AdvisorySeverity severity)
         {
@@ -153,33 +152,33 @@ namespace ESAPI_RegistrationQA.Services
             {
                 case MetricKeys.JacobianNegative:
                     return severity == AdvisorySeverity.Critical
-                        ? "Indica plegamiento de la rejilla: inversión topológica no física en el campo de " +
-                          "deformación. El registro NO es apto para acumulación de dosis ni para propagación " +
-                          "directa de contornos."
-                        : "Presencia de plegamiento local en el campo de deformación. Verifique las regiones " +
-                          "afectadas antes de propagar contornos.";
+                        ? "Indicates grid folding: unphysical topological inversion in the deformation " +
+                          "field. The registration is NOT suitable for dose accumulation or for direct " +
+                          "contour propagation."
+                        : "Local folding is present in the deformation field. Verify the affected regions " +
+                          "before propagating contours.";
 
                 case MetricKeys.MaxDisplacement:
-                    return "Desplazamiento vectorial elevado. Confirme que corresponde a un cambio anatómico " +
-                           "real y no a un error de correlación en los bordes del FOV.";
+                    return "High vector displacement. Confirm that it corresponds to a real anatomical " +
+                           "change and not to a correlation error at the FOV boundaries.";
 
                 case MetricKeys.Smoothness:
-                    return "Campo de deformación irregular. Puede indicar sobreajuste del algoritmo en zonas " +
-                           "de bajo contraste.";
+                    return "Irregular deformation field. May indicate algorithm overfitting in low-contrast " +
+                           "regions.";
 
                 case MetricKeys.Nmi:
                 case MetricKeys.Ncc:
                 case MetricKeys.Ssd:
-                    return "Posibles diferencias de contraste, artefactos metálicos, truncamiento del FOV o " +
-                           "un desalineamiento real. Revise la superposición corte a corte.";
+                    return "Possible contrast differences, metal artefacts, FOV truncation, or a genuine " +
+                           "misalignment. Review the overlay slice by slice.";
 
                 case MetricKeys.Dsc:
                 case MetricKeys.Hd95:
-                    return "El solapamiento anatómico está fuera de tolerancia. Se recomienda verificación " +
-                           "corte a corte y ajuste manual de los contornos propagados.";
+                    return "Anatomical overlap is out of tolerance. Slice-by-slice verification and manual " +
+                           "adjustment of the propagated contours are recommended.";
 
                 default:
-                    return "Revise el valor frente al criterio del perfil.";
+                    return "Review the value against the profile criterion.";
             }
         }
 
@@ -202,17 +201,17 @@ namespace ESAPI_RegistrationQA.Services
             {
                 set.Advisories.Add(new Advisory(
                     AdvisorySeverity.Info,
-                    "MODALIDAD",
-                    "Registro multimodal (" + pair + "). La métrica de referencia es " + primaryName +
-                    ": el NCC asume una relación lineal entre intensidades que no se cumple entre " +
-                    "modalidades distintas, por lo que su valor aquí es orientativo."));
+                    "MODALITY",
+                    "Multimodal registration (" + pair + "). The reference metric is " + primaryName +
+                    ": the NCC assumes a linear relationship between intensities that does not hold " +
+                    "across different modalities, so its value here is indicative only."));
             }
             else
             {
                 set.Advisories.Add(new Advisory(
                     AdvisorySeverity.Info,
-                    "MODALIDAD",
-                    "Registro monomodal (" + pair + "). La métrica de referencia es " + primaryName + "."));
+                    "MODALITY",
+                    "Monomodal registration (" + pair + "). The reference metric is " + primaryName + "."));
             }
         }
 
@@ -221,38 +220,38 @@ namespace ESAPI_RegistrationQA.Services
             if (measurements == null || measurements.SampleCount <= 0) return;
 
             string detail = string.Format(CultureInfo.InvariantCulture,
-                "Similitud calculada sobre {0:N0} pares de vóxeles con muestreo efectivo de {1:F1} mm.",
+                "Similarity computed over {0:N0} voxel pairs at {1:F1} mm effective sampling.",
                 measurements.SampleCount,
                 measurements.EffectiveSamplingMm.HasValue ? measurements.EffectiveSamplingMm.Value : 0.0);
 
             if (measurements.OverlapFraction.HasValue)
             {
                 detail += string.Format(CultureInfo.InvariantCulture,
-                    " Solapamiento entre volúmenes: {0:P1}.", measurements.OverlapFraction.Value);
+                    " Overlap between volumes: {0:P1}.", measurements.OverlapFraction.Value);
             }
 
             AdvisorySeverity severity = AdvisorySeverity.Info;
             if (measurements.OverlapFraction.HasValue && measurements.OverlapFraction.Value < 0.35)
             {
                 severity = AdvisorySeverity.Warning;
-                detail += " Un solapamiento bajo concentra la métrica en una fracción reducida de la " +
-                          "anatomía; su representatividad es limitada.";
+                detail += " Low overlap concentrates the metric on a small fraction of the anatomy; " +
+                          "its representativeness is limited.";
             }
 
-            set.Advisories.Add(new Advisory(severity, "MUESTREO", detail));
+            set.Advisories.Add(new Advisory(severity, "SAMPLING", detail));
         }
 
         /// <summary>
-        /// Veredicto global. Nunca declara un registro verificado si quedaron métricas sin
-        /// evaluar: la ausencia de evidencia no es evidencia de conformidad, y es
-        /// precisamente lo que la versión anterior afirmaba al rellenar los huecos con
-        /// valores generados.
+        /// Overall verdict. It never declares a registration verified while metrics remain
+        /// unevaluated: absence of evidence is not evidence of conformity, and that is
+        /// precisely what the previous version asserted by filling the gaps with generated
+        /// values.
         /// </summary>
         private static void BuildVerdict(
             AdvisorySet set, List<MetricResult> metrics, int unavailableCount,
             string profileName, QaMeasurements measurements)
         {
-            string registrationId = measurements != null ? measurements.RegistrationId : "(desconocido)";
+            string registrationId = measurements != null ? measurements.RegistrationId : "(unknown)";
             int red = metrics.Count(m => m.Status == QASemaphore.Red);
             int yellow = metrics.Count(m => m.Status == QASemaphore.Yellow);
             int green = metrics.Count(m => m.Status == QASemaphore.Green);
@@ -261,8 +260,8 @@ namespace ESAPI_RegistrationQA.Services
             {
                 set.OverallSeverity = AdvisorySeverity.Critical;
                 set.OverallStatus = string.Format(CultureInfo.InvariantCulture,
-                    "NO CONFORME — El registro '{0}' incumple {1} criterio(s) del perfil [{2}]. " +
-                    "{3} métrica(s) en zona de atención, {4} sin evaluar.",
+                    "NOT COMPLIANT — Registration '{0}' breaches {1} criterion(s) of the [{2}] profile. " +
+                    "{3} metric(s) in the attention zone, {4} unevaluated.",
                     registrationId, red, profileName, yellow, unavailableCount);
                 return;
             }
@@ -271,8 +270,8 @@ namespace ESAPI_RegistrationQA.Services
             {
                 set.OverallSeverity = AdvisorySeverity.Warning;
                 set.OverallStatus = string.Format(CultureInfo.InvariantCulture,
-                    "REVISIÓN REQUERIDA — El registro '{0}' tiene {1} métrica(s) en zona de atención " +
-                    "del perfil [{2}]. {3} sin evaluar.",
+                    "REVIEW REQUIRED — Registration '{0}' has {1} metric(s) in the attention zone of the " +
+                    "[{2}] profile. {3} unevaluated.",
                     registrationId, yellow, profileName, unavailableCount);
                 return;
             }
@@ -281,8 +280,8 @@ namespace ESAPI_RegistrationQA.Services
             {
                 set.OverallSeverity = AdvisorySeverity.Warning;
                 set.OverallStatus = string.Format(CultureInfo.InvariantCulture,
-                    "SIN EVIDENCIA — No se pudo evaluar ninguna métrica del registro '{0}'. " +
-                    "Consulte la pestaña de diagnóstico para ver qué falló.",
+                    "NO EVIDENCE — No metric of registration '{0}' could be evaluated. " +
+                    "See the diagnostics tab for what failed.",
                     registrationId);
                 return;
             }
@@ -291,22 +290,22 @@ namespace ESAPI_RegistrationQA.Services
             {
                 set.OverallSeverity = AdvisorySeverity.Warning;
                 set.OverallStatus = string.Format(CultureInfo.InvariantCulture,
-                    "CONFORME PARCIAL — Las {0} métrica(s) evaluadas del registro '{1}' cumplen el perfil " +
-                    "[{2}], pero {3} no se pudieron medir. La verificación no es completa.",
+                    "PARTIALLY COMPLIANT — The {0} evaluated metric(s) of registration '{1}' meet the [{2}] " +
+                    "profile, but {3} could not be measured. Verification is not complete.",
                     green, registrationId, profileName, unavailableCount);
                 return;
             }
 
             set.OverallSeverity = AdvisorySeverity.Ok;
             set.OverallStatus = string.Format(CultureInfo.InvariantCulture,
-                "CONFORME — Las {0} métricas evaluadas del registro '{1}' satisfacen las tolerancias " +
-                "del perfil [{2}].",
+                "COMPLIANT — All {0} evaluated metrics of registration '{1}' satisfy the tolerances of the " +
+                "[{2}] profile.",
                 green, registrationId, profileName);
 
             set.Advisories.Add(new Advisory(
                 AdvisorySeverity.Ok,
-                "ESTADO",
-                "Todas las métricas medidas se encuentran dentro de los umbrales de calidad del perfil activo."));
+                "STATUS",
+                "All measured metrics fall within the quality thresholds of the active profile."));
         }
     }
 }

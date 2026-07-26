@@ -9,34 +9,33 @@ namespace ESAPI_RegistrationQA.Services
         public float[] MovingValues { get; set; }
         public int Count { get; set; }
 
-        /// <summary>Fracción de vóxeles visitados de la imagen fija que tienen correspondencia.</summary>
+        /// <summary>Fraction of visited fixed-image voxels that have a correspondence.</summary>
         public double OverlapFraction { get; set; }
 
         public string Problem { get; set; }
     }
 
     /// <summary>
-    /// Empareja vóxeles físicamente correspondientes entre dos volúmenes aplicando el mapeo
-    /// del registro.
+    /// Matches physically corresponding voxels between two volumes by applying the
+    /// registration mapping.
     ///
-    /// Esto es lo que la versión anterior no hacía: comparaba <c>bufferFijo[x,y]</c> con
-    /// <c>bufferMovil[x,y]</c> por índice de vóxel, de modo que el resultado medía la
-    /// coincidencia de los sistemas de índices y no la calidad del registro. Entre un CT de
-    /// planificación y un CBCT, con distinto FOV, espaciado y origen, esa comparación carece
-    /// de interpretación física.
+    /// This is what the previous version did not do: it compared <c>fixedBuffer[x,y]</c>
+    /// with <c>movingBuffer[x,y]</c> by voxel index, so the result measured how well the
+    /// index systems coincided, not the quality of the registration. Between a planning CT
+    /// and a CBCT, with different FOV, spacing and origin, that comparison has no physical
+    /// interpretation.
     /// </summary>
     public static class VoxelPairSampler
     {
-        /// <summary>Cota superior de pares retenidos, para acotar memoria y tiempo de ordenación.</summary>
+        /// <summary>Upper bound on retained pairs, to bound memory and sorting time.</summary>
         public const int MaxRetainedPairs = 2000000;
 
-        /// <summary>Solapamiento mínimo por debajo del cual las métricas no son representativas.</summary>
+        /// <summary>Minimum overlap below which the metrics are not representative.</summary>
         public const double MinimumOverlapFraction = 0.10;
 
         /// <summary>
-        /// Recorre la rejilla de la imagen fija, lleva cada punto a coordenadas de paciente,
-        /// le aplica el mapeo del registro y muestrea la imagen móvil por interpolación
-        /// trilineal.
+        /// Walks the fixed-image grid, converts each point to patient coordinates, applies
+        /// the registration mapping and samples the moving image by trilinear interpolation.
         /// </summary>
         public static VoxelPairSet Pair(
             SampledVolume fixedVolume,
@@ -47,13 +46,13 @@ namespace ESAPI_RegistrationQA.Services
 
             if (fixedVolume == null || movingVolume == null)
             {
-                result.Problem = "falta uno de los volúmenes";
+                result.Problem = "one of the volumes is missing";
                 return result;
             }
 
             if (mapper == null)
             {
-                result.Problem = "no se dispone del mapeo entre las dos imágenes";
+                result.Problem = "no mapping between the two images is available";
                 return result;
             }
 
@@ -61,9 +60,9 @@ namespace ESAPI_RegistrationQA.Services
             long totalCandidates = fixedGeometry.VoxelCount;
             int budget = Math.Min(MaxRetainedPairs, Math.Max(1, mapper.RecommendedSampleBudget));
 
-            // Si la rejilla fija excede el presupuesto se recorre con paso uniforme en lugar
-            // de truncar: truncar sesgaría el muestreo hacia los primeros cortes, que en un
-            // volumen de planificación son mayoritariamente aire.
+            // If the fixed grid exceeds the budget it is walked with a uniform stride rather
+            // than truncated: truncating would bias sampling towards the first slices, which
+            // in a planning volume are mostly air.
             int stride = 1;
             if (totalCandidates > budget)
                 stride = (int)Math.Ceiling((double)totalCandidates / budget);
@@ -71,7 +70,7 @@ namespace ESAPI_RegistrationQA.Services
             int capacity = (int)Math.Min(budget, (totalCandidates + stride - 1) / stride);
             if (capacity <= 0)
             {
-                result.Problem = "la rejilla de muestreo quedó vacía";
+                result.Problem = "the sampling grid came out empty";
                 return result;
             }
 
@@ -118,13 +117,13 @@ namespace ESAPI_RegistrationQA.Services
 
             if (paired == 0)
             {
-                result.Problem = "las dos imágenes no se solapan tras aplicar el registro";
+                result.Problem = "the two images do not overlap after applying the registration";
             }
             else if (result.OverlapFraction < MinimumOverlapFraction)
             {
                 result.Problem = string.Format(
                     System.Globalization.CultureInfo.InvariantCulture,
-                    "solapamiento insuficiente ({0:P1} de la imagen fija); las métricas de intensidad no serían representativas",
+                    "insufficient overlap ({0:P1} of the fixed image); the intensity metrics would not be representative",
                     result.OverlapFraction);
             }
 

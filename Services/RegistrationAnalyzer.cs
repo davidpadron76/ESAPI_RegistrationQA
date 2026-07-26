@@ -6,21 +6,21 @@ using ESAPI_RegistrationQA.Models;
 namespace ESAPI_RegistrationQA.Services
 {
     /// <summary>
-    /// Extrae de la API de Varian todo lo medible sobre un registro y devuelve un
+    /// Extracts everything measurable about a registration from the Varian API and returns a
     /// <see cref="QaMeasurements"/>.
     ///
-    /// Regla que gobierna toda la clase: una métrica que no se puede medir se devuelve como
-    /// no disponible con el motivo concreto. Nunca se sustituye por un valor plausible. La
-    /// versión anterior derivaba DSC, HD95, jacobiano, desplazamiento máximo y suavidad de
-    /// <c>GetHashCode()</c> del objeto de registro, lo que además de carecer de significado
-    /// físico no era reproducible: el hash de identidad cambia entre ejecuciones, de modo
-    /// que el mismo registro producía un DSC distinto cada vez que se abría el script.
+    /// The rule governing this whole class: a metric that cannot be measured is returned as
+    /// unavailable with the specific reason. It is never replaced by a plausible-looking
+    /// value. The previous version derived DSC, HD95, Jacobian, maximum displacement and
+    /// smoothness from <c>GetHashCode()</c> of the registration object, which besides having
+    /// no physical meaning was not reproducible: the identity hash changes between runs, so
+    /// the same registration produced a different DSC every time the script was opened.
     /// </summary>
     public sealed class RegistrationAnalyzer
     {
         private readonly DiagnosticLog _log;
 
-        /// <summary>Geometría del volumen usado como rejilla de muestreo (la imagen origen).</summary>
+        /// <summary>Geometry of the volume used as the sampling grid (the source image).</summary>
         private ImageGeometry _fixedGeometry;
 
         public RegistrationAnalyzer(DiagnosticLog log)
@@ -34,44 +34,44 @@ namespace ESAPI_RegistrationQA.Services
             var measurements = new QaMeasurements();
 
             dynamic registration;
-            if (!Dyn.TryGet("contexto: registro activo", () => scriptContext.Registration, _log, out registration))
+            if (!Dyn.TryGet("context: active registration", () => scriptContext.Registration, _log, out registration))
             {
                 MarkAllUnavailable(measurements,
-                    "no hay ningún registro activo en el espacio de trabajo de Eclipse");
-                measurements.RegistrationId = "(sin registro activo)";
+                    "there is no active registration in the Eclipse workspace");
+                measurements.RegistrationId = "(no active registration)";
                 return measurements;
             }
 
             measurements.RegistrationId = ReadRegistrationId(registration);
             ClassifyRegistration(registration, measurements);
 
-            // --- Imágenes ---------------------------------------------------------------
-            // Se cargan una sola vez y se reutilizan: tanto el respaldo de la transformación
-            // como el cálculo de similitud y la extensión del FOV necesitan esta geometría.
+            // --- Images -----------------------------------------------------------------
+            // Loaded once and reused: the transform fallback, the similarity computation and
+            // the FOV extent all need this geometry.
             EsapiImageReader.LoadResult source = null;
             EsapiImageReader.LoadResult target = null;
 
             dynamic sourceImage, registeredImage;
-            bool haveSource = Dyn.TryGet("registro: SourceImage", () => registration.SourceImage, _log, out sourceImage);
-            bool haveRegistered = Dyn.TryGet("registro: RegisteredImage", () => registration.RegisteredImage, _log, out registeredImage);
+            bool haveSource = Dyn.TryGet("registration: SourceImage", () => registration.SourceImage, _log, out sourceImage);
+            bool haveRegistered = Dyn.TryGet("registration: RegisteredImage", () => registration.RegisteredImage, _log, out registeredImage);
 
-            if (haveSource) source = EsapiImageReader.Load(sourceImage, "imagen origen", _log);
-            if (haveRegistered) target = EsapiImageReader.Load(registeredImage, "imagen registrada", _log);
+            if (haveSource) source = EsapiImageReader.Load(sourceImage, "source image", _log);
+            if (haveRegistered) target = EsapiImageReader.Load(registeredImage, "registered image", _log);
 
             if (source != null) measurements.FixedModality = source.Modality;
             if (target != null) measurements.MovingModality = target.Modality;
 
             if (source != null && source.Success) _fixedGeometry = source.Volume.Geometry;
 
-            // --- Transformación rígida -------------------------------------------------
+            // --- Rigid transform --------------------------------------------------------
             ExtractRigidTransform(registration, measurements, source, target);
 
-            // --- Similitud de intensidad ------------------------------------------------
+            // --- Intensity similarity ---------------------------------------------------
             if (source == null || target == null || !source.Success || !target.Success)
             {
                 string reason = source == null || target == null
-                    ? "el registro no expone ambas imágenes (SourceImage / RegisteredImage), por lo que no hay pares de vóxeles que comparar"
-                    : "no se pudieron cargar ambos volúmenes (" + (source.Problem ?? target.Problem) + ")";
+                    ? "the registration does not expose both images (SourceImage / RegisteredImage), so there are no voxel pairs to compare"
+                    : "could not load both volumes (" + (source.Problem ?? target.Problem) + ")";
 
                 measurements.Nmi = MeasuredValue.Unavailable(reason);
                 measurements.Ncc = MeasuredValue.Unavailable(reason);
@@ -82,10 +82,10 @@ namespace ESAPI_RegistrationQA.Services
                 ComputeIntensitySimilarity(registration, source, target, measurements);
             }
 
-            // --- Deformación / topología ------------------------------------------------
+            // --- Deformation / topology -------------------------------------------------
             ComputeDeformationMetrics(measurements);
 
-            // --- Estructuras ------------------------------------------------------------
+            // --- Structures -------------------------------------------------------------
             ComputeStructureMetrics(registration, measurements);
 
             foreach (DiagnosticEntry entry in _log.Entries)
@@ -94,49 +94,49 @@ namespace ESAPI_RegistrationQA.Services
             return measurements;
         }
 
-        // ---------------------------------------------------------------- identificación
+        // ---------------------------------------------------------------- identification
 
         private string ReadRegistrationId(dynamic registration)
         {
             dynamic value;
             string source;
-            if (Dyn.TryGetFirst("registro: identificador", _log, out value, out source,
+            if (Dyn.TryGetFirst("registration: identifier", _log, out value, out source,
                     Dyn.Alt("Id", () => registration.Id),
                     Dyn.Alt("Name", () => registration.Name)))
             {
                 return Convert.ToString(value, CultureInfo.InvariantCulture);
             }
 
-            return "(registro sin identificador)";
+            return "(unidentified registration)";
         }
 
         /// <summary>
-        /// Determina el tipo de registro. Se prefiere una propiedad explícita de la API y
-        /// sólo se recurre al nombre del tipo CLR como último recurso, porque ese nombre
-        /// puede cambiar entre versiones de Eclipse sin previo aviso.
+        /// Determines the registration type. An explicit API property is preferred and the
+        /// CLR type name is only a last resort, because that name can change between Eclipse
+        /// versions without notice.
         /// </summary>
         private void ClassifyRegistration(dynamic registration, QaMeasurements measurements)
         {
             dynamic value;
             string source;
 
-            if (Dyn.TryGetFirst("registro: tipo declarado", _log, out value, out source,
+            if (Dyn.TryGetFirst("registration: declared type", _log, out value, out source,
                     Dyn.Alt("RegistrationType", () => registration.RegistrationType),
                     Dyn.Alt("Type", () => registration.Type)))
             {
                 string text = Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
-                _log.Info("registro: tipo declarado", text + " (vía " + source + ")");
+                _log.Info("registration: declared type", text + " (via " + source + ")");
                 ApplyTypeText(text, measurements);
                 return;
             }
 
-            string clrTypeName = "(desconocido)";
-            Dyn.TryInvoke("registro: nombre de tipo CLR",
+            string clrTypeName = "(unknown)";
+            Dyn.TryInvoke("registration: CLR type name",
                 () => { clrTypeName = ((object)registration).GetType().Name; }, _log);
 
-            _log.Warning("registro: tipo",
-                "la API no expone el tipo de registro; se deduce del nombre de la clase CLR '" +
-                clrTypeName + "', lo que es frágil ante cambios de versión");
+            _log.Warning("registration: type",
+                "the API does not expose the registration type; inferring it from the CLR class name '" +
+                clrTypeName + "', which is fragile across versions");
 
             ApplyTypeText(clrTypeName, measurements);
         }
@@ -165,7 +165,7 @@ namespace ESAPI_RegistrationQA.Services
             }
         }
 
-        // ---------------------------------------------------------------- transformación
+        // ---------------------------------------------------------------- transform
 
         private void ExtractRigidTransform(
             dynamic registration,
@@ -182,30 +182,30 @@ namespace ESAPI_RegistrationQA.Services
                 if (RigidTransform.TryFromRawMatrix(raw, out transform, out note))
                 {
                     measurements.Transform = transform;
-                    measurements.TransformSource = "matriz de la API — " + note;
+                    measurements.TransformSource = "API matrix — " + note;
                     measurements.RigidEulerAngles = transform.GetEulerAnglesDegrees();
 
-                    _log.Info("transformación: matriz", note);
+                    _log.Info("transform: matrix", note);
 
                     if (measurements.RigidEulerAngles.Value.GimbalLock)
                     {
-                        _log.Warning("transformación: ángulos de Euler",
-                            "bloqueo de cardán (cabeceo ≈ ±90°): sólo la combinación de cabeceo y guiñada " +
-                            "es observable; se reporta la guiñada como 0");
+                        _log.Warning("transform: Euler angles",
+                            "gimbal lock (pitch ≈ ±90°): only the combination of pitch and yaw is " +
+                            "observable; yaw is reported as 0");
                     }
                     return;
                 }
 
-                _log.Failure("transformación: matriz", note);
+                _log.Failure("transform: matrix", note);
             }
 
-            // Respaldo: transformación relativa entre los marcos de las dos imágenes.
+            // Fallback: relative transform between the two image frames.
             //
-            // Nota importante: sólo se recurre a este camino cuando la matriz no se pudo
-            // leer. La versión anterior lo tomaba también cuando la traslación resultaba
-            // ser (0,0,0), de modo que un registro identidad legítimo —o uno perfectamente
-            // alineado— veía descartada su lectura correcta y sustituida por la diferencia
-            // de orígenes de las series, que es otra magnitud.
+            // Important: this path is taken only when the matrix could not be read. The
+            // previous version also took it when the translation happened to be (0,0,0), so
+            // a legitimate identity registration — or a perfectly aligned one — had its
+            // correct reading discarded and replaced by the difference of series origins,
+            // which is a different quantity.
             ImageGeometry sourceGeometry = source != null && source.Success ? source.Volume.Geometry : null;
             ImageGeometry targetGeometry = target != null && target.Success ? target.Volume.Geometry : null;
 
@@ -214,19 +214,19 @@ namespace ESAPI_RegistrationQA.Services
                 RigidTransform transform = RigidTransform.FromFrames(sourceGeometry, targetGeometry);
                 measurements.Transform = transform;
                 measurements.TransformSource =
-                    "deducida de los marcos de referencia de ambas imágenes (la API no expuso una matriz)";
+                    "derived from the reference frames of both images (the API exposed no matrix)";
                 measurements.RigidEulerAngles = transform.GetEulerAnglesDegrees();
 
-                _log.Warning("transformación",
-                    "no se obtuvo matriz del registro; se usó la transformación relativa entre los marcos " +
-                    "de las dos imágenes. Esto describe la diferencia de encuadre de las series, que sólo " +
-                    "coincide con el registro si éste ya está aplicado a la geometría.");
+                _log.Warning("transform",
+                    "no matrix was obtained from the registration; the relative transform between the two " +
+                    "image frames was used instead. This describes the difference in series framing, which " +
+                    "only coincides with the registration if the latter is already baked into the geometry.");
                 return;
             }
 
-            measurements.TransformSource = "no disponible";
-            _log.Failure("transformación",
-                "ni la matriz del registro ni los marcos de las imágenes fueron accesibles");
+            measurements.TransformSource = "not available";
+            _log.Failure("transform",
+                "neither the registration matrix nor the image frames were accessible");
         }
 
         private double[,] TryReadMatrix(dynamic registration)
@@ -234,7 +234,7 @@ namespace ESAPI_RegistrationQA.Services
             dynamic matrixObject;
             string source;
 
-            if (!Dyn.TryGetFirst("transformación: matriz", _log, out matrixObject, out source,
+            if (!Dyn.TryGetFirst("transform: matrix", _log, out matrixObject, out source,
                     Dyn.Alt("RigidRegistration.Matrix", () => registration.RigidRegistration.Matrix),
                     Dyn.Alt("Matrix", () => registration.Matrix),
                     Dyn.Alt("TransformMatrix", () => registration.TransformMatrix),
@@ -245,7 +245,7 @@ namespace ESAPI_RegistrationQA.Services
 
             var raw = new double[4, 4];
 
-            bool read = Dyn.TryInvoke("transformación: lectura de celdas de la matriz (" + source + ")", () =>
+            bool read = Dyn.TryInvoke("transform: read matrix cells (" + source + ")", () =>
             {
                 for (int r = 0; r < 4; r++)
                 {
@@ -258,7 +258,7 @@ namespace ESAPI_RegistrationQA.Services
 
             if (!read) return null;
 
-            // Una matriz toda a cero indica que la indexación [r,c] no es la esperada.
+            // An all-zero matrix indicates that [r,c] indexing is not what was expected.
             bool allZero = true;
             for (int r = 0; r < 4 && allZero; r++)
                 for (int c = 0; c < 4 && allZero; c++)
@@ -266,16 +266,16 @@ namespace ESAPI_RegistrationQA.Services
 
             if (allZero)
             {
-                _log.Failure("transformación: matriz",
-                    "la matriz leída vía " + source + " es idénticamente nula; la indexación [fila,columna] " +
-                    "no corresponde con la esperada");
+                _log.Failure("transform: matrix",
+                    "the matrix read via " + source + " is identically zero; [row,column] indexing " +
+                    "does not match what was expected");
                 return null;
             }
 
             return raw;
         }
 
-        // ---------------------------------------------------------------- intensidad
+        // ---------------------------------------------------------------- intensity
 
         private void ComputeIntensitySimilarity(
             dynamic registration,
@@ -287,10 +287,10 @@ namespace ESAPI_RegistrationQA.Services
             if (mapper == null)
             {
                 string reason = measurements.IsDeformable
-                    ? "es un registro deformable y la API no expone ni el campo de vectores de deformación " +
-                      "ni un método de mapeo punto a punto. Evaluar la similitud aplicando sólo la componente " +
-                      "lineal describiría una transformación distinta de la que se está auditando."
-                    : "no se dispone de una transformación válida con la que emparejar los vóxeles";
+                    ? "this is a deformable registration and the API exposes neither the deformation " +
+                      "vector field nor a point-by-point mapping method. Evaluating similarity using only " +
+                      "the linear component would describe a different transform from the one under audit."
+                    : "no valid transform is available with which to match voxels";
 
                 measurements.Nmi = MeasuredValue.Unavailable(reason);
                 measurements.Ncc = MeasuredValue.Unavailable(reason);
@@ -298,7 +298,7 @@ namespace ESAPI_RegistrationQA.Services
                 return;
             }
 
-            _log.Info("similitud: mapeo", mapper.Description);
+            _log.Info("similarity: mapping", mapper.Description);
 
             VoxelPairSet pairs = VoxelPairSampler.Pair(source.Volume, target.Volume, mapper);
             measurements.SampleCount = pairs.Count;
@@ -310,7 +310,7 @@ namespace ESAPI_RegistrationQA.Services
                 measurements.Nmi = MeasuredValue.Unavailable(pairs.Problem);
                 measurements.Ncc = MeasuredValue.Unavailable(pairs.Problem);
                 measurements.Ssd = MeasuredValue.Unavailable(pairs.Problem);
-                _log.Failure("similitud: emparejamiento", pairs.Problem);
+                _log.Failure("similarity: pairing", pairs.Problem);
                 return;
             }
 
@@ -322,35 +322,36 @@ namespace ESAPI_RegistrationQA.Services
                 measurements.Nmi = MeasuredValue.Unavailable(similarity.Problem);
                 measurements.Ncc = MeasuredValue.Unavailable(similarity.Problem);
                 measurements.Ssd = MeasuredValue.Unavailable(similarity.Problem);
-                _log.Failure("similitud: cálculo", similarity.Problem);
+                _log.Failure("similarity: computation", similarity.Problem);
                 return;
             }
 
             string samplingNote = string.Format(CultureInfo.InvariantCulture,
-                "{0:N0} pares de vóxeles, solapamiento {1:P1}, muestreo efectivo {2:F1} mm",
+                "{0:N0} voxel pairs, {1:P1} overlap, {2:F1} mm effective sampling",
                 pairs.Count, pairs.OverlapFraction, measurements.EffectiveSamplingMm);
 
             measurements.Ncc = similarity.Ncc.HasValue
                 ? MeasuredValue.Measured(similarity.Ncc.Value, samplingNote)
-                : MeasuredValue.Unavailable("no se pudo calcular la correlación");
+                : MeasuredValue.Unavailable("the correlation could not be computed");
 
             measurements.Ssd = similarity.Ssd.HasValue
                 ? MeasuredValue.Measured(similarity.Ssd.Value, samplingNote)
-                : MeasuredValue.Unavailable("rango de intensidad nulo en la imagen de referencia");
+                : MeasuredValue.Unavailable("zero intensity range in the reference image");
 
             measurements.Nmi = similarity.Nmi.HasValue
                 ? MeasuredValue.Measured(similarity.Nmi.Value,
-                    samplingNote + ", histograma conjunto de " + similarity.HistogramBins + " bins")
-                : MeasuredValue.Unavailable("no se pudo construir el histograma conjunto");
+                    samplingNote + ", " + similarity.HistogramBins + "-bin joint histogram")
+                : MeasuredValue.Unavailable("the joint histogram could not be built");
 
-            _log.Info("similitud: resultado", samplingNote);
+            _log.Info("similarity: result", samplingNote);
         }
 
         /// <summary>
-        /// Construye el mapeo de puntos. Para un registro deformable sólo es válido un mapeo
-        /// que atraviese el campo de deformación; si la API no lo ofrece, se devuelve null y
-        /// las métricas de intensidad quedan como no disponibles, en vez de calcularse con
-        /// la componente lineal y presentarse como si describieran el registro deformable.
+        /// Builds the point mapping. For a deformable registration only a mapping that goes
+        /// through the deformation field is valid; if the API does not offer one, null is
+        /// returned and the intensity metrics stay unavailable, rather than being computed
+        /// from the linear component and presented as if they described the deformable
+        /// registration.
         /// </summary>
         private IPointMapper BuildPointMapper(dynamic registration, QaMeasurements measurements)
         {
@@ -363,13 +364,13 @@ namespace ESAPI_RegistrationQA.Services
 
             return new RigidPointMapper(
                 measurements.Transform,
-                "matriz rígida — " + measurements.TransformSource);
+                "rigid matrix — " + measurements.TransformSource);
         }
 
         /// <summary>
-        /// Busca por reflexión un método de mapeo punto a punto en el objeto de registro.
-        /// Se sonda con un punto real y sólo se acepta si devuelve algo finito: la mera
-        /// existencia del método no garantiza que esté implementado en esta versión.
+        /// Looks up a point-mapping method on the registration object by reflection. It is
+        /// probed with a real point and only accepted if it returns something finite: the
+        /// mere existence of the method does not guarantee it is implemented in this version.
         /// </summary>
         private DynamicPointMapper TryBuildDeformableMapper(dynamic registration)
         {
@@ -395,9 +396,9 @@ namespace ESAPI_RegistrationQA.Services
 
                 if (toVector == null || fromVector == null)
                 {
-                    _log.Warning("mapeo deformable: " + name,
-                        "se encontró el método pero no se pudo construir/leer el tipo de vector " +
-                        vectorType.Name);
+                    _log.Warning("deformable mapping: " + name,
+                        "the method was found but the vector type " + vectorType.Name +
+                        " could not be constructed or read");
                     continue;
                 }
 
@@ -407,27 +408,27 @@ namespace ESAPI_RegistrationQA.Services
                     return fromVector(result);
                 };
 
-                // Sonda: si no devuelve un punto finito, el método no es utilizable.
+                // Probe: if it does not return a finite point, the method is not usable.
                 try
                 {
                     Vec3? probe = map(new Vec3(0, 0, 0));
                     if (!probe.HasValue || !probe.Value.IsFinite)
                     {
-                        _log.Warning("mapeo deformable: " + name, "la sonda no devolvió un punto finito");
+                        _log.Warning("deformable mapping: " + name, "the probe did not return a finite point");
                         continue;
                     }
                 }
                 catch (Exception ex)
                 {
-                    _log.Warning("mapeo deformable: " + name, "la sonda falló — " + DiagnosticLog.Describe(ex));
+                    _log.Warning("deformable mapping: " + name, "the probe failed — " + DiagnosticLog.Describe(ex));
                     continue;
                 }
 
-                _log.Info("mapeo deformable",
-                    "se usará " + registrationType.Name + "." + name + " para mapear puntos a través del registro");
+                _log.Info("deformable mapping",
+                    "will use " + registrationType.Name + "." + name + " to map points through the registration");
 
                 return new DynamicPointMapper(map,
-                    "mapeo punto a punto vía " + name + " (atraviesa el campo de deformación)");
+                    "point-by-point mapping via " + name + " (traverses the deformation field)");
             }
 
             return null;
@@ -480,26 +481,26 @@ namespace ESAPI_RegistrationQA.Services
             };
         }
 
-        // ---------------------------------------------------------------- deformación
+        // ---------------------------------------------------------------- deformation
 
         /// <summary>
-        /// Métricas topológicas.
+        /// Topological metrics.
         ///
-        /// Para una transformación rígida el jacobiano vale 1 en todo punto y la suavidad es
-        /// perfecta: no son estimaciones sino consecuencias de la definición, y se marcan
-        /// como tales. El desplazamiento máximo sí se calcula, de forma exacta, sobre los
-        /// vértices del volumen.
+        /// For a rigid transform the Jacobian is 1 everywhere and smoothness is perfect:
+        /// these are not estimates but consequences of the definition, and are labelled as
+        /// such. Maximum displacement is computed exactly over the volume corners.
         ///
-        /// Para un registro deformable estas tres magnitudes exigen recorrer el campo de
-        /// vectores, que la API de scripting no expone. Se devuelven como no disponibles.
+        /// For a deformable registration these three quantities require traversing the
+        /// vector field, which the scripting API does not expose. They are returned as
+        /// unavailable.
         /// </summary>
         private void ComputeDeformationMetrics(QaMeasurements measurements)
         {
             if (measurements.IsDeformable)
             {
                 const string reason =
-                    "requiere recorrer el campo de vectores de deformación (DVF), que la API de scripting " +
-                    "de Varian no expone. No es derivable de la matriz lineal ni de las imágenes.";
+                    "requires traversing the deformation vector field (DVF), which the Varian scripting " +
+                    "API does not expose. It cannot be derived from the linear matrix or from the images.";
 
                 measurements.JacobianNegativePercent = MeasuredValue.Unavailable(reason);
                 measurements.Smoothness = MeasuredValue.Unavailable(reason);
@@ -507,83 +508,83 @@ namespace ESAPI_RegistrationQA.Services
                 return;
             }
 
-            const string analyticNote = "exacto por definición para una transformación rígida, no estimado";
+            const string analyticNote = "exact by definition for a rigid transform, not estimated";
 
             measurements.JacobianNegativePercent = MeasuredValue.Measured(0.0,
-                "|J| = 1 en todo punto de una transformación rígida: no hay plegamiento posible. " + analyticNote);
+                "|J| = 1 at every point of a rigid transform: no folding is possible. " + analyticNote);
 
             measurements.Smoothness = MeasuredValue.Measured(1.0,
-                "el gradiente del campo de desplazamiento es constante. " + analyticNote);
+                "the gradient of the displacement field is constant. " + analyticNote);
 
             if (measurements.Transform == null)
             {
                 measurements.MaxDisplacement = MeasuredValue.Unavailable(
-                    "no se dispone de la transformación con la que evaluar el desplazamiento");
+                    "no transform is available against which to evaluate displacement");
                 return;
             }
 
             ImageGeometry geometry = _fixedGeometry;
             if (geometry == null)
             {
-                // Sin extensión del volumen, el desplazamiento máximo no está definido:
-                // depende del tamaño de la región evaluada, no sólo de la transformación.
+                // Without the volume extent, maximum displacement is undefined: it depends
+                // on the size of the evaluated region, not on the transform alone.
                 measurements.MaxDisplacement = MeasuredValue.Unavailable(
-                    "no se pudo determinar la extensión del volumen sobre la que evaluar el desplazamiento");
+                    "could not determine the volume extent over which to evaluate displacement");
                 return;
             }
 
             double maxDisplacement = measurements.Transform.MaxDisplacementOver(geometry);
             measurements.MaxDisplacement = MeasuredValue.Measured(maxDisplacement,
-                "máximo sobre los ocho vértices del FOV; exacto porque el desplazamiento de una " +
-                "aplicación afín es convexo y alcanza su máximo en un vértice");
+                "maximum over the eight FOV corners; exact because the displacement of an affine map " +
+                "is convex and attains its maximum at a vertex");
         }
 
-        // ---------------------------------------------------------------- estructuras
+        // ---------------------------------------------------------------- structures
 
         /// <summary>
-        /// DSC y HD95 exigen un par emparejado: un contorno de referencia y ese mismo
-        /// contorno propagado por el registro, identificables entre sí.
+        /// DSC and HD95 require a matched pair: a reference contour and that same contour
+        /// propagated through the registration, identifiable with each other.
         ///
-        /// La versión anterior recorría <c>StructureSets[0]</c>, sumaba volúmenes y hashes de
-        /// los identificadores y convertía esa suma en un DSC mediante aritmética modular.
-        /// El resultado no tenía relación con solapamiento alguno.
+        /// The previous version walked <c>StructureSets[0]</c>, summed volumes and hashes of
+        /// the identifiers, and turned that sum into a DSC through modular arithmetic. The
+        /// result bore no relation to any overlap.
         /// </summary>
         private void ComputeStructureMetrics(dynamic registration, QaMeasurements measurements)
         {
-            int sourceStructures = CountStructures(() => registration.SourceImage.Image.StructureSets, "imagen origen");
-            int targetStructures = CountStructures(() => registration.RegisteredImage.Image.StructureSets, "imagen registrada");
+            int sourceStructures = CountStructures(() => registration.SourceImage.Image.StructureSets, "source image");
+            int targetStructures = CountStructures(() => registration.RegisteredImage.Image.StructureSets, "registered image");
 
             string reason;
 
             if (sourceStructures == 0 || targetStructures == 0)
             {
-                reason = "no hay contornos en ambas series (origen: " + sourceStructures +
-                         ", registrada: " + targetStructures + "). El DSC y la HD95 comparan un contorno " +
-                         "de referencia con ese mismo contorno propagado; con una sola serie contorneada " +
-                         "no existe el par a comparar.";
+                reason = "there are no contours on both series (source: " + sourceStructures +
+                         ", registered: " + targetStructures + "). DSC and HD95 compare a reference contour " +
+                         "with that same contour after propagation; with only one contoured series there is " +
+                         "no pair to compare.";
             }
             else
             {
-                reason = "hay contornos en ambas series (origen: " + sourceStructures +
-                         ", registrada: " + targetStructures + "), pero el cálculo de DSC y HD95 requiere " +
-                         "rasterizar ambos contornos sobre una rejilla común y emparejarlos por " +
-                         "identificador. No está implementado en esta versión.";
+                reason = "contours exist on both series (source: " + sourceStructures +
+                         ", registered: " + targetStructures + "), but computing DSC and HD95 requires " +
+                         "rasterising both contours onto a common grid and matching them by identifier. " +
+                         "Not implemented in this version.";
             }
 
             measurements.Dsc = MeasuredValue.Unavailable(reason);
             measurements.Hd95 = MeasuredValue.Unavailable(reason);
 
-            _log.Warning("estructuras", reason);
+            _log.Warning("structures", reason);
         }
 
         private int CountStructures(Func<object> structureSetsAccessor, string label)
         {
             dynamic structureSets;
-            if (!Dyn.TryGet("estructuras: StructureSets de " + label, structureSetsAccessor, _log, out structureSets))
+            if (!Dyn.TryGet("structures: StructureSets of " + label, structureSetsAccessor, _log, out structureSets))
                 return 0;
 
             int count = 0;
-            Dyn.TryInvoke("estructuras: recuento en " + label, () =>
+            Dyn.TryInvoke("structures: count on " + label, () =>
             {
                 foreach (dynamic structureSet in structureSets)
                 {
@@ -597,7 +598,7 @@ namespace ESAPI_RegistrationQA.Services
             return count;
         }
 
-        // ---------------------------------------------------------------- utilidades
+        // ---------------------------------------------------------------- utilities
 
         private static void MarkAllUnavailable(QaMeasurements measurements, string reason)
         {

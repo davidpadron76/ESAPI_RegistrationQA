@@ -2,14 +2,14 @@ using System;
 
 namespace ESAPI_RegistrationQA.Models
 {
-    /// <summary>Ángulos de Euler en grados, convención intrínseca Rz·Ry·Rx.</summary>
+    /// <summary>Euler angles in degrees, intrinsic Rz·Ry·Rx convention.</summary>
     public struct EulerAngles
     {
         public readonly double PitchX;
         public readonly double RollY;
         public readonly double YawZ;
 
-        /// <summary>true si la extracción cayó en bloqueo de cardán (|pitch| ≈ 90°).</summary>
+        /// <summary>true when the extraction hit gimbal lock (|pitch| ≈ 90°).</summary>
         public readonly bool GimbalLock;
 
         public EulerAngles(double pitchX, double rollY, double yawZ, bool gimbalLock)
@@ -22,11 +22,11 @@ namespace ESAPI_RegistrationQA.Models
     }
 
     /// <summary>
-    /// Transformación rígida homogénea 4x4 en coordenadas de paciente.
+    /// A 4x4 homogeneous rigid transform in patient coordinates.
     ///
-    /// Convención interna: P' = M · P con P en columna, es decir, la traslación reside en
-    /// la última COLUMNA (m[0..2,3]) y la última fila es (0,0,0,1). Las matrices leídas de
-    /// la API se normalizan a esta convención en <see cref="TryFromRawMatrix"/>.
+    /// Internal convention: P' = M · P with P as a column, i.e. the translation lives in the
+    /// last COLUMN (m[0..2,3]) and the last row is (0,0,0,1). Matrices read from the API are
+    /// normalised to this convention in <see cref="TryFromRawMatrix"/>.
     /// </summary>
     public sealed class RigidTransform
     {
@@ -80,9 +80,9 @@ namespace ESAPI_RegistrationQA.Models
         }
 
         /// <summary>
-        /// Inversa analítica válida para transformaciones rígidas: R⁻¹ = Rᵀ y t⁻¹ = −Rᵀ·t.
-        /// Devuelve false si la submatriz de rotación no es ortonormal, en cuyo caso esta
-        /// fórmula no aplica y el resultado sería silenciosamente incorrecto.
+        /// Analytic inverse, valid for rigid transforms: R⁻¹ = Rᵀ and t⁻¹ = −Rᵀ·t.
+        /// Returns false when the rotation submatrix is not orthonormal, in which case this
+        /// formula does not apply and the result would be silently wrong.
         /// </summary>
         public bool TryInvert(out RigidTransform inverse)
         {
@@ -109,9 +109,10 @@ namespace ESAPI_RegistrationQA.Models
         }
 
         /// <summary>
-        /// Verifica que la submatriz 3x3 es una rotación pura: columnas unitarias, mutuamente
-        /// ortogonales y determinante +1. Si hay escalado o reflexión, los ángulos de Euler
-        /// extraídos carecen de sentido físico y hay que decirlo en vez de reportarlos.
+        /// Verifies that the 3x3 submatrix is a pure rotation: unit columns, mutually
+        /// orthogonal, determinant +1. If there is scaling or reflection, the extracted
+        /// Euler angles carry no physical meaning and that must be reported rather than
+        /// glossed over.
         /// </summary>
         public bool IsRotationOrthonormal(double tolerance, out double determinant)
         {
@@ -132,10 +133,10 @@ namespace ESAPI_RegistrationQA.Models
         }
 
         /// <summary>
-        /// Extrae los ángulos de Euler (convención Rz·Ry·Rx) tratando explícitamente el
-        /// bloqueo de cardán. La versión anterior usaba Atan2(m21, m22) sin protección: con
-        /// pitch cercano a ±90° ambos argumentos tienden a cero, Atan2(0,0) devuelve 0 y los
-        /// ángulos se degradaban en silencio.
+        /// Extracts the Euler angles (Rz·Ry·Rx convention) with explicit gimbal-lock
+        /// handling. The previous version used Atan2(m21, m22) unguarded: with pitch near
+        /// ±90° both arguments tend to zero, Atan2(0,0) returns 0 and the angles degraded
+        /// silently.
         /// </summary>
         public EulerAngles GetEulerAnglesDegrees()
         {
@@ -159,8 +160,8 @@ namespace ESAPI_RegistrationQA.Models
             }
             else
             {
-                // Degenerado: sólo la suma (o diferencia) pitch±yaw es observable.
-                // Se fija yaw = 0 y se vuelca la rotación restante sobre pitch.
+                // Degenerate: only the sum (or difference) pitch±yaw is observable.
+                // Yaw is pinned to 0 and the remaining rotation is folded into pitch.
                 pitchX = Math.Atan2(-m12, m11);
                 yawZ = 0.0;
             }
@@ -173,10 +174,10 @@ namespace ESAPI_RegistrationQA.Models
         }
 
         /// <summary>
-        /// Máximo desplazamiento inducido dentro de un volumen. Para una aplicación afín el
-        /// módulo del desplazamiento es una función convexa del punto, de modo que su máximo
-        /// sobre una caja se alcanza siempre en un vértice: evaluar los ocho vértices da el
-        /// valor exacto, no una estimación.
+        /// Largest displacement induced within a volume. For an affine map the displacement
+        /// magnitude is a convex function of the point, so its maximum over a box is always
+        /// attained at a vertex: evaluating the eight corners gives the exact value, not an
+        /// estimate.
         /// </summary>
         public double MaxDisplacementOver(ImageGeometry geometry)
         {
@@ -190,14 +191,14 @@ namespace ESAPI_RegistrationQA.Models
         }
 
         /// <summary>
-        /// Normaliza una matriz 4x4 cruda de la API a la convención interna.
+        /// Normalises a raw 4x4 matrix from the API to the internal convention.
         ///
-        /// Existen dos convenciones habituales y son indistinguibles mirando sólo la
-        /// submatriz 3x3 (la traspuesta de una matriz ortonormal también es ortonormal), por
-        /// lo que confundirlas invierte el signo de todos los ángulos sin que nada falle. El
-        /// discriminante fiable es dónde está la traslación:
-        ///   - columna (P' = M·P): última fila = (0,0,0,1) → se usa tal cual
-        ///   - fila    (P' = P·M): última columna = (0,0,0,1)ᵀ → se traspone
+        /// Two conventions are in common use and they are indistinguishable by looking at
+        /// the 3x3 submatrix alone (the transpose of an orthonormal matrix is also
+        /// orthonormal), so confusing them flips the sign of every angle without anything
+        /// failing. The reliable discriminant is where the translation sits:
+        ///   - column (P' = M·P): last row = (0,0,0,1) → used as is
+        ///   - row    (P' = P·M): last column = (0,0,0,1)ᵀ → transposed
         /// </summary>
         public static bool TryFromRawMatrix(double[,] raw, out RigidTransform transform, out string conventionNote)
         {
@@ -206,7 +207,7 @@ namespace ESAPI_RegistrationQA.Models
 
             if (raw == null || raw.GetLength(0) != 4 || raw.GetLength(1) != 4)
             {
-                conventionNote = "la matriz recuperada no es 4x4";
+                conventionNote = "the retrieved matrix is not 4x4";
                 return false;
             }
 
@@ -216,7 +217,7 @@ namespace ESAPI_RegistrationQA.Models
                 {
                     if (double.IsNaN(raw[r, c]) || double.IsInfinity(raw[r, c]))
                     {
-                        conventionNote = "la matriz contiene valores no finitos";
+                        conventionNote = "the matrix contains non-finite values";
                         return false;
                     }
                 }
@@ -236,24 +237,24 @@ namespace ESAPI_RegistrationQA.Models
             if (lastRowIsHomogeneous && !lastColumnIsHomogeneous)
             {
                 normalized = (double[,])raw.Clone();
-                conventionNote = "traslación en la última columna (P' = M·P)";
+                conventionNote = "translation in the last column (P' = M·P)";
             }
             else if (lastColumnIsHomogeneous && !lastRowIsHomogeneous)
             {
                 normalized = Transpose(raw);
-                conventionNote = "traslación en la última fila (P' = P·M); matriz traspuesta a la convención interna";
+                conventionNote = "translation in the last row (P' = P·M); matrix transposed to the internal convention";
             }
             else if (lastRowIsHomogeneous && lastColumnIsHomogeneous)
             {
-                // Traslación nula en ambas lecturas: sólo rotación, las dos son válidas para
-                // la traslación pero difieren en el sentido de la rotación. Se asume la
-                // convención estándar y se deja constancia.
+                // Zero translation under both readings: rotation only. Both are valid for
+                // the translation but differ in the sense of the rotation. The standard
+                // convention is assumed and the ambiguity is recorded.
                 normalized = (double[,])raw.Clone();
-                conventionNote = "traslación nula; se asume convención P' = M·P (rotación pura, sentido no verificable)";
+                conventionNote = "zero translation; assuming the P' = M·P convention (pure rotation, sense not verifiable)";
             }
             else
             {
-                conventionNote = "no se pudo determinar la convención de la matriz: ni la última fila ni la última columna son homogéneas";
+                conventionNote = "could not determine the matrix convention: neither the last row nor the last column is homogeneous";
                 return false;
             }
 
@@ -263,7 +264,7 @@ namespace ESAPI_RegistrationQA.Models
             {
                 conventionNote = string.Format(
                     System.Globalization.CultureInfo.InvariantCulture,
-                    "la submatriz de rotación no es ortonormal (det = {0:F4}); la transformación incluye escalado, cizalla o reflexión",
+                    "the rotation submatrix is not orthonormal (det = {0:F4}); the transform includes scaling, shear or reflection",
                     determinant);
                 return false;
             }
@@ -273,22 +274,23 @@ namespace ESAPI_RegistrationQA.Models
         }
 
         /// <summary>
-        /// Transformación rígida relativa entre dos marcos de imagen, deducida de sus
-        /// cosenos directores y orígenes: R = R_hasta · R_desdeᵀ y t = O_hasta − R · O_desde.
+        /// Relative rigid transform between two image frames, derived from their direction
+        /// cosines and origins: R = R_to · R_fromᵀ and t = O_to − R · O_from.
         ///
-        /// Sustituye al cálculo anterior, que restaba componentes sueltas de los vectores
-        /// director y las multiplicaba por 180/π. Esa resta sólo se aproxima al ángulo real
-        /// bajo la hipótesis de ángulo pequeño y para el eje que casualmente coincidiera.
+        /// This replaces the previous calculation, which subtracted individual components of
+        /// the direction vectors and multiplied them by 180/π. That subtraction only
+        /// approximates the true angle under a small-angle assumption and for whichever axis
+        /// happened to line up.
         /// </summary>
         public static RigidTransform FromFrames(ImageGeometry from, ImageGeometry to)
         {
-            // Columnas de R_desde y R_hasta son los cosenos directores de cada marco.
+            // The columns of R_from and R_to are the direction cosines of each frame.
             var rotation = new double[3, 3];
 
             Vec3[] fromAxes = { from.XDirection, from.YDirection, from.ZDirection };
             Vec3[] toAxes = { to.XDirection, to.YDirection, to.ZDirection };
 
-            // R = R_hasta · R_desdeᵀ  →  R[r,c] = Σ_a  toAxes[a][r] · fromAxes[a][c]
+            // R = R_to · R_fromᵀ  →  R[r,c] = Σ_a  toAxes[a][r] · fromAxes[a][c]
             for (int r = 0; r < 3; r++)
             {
                 for (int c = 0; c < 3; c++)

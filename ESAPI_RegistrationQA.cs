@@ -8,14 +8,14 @@ namespace VMS.IRS.Scripting
     {
         public Script() { }
 
-        // Nota: [STAThread] sólo tiene efecto sobre el Main de un ejecutable. Eclipse ya
-        // invoca los scripts desde un hilo STA, de modo que el atributo era inocuo aquí.
+        // Note: [STAThread] only has an effect on the Main of an executable. Eclipse already
+        // invokes scripts from an STA thread, so the attribute was inert here.
         public void Execute(ScriptContext context)
         {
             if (context == null)
             {
                 MessageBox.Show(
-                    "Eclipse no proporcionó contexto de script.",
+                    "Eclipse did not provide a script context.",
                     "Registration QA", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
@@ -23,7 +23,7 @@ namespace VMS.IRS.Scripting
             if (context.Patient == null)
             {
                 MessageBox.Show(
-                    "No hay ningún paciente abierto en Eclipse. Abra un paciente antes de ejecutar este script de QA.",
+                    "No patient is open in Eclipse. Open a patient before running this QA script.",
                     "Registration QA", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -35,7 +35,7 @@ namespace VMS.IRS.Scripting
 
                 var window = new Window
                 {
-                    Title = "ESAPI Registration QA — Auditoría técnica v" + HtmlReportBuilder.AssemblyVersion(),
+                    Title = "ESAPI Registration QA — Technical Audit v" + HtmlReportBuilder.AssemblyVersion(),
                     Content = mainControl,
                     Width = 1020,
                     Height = 700,
@@ -49,7 +49,7 @@ namespace VMS.IRS.Scripting
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    "Error en tiempo de ejecución:" + Environment.NewLine +
+                    "Runtime error:" + Environment.NewLine +
                     DiagnosticLog.Describe(ex) + Environment.NewLine + Environment.NewLine +
                     ex.StackTrace,
                     "ESAPI Registration QA", MessageBoxButton.OK, MessageBoxImage.Error);

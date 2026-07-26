@@ -26,9 +26,9 @@ namespace ESAPI_RegistrationQA.Models
         }
 
         /// <summary>
-        /// true si ambas modalidades son conocidas y distintas. Determina qué métrica de
-        /// intensidad es la primaria: NMI para multimodal (las intensidades no son
-        /// linealmente comparables), NCC para monomodal.
+        /// true when both modalities are known and different. This determines which
+        /// intensity metric is the primary one: NMI for multimodal (intensities are not
+        /// linearly comparable), NCC for monomodal.
         /// </summary>
         public bool IsMultimodal
         {
@@ -40,7 +40,7 @@ namespace ESAPI_RegistrationQA.Models
             }
         }
 
-        /// <summary>Clave de la métrica de intensidad de referencia para este par de modalidades.</summary>
+        /// <summary>Key of the reference intensity metric for this modality pair.</summary>
         public string PrimaryIntensityMetricKey
         {
             get { return IsMultimodal ? MetricKeys.Nmi : MetricKeys.Ncc; }

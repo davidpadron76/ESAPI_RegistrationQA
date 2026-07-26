@@ -24,15 +24,15 @@ namespace ESAPI_RegistrationQA.Services
     }
 
     /// <summary>
-    /// Genera el reporte HTML de auditoría.
+    /// Generates the HTML audit report.
     ///
-    /// Dos reglas invariables:
-    ///  - todo texto procedente de datos (identificador de paciente, de registro, motivos de
-    ///    indisponibilidad) se escapa antes de insertarse. Antes se interpolaba en crudo, de
-    ///    modo que un identificador con &lt;, &amp; o comillas rompía el documento;
-    ///  - todo número se formatea en cultura invariante. Antes heredaba la cultura de la
-    ///    estación, así que en una configuración en español los decimales salían con coma,
-    ///    lo que impide archivar o reprocesar el reporte de forma consistente.
+    /// Two invariable rules:
+    ///  - all text coming from data (patient identifier, registration identifier,
+    ///    unavailability reasons) is escaped before insertion. It used to be interpolated
+    ///    raw, so an identifier containing &lt;, &amp; or quotes broke the document;
+    ///  - all numbers are formatted in invariant culture. They used to inherit the
+    ///    workstation culture, so on a Spanish configuration decimals came out with a comma,
+    ///    which prevents consistent archiving or reprocessing of the report.
     /// </summary>
     public static class HtmlReportBuilder
     {
@@ -42,7 +42,7 @@ namespace ESAPI_RegistrationQA.Services
 
             var sb = new StringBuilder(32768);
 
-            sb.Append("<!DOCTYPE html><html lang='es'><head><meta charset='utf-8'/>");
+            sb.Append("<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'/>");
             sb.Append("<title>Registration QA Report</title>");
             sb.Append(Styles);
             sb.Append("</head><body><div class='container'>");
@@ -50,7 +50,7 @@ namespace ESAPI_RegistrationQA.Services
             AppendHeader(sb, data);
             AppendVerdict(sb, data);
             AppendAdvisories(sb, data);
-            AppendMetricsTable(sb, "1. Similitud de intensidad y métricas topológicas",
+            AppendMetricsTable(sb, "1. Intensity similarity and topological metrics",
                 data.IntensityMetrics, data.DeformationMetrics);
             AppendStructureTable(sb, data);
             AppendRigidTable(sb, data);
@@ -65,23 +65,23 @@ namespace ESAPI_RegistrationQA.Services
 
         public static void Save(ReportData data, string path)
         {
-            // UTF-8 explícito y coherente con el charset declarado en la cabecera.
+            // Explicit UTF-8, consistent with the charset declared in the header.
             File.WriteAllText(path, Build(data), new UTF8Encoding(false));
         }
 
-        // ------------------------------------------------------------------ secciones
+        // ------------------------------------------------------------------ sections
 
         private static void AppendHeader(StringBuilder sb, ReportData data)
         {
             QaMeasurements m = data.Measurements;
 
-            sb.Append("<div class='header'><h1>Auditoría cuantitativa de registro de imagen</h1>");
+            sb.Append("<div class='header'><h1>Registration Quantitative Audit Report</h1>");
             sb.Append("<div class='meta'>");
-            AppendMeta(sb, "Paciente", data.PatientId);
-            AppendMeta(sb, "Registro", m != null ? m.RegistrationId : null);
-            AppendMeta(sb, "Tipo", m != null ? m.RegType.ToString() : null);
-            AppendMeta(sb, "Perfil", data.ProfileName);
-            AppendMeta(sb, "Fecha", DateTime.Now.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture));
+            AppendMeta(sb, "Patient", data.PatientId);
+            AppendMeta(sb, "Registration", m != null ? m.RegistrationId : null);
+            AppendMeta(sb, "Type", m != null ? m.RegType.ToString() : null);
+            AppendMeta(sb, "Profile", data.ProfileName);
+            AppendMeta(sb, "Date", DateTime.Now.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture));
             sb.Append("</div></div>");
         }
 
@@ -105,8 +105,8 @@ namespace ESAPI_RegistrationQA.Services
         {
             if (data.Advisories == null || data.Advisories.Advisories.Count == 0) return;
 
-            sb.Append("<h2>Recomendaciones clínicas (AAPM TG-132 / TG-233)</h2>");
-            sb.Append("<table class='advisories'><tr><th>Nivel</th><th>Ámbito</th><th>Observación</th></tr>");
+            sb.Append("<h2>Clinical advisories (AAPM TG-132 / TG-233)</h2>");
+            sb.Append("<table class='advisories'><tr><th>Level</th><th>Scope</th><th>Observation</th></tr>");
 
             foreach (Advisory advisory in data.Advisories.Advisories
                          .OrderByDescending(a => a.Severity))
@@ -125,7 +125,7 @@ namespace ESAPI_RegistrationQA.Services
             IList<MetricResult> first, IList<MetricResult> second)
         {
             sb.Append("<h2>").Append(E(title)).Append("</h2>");
-            sb.Append("<table><tr><th>Métrica</th><th>Valor</th><th>Criterio de aceptación</th><th>Estado</th></tr>");
+            sb.Append("<table><tr><th>Metric</th><th>Value</th><th>Acceptance criterion</th><th>Status</th></tr>");
 
             foreach (MetricResult metric in Concat(first, second))
                 AppendMetricRow(sb, metric);
@@ -135,8 +135,8 @@ namespace ESAPI_RegistrationQA.Services
 
         private static void AppendStructureTable(StringBuilder sb, ReportData data)
         {
-            sb.Append("<h2>2. Alineamiento de estructuras y superficie</h2>");
-            sb.Append("<table><tr><th>Índice anatómico</th><th>Valor</th><th>Criterio de aceptación</th><th>Estado</th></tr>");
+            sb.Append("<h2>2. Structure and surface alignment</h2>");
+            sb.Append("<table><tr><th>Anatomical index</th><th>Value</th><th>Acceptance criterion</th><th>Status</th></tr>");
 
             foreach (MetricResult metric in data.StructureMetrics ?? new List<MetricResult>())
                 AppendMetricRow(sb, metric);
@@ -160,7 +160,7 @@ namespace ESAPI_RegistrationQA.Services
             if (!string.IsNullOrEmpty(annotation))
             {
                 sb.Append("<tr class='annotation'><td colspan='4'>")
-                  .Append(metric.IsAvailable ? "Nota: " : "Motivo: ")
+                  .Append(metric.IsAvailable ? "Note: " : "Reason: ")
                   .Append(E(annotation))
                   .Append("</td></tr>");
             }
@@ -168,12 +168,12 @@ namespace ESAPI_RegistrationQA.Services
 
         private static void AppendRigidTable(StringBuilder sb, ReportData data)
         {
-            sb.Append("<h2>3. Parámetros de la transformación rígida</h2>");
-            sb.Append("<p class='note'>Coordenadas de paciente DICOM: X = izquierda-derecha (LR), ");
-            sb.Append("Y = anterior-posterior (AP), Z = cráneo-caudal (CC). ");
-            sb.Append("Ángulos de Euler en convención intrínseca Rz·Ry·Rx.</p>");
+            sb.Append("<h2>3. Rigid transformation parameters</h2>");
+            sb.Append("<p class='note'>DICOM patient coordinates: X = left-right (LR), ");
+            sb.Append("Y = anterior-posterior (AP), Z = cranio-caudal (CC). ");
+            sb.Append("Euler angles in the intrinsic Rz·Ry·Rx convention.</p>");
 
-            sb.Append("<table><tr><th>Parámetro espacial</th><th>Valor</th><th>Unidad</th></tr>");
+            sb.Append("<table><tr><th>Spatial parameter</th><th>Value</th><th>Unit</th></tr>");
 
             foreach (RigidTransformItem item in data.RigidTransform ?? new List<RigidTransformItem>())
             {
@@ -192,27 +192,27 @@ namespace ESAPI_RegistrationQA.Services
             QaMeasurements m = data.Measurements;
             if (m == null) return;
 
-            sb.Append("<h2>4. Procedencia y trazabilidad de la medición</h2>");
+            sb.Append("<h2>4. Measurement provenance and traceability</h2>");
             sb.Append("<table class='provenance'>");
 
-            AppendProvenanceRow(sb, "Origen de la transformación", m.TransformSource);
-            AppendProvenanceRow(sb, "Modalidades", m.FixedModality + " → " + m.MovingModality);
+            AppendProvenanceRow(sb, "Transform source", m.TransformSource);
+            AppendProvenanceRow(sb, "Modalities", m.FixedModality + " → " + m.MovingModality);
 
             if (m.SampleCount > 0)
             {
-                AppendProvenanceRow(sb, "Pares de vóxeles evaluados",
+                AppendProvenanceRow(sb, "Voxel pairs evaluated",
                     m.SampleCount.ToString("N0", CultureInfo.InvariantCulture));
             }
 
             if (m.OverlapFraction.HasValue)
             {
-                AppendProvenanceRow(sb, "Solapamiento entre volúmenes",
+                AppendProvenanceRow(sb, "Overlap between volumes",
                     m.OverlapFraction.Value.ToString("P1", CultureInfo.InvariantCulture));
             }
 
             if (m.EffectiveSamplingMm.HasValue)
             {
-                AppendProvenanceRow(sb, "Resolución efectiva de muestreo",
+                AppendProvenanceRow(sb, "Effective sampling resolution",
                     m.EffectiveSamplingMm.Value.ToString("F2", CultureInfo.InvariantCulture) + " mm");
             }
 
@@ -235,10 +235,10 @@ namespace ESAPI_RegistrationQA.Services
 
             if (relevant.Count == 0) return;
 
-            sb.Append("<h2>5. Diagnóstico de acceso a la API</h2>");
-            sb.Append("<p class='note'>Incidencias registradas durante la lectura de los datos. ");
-            sb.Append("Se incluyen para que toda métrica no evaluada tenga una causa trazable.</p>");
-            sb.Append("<table class='diagnostics'><tr><th>Nivel</th><th>Operación</th><th>Detalle</th></tr>");
+            sb.Append("<h2>5. API access diagnostics</h2>");
+            sb.Append("<p class='note'>Issues recorded while reading the data. ");
+            sb.Append("They are included so that every unevaluated metric has a traceable cause.</p>");
+            sb.Append("<table class='diagnostics'><tr><th>Level</th><th>Operation</th><th>Detail</th></tr>");
 
             foreach (DiagnosticEntry entry in relevant)
             {
@@ -255,23 +255,23 @@ namespace ESAPI_RegistrationQA.Services
         private static void AppendSignatures(StringBuilder sb)
         {
             sb.Append("<div class='signatures'>");
-            sb.Append("<div class='sig'>Físico médico</div>");
-            sb.Append("<div class='sig'>Oncólogo radioterápico</div>");
+            sb.Append("<div class='sig'>Medical physicist</div>");
+            sb.Append("<div class='sig'>Radiation oncologist</div>");
             sb.Append("</div>");
         }
 
         private static void AppendFooter(StringBuilder sb, ReportData data)
         {
             sb.Append("<div class='footer'>");
-            sb.Append("<span>Generado por ESAPI_RegistrationQA v").Append(E(AssemblyVersion())).Append("</span>");
-            sb.Append("<span>Perfil activo: ").Append(E(data.ProfileName ?? "—")).Append("</span>");
+            sb.Append("<span>Generated by ESAPI_RegistrationQA v").Append(E(AssemblyVersion())).Append("</span>");
+            sb.Append("<span>Active profile: ").Append(E(data.ProfileName ?? "—")).Append("</span>");
             sb.Append("<span>").Append(E(Environment.UserName)).Append("</span>");
             sb.Append("</div>");
         }
 
-        // ------------------------------------------------------------------ utilidades
+        // ------------------------------------------------------------------ utilities
 
-        /// <summary>Escape HTML. Único punto por el que pasa todo texto insertado en el documento.</summary>
+        /// <summary>HTML escaping. The single point through which all inserted text passes.</summary>
         private static string E(string text)
         {
             return WebUtility.HtmlEncode(text ?? string.Empty);
@@ -306,8 +306,8 @@ namespace ESAPI_RegistrationQA.Services
         }
 
         /// <summary>
-        /// Versión del ensamblado. Un reporte de QA firmado debe poder asociarse a la versión
-        /// exacta del código que lo produjo.
+        /// Assembly version. A signed QA report must be traceable to the exact version of the
+        /// code that produced it.
         /// </summary>
         public static string AssemblyVersion()
         {
@@ -324,14 +324,14 @@ namespace ESAPI_RegistrationQA.Services
             }
             catch
             {
-                return "desconocida";
+                return "unknown";
             }
         }
 
-        /// <summary>Elimina caracteres no admitidos en un nombre de archivo.</summary>
+        /// <summary>Strips characters that are not allowed in a file name.</summary>
         public static string SanitizeFileName(string candidate)
         {
-            if (string.IsNullOrEmpty(candidate)) return "sin_id";
+            if (string.IsNullOrEmpty(candidate)) return "no_id";
 
             var sb = new StringBuilder(candidate.Length);
             char[] invalid = Path.GetInvalidFileNameChars();

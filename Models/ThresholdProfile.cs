@@ -5,9 +5,9 @@ using System.Globalization;
 namespace ESAPI_RegistrationQA.Models
 {
     /// <summary>
-    /// Límites verde/amarillo de una métrica. La dirección de bondad (si mayor es mejor)
-    /// no se almacena aquí: es una propiedad intrínseca de la métrica y vive en
-    /// <see cref="MetricCatalog"/>, de modo que no puede quedar inconsistente entre perfiles.
+    /// Green/yellow limits for a metric. The direction of goodness (whether higher is
+    /// better) is not stored here: it is an intrinsic property of the metric and lives in
+    /// <see cref="MetricCatalog"/>, so it cannot become inconsistent between profiles.
     /// </summary>
     public sealed class ThresholdLimits
     {
@@ -44,8 +44,8 @@ namespace ESAPI_RegistrationQA.Models
         }
 
         /// <summary>
-        /// Clasifica un valor medido. Devuelve <see cref="QASemaphore.NotAvailable"/> si el
-        /// perfil no define la métrica: no se inventa una clasificación por defecto.
+        /// Classifies a measured value. Returns <see cref="QASemaphore.NotAvailable"/> when
+        /// the profile does not define the metric: no default classification is invented.
         /// </summary>
         public QASemaphore Evaluate(string metricKey, double value)
         {
@@ -65,8 +65,9 @@ namespace ESAPI_RegistrationQA.Models
         }
 
         /// <summary>
-        /// Texto del criterio de aceptación, mostrando ambos umbrales. Antes sólo se mostraba
-        /// el límite verde, lo que hacía imposible entender por qué una métrica salía en amarillo.
+        /// Acceptance criterion text, showing both thresholds. Previously only the green
+        /// limit was shown, which made it impossible to understand why a metric came out
+        /// yellow.
         /// </summary>
         public string DescribeCriteria(string metricKey)
         {
@@ -79,11 +80,11 @@ namespace ESAPI_RegistrationQA.Models
 
             return string.Format(
                 CultureInfo.InvariantCulture,
-                "{0} {1:0.###}{2} (amarillo {0} {3:0.###}{2})",
+                "{0} {1:0.###}{2} (yellow {0} {3:0.###}{2})",
                 op, limits.GreenLimit, suffix, limits.YellowLimit);
         }
 
-        /// <summary>Umbral verde en texto, para insertarlo en los mensajes de aviso.</summary>
+        /// <summary>Green threshold as text, for embedding in advisory messages.</summary>
         public string DescribeGreenLimit(string metricKey)
         {
             ThresholdLimits limits;
@@ -94,7 +95,7 @@ namespace ESAPI_RegistrationQA.Models
             return string.Format(CultureInfo.InvariantCulture, "{0:0.###}{1}", limits.GreenLimit, suffix);
         }
 
-        // 1. Cabeza y Cuello (ART H&N)
+        // 1. Head and neck (ART H&N)
         public static ThresholdProfile CreateDefaultHN()
         {
             var profile = new ThresholdProfile { ProfileName = "ART Head & Neck" };
@@ -109,7 +110,7 @@ namespace ESAPI_RegistrationQA.Models
             return profile;
         }
 
-        // 2. Cerebro / Radiocirugía (Brain / SRS) - Tolerancias estrictas
+        // 2. Brain / radiosurgery (Brain / SRS) - tight tolerances
         public static ThresholdProfile CreateBrainSRS()
         {
             var profile = new ThresholdProfile { ProfileName = "Brain / SRS" };
@@ -124,7 +125,7 @@ namespace ESAPI_RegistrationQA.Models
             return profile;
         }
 
-        // 3. Pelvis / Próstata
+        // 3. Pelvis / prostate
         public static ThresholdProfile CreatePelvis()
         {
             var profile = new ThresholdProfile { ProfileName = "Pelvis / Prostate" };
@@ -139,7 +140,7 @@ namespace ESAPI_RegistrationQA.Models
             return profile;
         }
 
-        // 4. Tórax / Pulmón (Thorax / Lung)
+        // 4. Thorax / lung
         public static ThresholdProfile CreateThorax()
         {
             var profile = new ThresholdProfile { ProfileName = "Thorax / Lung" };
