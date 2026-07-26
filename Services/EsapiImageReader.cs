@@ -112,7 +112,13 @@ namespace ESAPI_RegistrationQA.Services
             Vec3 origin;
             if (!TryReadVector("Origin", () => frame.Origin, label, log, out origin)) return null;
 
-            Vec3 xDirection, yDirection, zDirection;
+            // Seeded with the canonical axial orientation. The seed is required for definite
+            // assignment: && short-circuits, so a failure on XDirection leaves the later out
+            // parameters untouched.
+            Vec3 xDirection = new Vec3(1, 0, 0);
+            Vec3 yDirection = new Vec3(0, 1, 0);
+            Vec3 zDirection = new Vec3(0, 0, 1);
+
             bool haveDirections =
                 TryReadVector("XDirection", () => frame.XDirection, label, log, out xDirection) &&
                 TryReadVector("YDirection", () => frame.YDirection, label, log, out yDirection) &&
@@ -120,9 +126,14 @@ namespace ESAPI_RegistrationQA.Services
 
             if (!haveDirections)
             {
-                // Canonical axial orientation. This is correct for the vast majority of
-                // planning series, but it is recorded because a study acquired with a tilted
-                // gantry would be misinterpreted.
+                // All three are reset, not just the ones that failed. A partial read would
+                // otherwise mix a real axis with two canonical ones, which is not guaranteed
+                // to be an orthonormal frame and would be rejected downstream — or worse,
+                // silently accepted as a skewed geometry.
+                //
+                // The canonical orientation is correct for the vast majority of planning
+                // series, but the substitution is logged because a study acquired with a
+                // tilted gantry would be misinterpreted.
                 xDirection = new Vec3(1, 0, 0);
                 yDirection = new Vec3(0, 1, 0);
                 zDirection = new Vec3(0, 0, 1);
