@@ -3,7 +3,7 @@
 ## Why this document exists
 
 The tool has never been checked against a known answer. What has been verified is the pure
-mathematics — 46 analytic checks in `tools/verify_math.py`, covering Euler extraction, matrix
+mathematics — 52 analytic checks in `tools/verify_math.py`, covering Euler extraction, matrix
 convention detection, voxel↔patient round-trips, the similarity metrics against their
 theoretical values, transform composition, and TRE against known landmark displacements —
 plus the fact that it builds and runs.

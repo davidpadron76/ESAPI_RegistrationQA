@@ -110,7 +110,7 @@ would describe a different transform from the one under audit.
 
 The numbers are measurements; the semaphore colours are provisional.
 
-What has been verified: the pure mathematics, through 46 analytic checks in
+What has been verified: the pure mathematics, through 52 analytic checks in
 `tools/verify_math.py` — Euler extraction, matrix convention detection, voxel↔patient
 round-trips, the similarity metrics against their theoretical values, transform composition,
 and TRE against known landmark displacements.
