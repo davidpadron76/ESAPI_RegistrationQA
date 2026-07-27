@@ -67,15 +67,24 @@ namespace ESAPI_RegistrationQA.Models
             get { return Status == QASemaphore.NotAvailable ? "N/A" : Status.ToString(); }
         }
 
-        /// <summary>Combined tooltip: metric definition, unavailability reason and notes.</summary>
+        /// <summary>
+        /// Combined tooltip. Leads with the clinical question rather than the formula: the
+        /// reader needs to know what they are being asked to decide before the arithmetic
+        /// is of any use to them.
+        /// </summary>
         public string Tooltip
         {
             get
             {
                 MetricDefinition definition;
-                string text = MetricCatalog.TryGet(MetricKey, out definition)
-                    ? definition.Description
-                    : MetricName;
+                if (!MetricCatalog.TryGet(MetricKey, out definition))
+                    return MetricName;
+
+                string text =
+                    definition.ClinicalQuestion + Environment.NewLine + Environment.NewLine +
+                    definition.Description + Environment.NewLine + Environment.NewLine +
+                    "What it supports: " + definition.DecisionSupported + Environment.NewLine + Environment.NewLine +
+                    "TG-132: " + definition.StandardBasis;
 
                 if (!string.IsNullOrEmpty(MeasurementNote))
                     text += Environment.NewLine + Environment.NewLine + "Note: " + MeasurementNote;

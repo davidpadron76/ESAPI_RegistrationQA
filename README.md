@@ -9,80 +9,76 @@ Brock KK, Mutic S, McNutt TR, Li H, Kessler ML. *Use of image registration and f
 algorithms and techniques in radiotherapy: Report of the AAPM Radiation Therapy Committee
 Task Group No. 132.* Med Phys. 2017;44(7):e43–e76. [doi:10.1002/mp.12256](https://doi.org/10.1002/mp.12256)
 
-Earlier versions of this project also cited AAPM TG-233. That was an error: TG-233 covers
-performance evaluation of CT systems and has nothing to do with image registration. TG-132 is
-the applicable report and is not related to it.
+Earlier versions of this project cited AAPM TG-233. That was an error: TG-233 covers
+performance evaluation of CT systems and is unrelated to image registration.
 
-### How this tool maps onto TG-132 Table III
+## Why each metric is here
 
-Table III is the list of quantitative metrics TG-132 recommends, with its tolerances:
+A metric earns its place by the clinical decision it supports. Appearing in TG-132 Table III
+is evidence for that, not the criterion itself — and the converse holds too: several metrics
+the report does not tabulate are useful for interpreting a co-registration, and TG-132 §4.C.3
+explicitly admits some of them for assessment.
 
-| TG-132 metric | Tolerance in Table III | In this tool |
-|---|---|---|
-| Target Registration Error (TRE) | Maximum voxel dimension (~2–3 mm) | **Measured** — mean and max over matched point landmarks |
-| Mean Distance to Agreement (MDA) | Contouring uncertainty or max voxel dimension (~2–3 mm) | Not implemented |
-| Dice Similarity Coefficient (DSC) | Within contouring uncertainty (~0.80–0.90) | Not implemented |
-| Jacobian determinant | No negative values; deviation from 1 as clinically expected | Analytic for rigid; not obtainable for DIR |
-| Consistency (inverse) | Maximum voxel dimension (~2–3 mm) | **Measured** — when the reverse registration exists |
+Each definition carries its justification in the code (`Models/MetricCatalog.cs`), and the
+constructor refuses a metric that leaves it blank. The same table is printed as an appendix
+to every exported report, so whoever countersigns the document can see the basis for each
+number.
 
-TRE is the report's primary accuracy metric and the only one here expressed directly in
-millimetres of spatial error. It needs point landmarks — DICOM type `MARKER` or `ISOCENTER` —
-present on both series under the same identifier. Contour structures are deliberately
-excluded: their centre of mass shifts when the contour is edited, so it is not a landmark in
-the sense the report means.
+| Metric | Question it answers | Relation to TG-132 | Status |
+|---|---|---|---|
+| **NCC** | Does the anatomy line up, same modality? | §4.C.3, admitted for assessment | Measured |
+| **NMI** | Does it line up when intensities are not linearly comparable (CT-MR, CT-PET)? | §4.C.3, admitted for assessment | Measured |
+| **SSD** | Are there local intensity differences beyond the overall alignment? | §4.C.3, admitted for assessment | Measured |
+| **Jacobian < 0** | Has the deformation folded tissue onto itself? | Table III | Exact for rigid · N/A for DIR |
+| **Max Displacement** | How far has the registration moved the anatomy? | Not tabulated; plausibility check | Exact for rigid · N/A for DIR |
+| **Smoothness** | Is the deformation physically plausible? | Not tabulated; related to §4.C.3 | Exact for rigid · N/A for DIR |
+| **DSC** | Do the same organs end up in the same place? | Table III, ~0.80–0.90 | Not implemented |
+| **HD95** | How far apart are the surfaces where they disagree most? | Not tabulated; report specifies MDA | Not implemented |
+| **TRE (mean)** | How large is the spatial error, in millimetres? | Table III, primary metric | Measured |
+| **TRE (max)** | Is any single landmark badly placed? | Table III; mean/max split is ours | Measured |
+| **Inverse consistency** | Is the algorithm behaving stably? | §4.C.4 and Table III | Measured |
 
-Inverse consistency needs the reverse registration to exist in the workspace. Create it and
-re-run to enable the check. Note what it does and does not show: a registration can be
-perfectly consistent and still wrong, so it evidences a stable algorithm rather than an
-accurate one.
+Two points the report makes that shape how the first three should be read. TG-132 §4.C.3
+admits SSD, CC and MI for assessment **provided the metric was not the one the registration
+algorithm optimised** — otherwise the assessment is circular — and notes they are **difficult
+to convert into a measure of spatial accuracy**. A compliant NCC does not establish
+millimetric accuracy; TRE is the metric that does. The plugin raises an advisory saying so on
+every case where those metrics are available.
 
-The remaining metrics the tool computes — NCC, NMI and SSD — appear in TG-132 §4.C.3 as a
-secondary route, with two explicit conditions:
+Where the tool departs from the report, deliberately:
 
-> "the metrics used to drive registration (i.e., SSD, CC, and MI) can also be used to assess
-> the registration **as long as the metric was not used in the registration algorithm itself**
-> […] **it is difficult to convert these metrics into quantitative measures of spatial
-> accuracy**."
-
-Both conditions matter in practice. If your TPS optimises mutual information, validating with
-NMI is circular. And a compliant NCC does not establish millimetric accuracy. The plugin
-raises an advisory saying so on every case where those metrics are available.
-
-Two further departures worth knowing about:
-
-- The plugin reports **HD95**, not MDA. HD95 is common in the segmentation literature but is
-  not the metric in Table III. MDA is the TG-132 recommendation.
-- The **site-specific threshold profiles** (Head & Neck, Brain/SRS, Pelvis, Thorax) go beyond
-  TG-132, which ties its tolerances to voxel dimension and contouring uncertainty rather than
-  to anatomical site. The DSC range of 0.80–0.90 comes from Table III; the rest are inherited
-  values pending calibration. See [VALIDATION.md](VALIDATION.md).
+- **HD95 instead of MDA.** Table III specifies Mean Distance to Agreement. HD95 is what the
+  segmentation literature reports, which keeps local results comparable with published
+  series. MDA is worth adding alongside it rather than in its place.
+- **Site-specific threshold profiles.** TG-132 ties its tolerances to voxel dimension and
+  contouring uncertainty rather than to anatomical site. The DSC range comes from Table III;
+  the rest are inherited values pending calibration against real data. See
+  [VALIDATION.md](VALIDATION.md).
 
 ## What it actually measures
 
-This section is deliberately explicit about scope. The plugin produces a report intended to
-be signed by a medical physicist, and therefore it **never substitutes a metric it could not
-measure with a plausible-looking value**: it marks it *N/A* with the specific reason, visible
-both in the interface and in the report.
+The plugin produces a report intended to be signed by a medical physicist, so it **never
+substitutes a metric it could not measure with a plausible-looking value**: it marks it *N/A*
+with the specific reason, visible in the interface and in the report.
 
 | Metric | Status | How it is obtained |
 |---|---|---|
 | **NCC** | ✅ Measured | Pearson correlation over voxel pairs matched by applying the registration transform. Signed, range [-1, 1]. |
 | **NMI** | ✅ Measured | Studholme NMI, `(H(A)+H(B))/H(A,B)`, over the actual joint histogram. Bin count adapts to sample size. |
-| **SSD** | ✅ Measured | Mean squared difference normalised by the square of the robust range (P1–P99) of the reference image. Dimensionless and comparable across modalities. |
-| **Translations and Euler angles** | ✅ Measured | From the registration matrix, with automatic convention detection (translation in row or column), orthonormality verification and explicit gimbal-lock handling. |
+| **SSD** | ✅ Measured | Mean squared difference normalised by the square of the robust range (P1–P99) of the reference image. |
+| **Translations and Euler angles** | ✅ Measured | From the registration matrix, with automatic convention detection, orthonormality verification and explicit gimbal-lock handling. |
+| **TRE (mean and max)** | ✅ Measured | Matched point landmarks pushed through the registration. Needs MARKER or ISOCENTER structures with the same identifier on both series. |
+| **Inverse consistency** | ✅ Measured | Forward then reverse mapping over a grid across the field of view. Needs the reverse registration to exist in the workspace. |
 | **Max displacement** | ✅ Measured (rigid) | Exact maximum over the eight FOV corners. |
 | **Jacobian < 0** | ✅ Exact by definition (rigid) | 0% — a rigid transform has \|J\| = 1 everywhere. |
 | **Smoothness** | ✅ Exact by definition (rigid) | 1.0 — the field gradient is constant. |
-| **TRE (mean and max)** | ✅ Measured | Matched point landmarks pushed through the registration and compared with their counterparts. TG-132's primary accuracy metric. Needs MARKER or ISOCENTER structures with the same identifier on both series. |
-| **Inverse consistency** | ✅ Measured | Forward then reverse mapping over a grid across the field of view; the residual is what remains. Needs the reverse registration to exist in the workspace. |
-| **Jacobian, displacement and smoothness** | ❌ **N/A for deformable** | Require traversing the deformation vector field (DVF), which the Varian scripting API does not expose. |
-| **DSC** | ❌ **N/A** | Requires rasterising a structure pair matched by identifier onto a common grid. Not implemented. |
-| **HD95** | ❌ **N/A** | Same. TG-132 Table III specifies MDA rather than HD95. |
+| **Jacobian, displacement and smoothness** | ❌ **N/A for deformable** | Require traversing the deformation vector field, which the Varian scripting API does not expose. |
+| **DSC / HD95** | ❌ **N/A** | Require rasterising a structure pair matched by identifier onto a common grid. Not implemented. |
 
-For **deformable** registrations, if the API exposes a point-by-point mapping method
-(`TransformPoint` or equivalent), the intensity metrics are computed by traversing the
-deformation field. If it does not, they are marked N/A: applying only the linear component
-would describe a different transform from the one under audit.
+For **deformable** registrations, if the API exposes a point-by-point mapping method, the
+intensity metrics and the TRE are computed by traversing the deformation field. If it does
+not, they are marked N/A: applying only the linear component would describe a different
+transform from the one under audit.
 
 ## Features
 

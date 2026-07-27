@@ -58,6 +58,7 @@ namespace ESAPI_RegistrationQA.Services
             AppendRigidTable(sb, data);
             AppendProvenance(sb, data);
             AppendDiagnostics(sb, data);
+            AppendMetricRationale(sb);
             AppendSignatures(sb);
             AppendFooter(sb, data);
 
@@ -280,6 +281,34 @@ namespace ESAPI_RegistrationQA.Services
             sb.Append("</table>");
         }
 
+        /// <summary>
+        /// Appendix stating, for every metric, the question it answers and where it stands
+        /// relative to TG-132.
+        ///
+        /// It belongs in a signed report rather than only in the source: whoever countersigns
+        /// this document is accountable for the interpretation, and that is not possible if
+        /// the basis for including each number lives somewhere they cannot see.
+        /// </summary>
+        private static void AppendMetricRationale(StringBuilder sb)
+        {
+            sb.Append("<h2>Appendix — basis for each metric</h2>");
+            sb.Append("<p class='note'>Metrics are included for the clinical decision they support. ");
+            sb.Append("Those not named in TG-132 are marked as such together with the reason for ");
+            sb.Append("retaining them; membership of the report is not by itself the criterion.</p>");
+            sb.Append("<table class='rationale'><tr><th>Metric</th><th>Question it answers</th>");
+            sb.Append("<th>What it supports</th><th>Relation to TG-132</th></tr>");
+
+            foreach (MetricDefinition definition in MetricCatalog.All)
+            {
+                sb.Append("<tr><td><b>").Append(E(definition.DisplayName)).Append("</b></td><td>")
+                  .Append(E(definition.ClinicalQuestion)).Append("</td><td>")
+                  .Append(E(definition.DecisionSupported)).Append("</td><td>")
+                  .Append(E(definition.StandardBasis)).Append("</td></tr>");
+            }
+
+            sb.Append("</table>");
+        }
+
         private static void AppendSignatures(StringBuilder sb)
         {
             sb.Append("<div class='signatures'>");
@@ -396,6 +425,8 @@ tr.na-row td { color: #777; background: #fafafa !important; }
 tr.annotation td { font-size: 9.5px; color: #666; background: #fbfbfb !important;
                    border-top: none; font-style: italic; }
 table.provenance td.label { width: 40%; font-weight: 600; color: #005a9c; }
+table.rationale { font-size: 9.5px; }
+table.rationale td { line-height: 1.35; }
 .badge { padding: 2px 7px; border-radius: 3px; font-weight: bold; text-align: center;
          display: inline-block; min-width: 46px; font-size: 9.5px; }
 .badge-green { background: #c8e6c9 !important; color: #2e7d32 !important; }
