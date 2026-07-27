@@ -105,7 +105,7 @@ namespace ESAPI_RegistrationQA.Services
         {
             if (data.Advisories == null || data.Advisories.Advisories.Count == 0) return;
 
-            sb.Append("<h2>Clinical advisories (AAPM TG-132 / TG-233)</h2>");
+            sb.Append("<h2>Clinical advisories (AAPM TG-132)</h2>");
             sb.Append("<table class='advisories'><tr><th>Level</th><th>Scope</th><th>Observation</th></tr>");
 
             foreach (Advisory advisory in data.Advisories.Advisories

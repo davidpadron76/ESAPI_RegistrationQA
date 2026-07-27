@@ -3,6 +3,50 @@
 A C# / WPF plugin for the **Varian Eclipse Treatment Planning System** (ESAPI and VMS.IRS
 architecture) that automates the quantitative audit of image registrations.
 
+## Reference
+
+Brock KK, Mutic S, McNutt TR, Li H, Kessler ML. *Use of image registration and fusion
+algorithms and techniques in radiotherapy: Report of the AAPM Radiation Therapy Committee
+Task Group No. 132.* Med Phys. 2017;44(7):e43–e76. [doi:10.1002/mp.12256](https://doi.org/10.1002/mp.12256)
+
+Earlier versions of this project also cited AAPM TG-233. That was an error: TG-233 covers
+performance evaluation of CT systems and has nothing to do with image registration. TG-132 is
+the applicable report and is not related to it.
+
+### How this tool maps onto TG-132 Table III
+
+Table III is the list of quantitative metrics TG-132 recommends, with its tolerances:
+
+| TG-132 metric | Tolerance in Table III | In this tool |
+|---|---|---|
+| Target Registration Error (TRE) | Maximum voxel dimension (~2–3 mm) | Not implemented |
+| Mean Distance to Agreement (MDA) | Contouring uncertainty or max voxel dimension (~2–3 mm) | Not implemented |
+| Dice Similarity Coefficient (DSC) | Within contouring uncertainty (~0.80–0.90) | Not implemented |
+| Jacobian determinant | No negative values; deviation from 1 as clinically expected | Analytic for rigid; not obtainable for DIR |
+| Consistency (inverse / transitivity) | Maximum voxel dimension (~2–3 mm) | Not implemented |
+
+So none of the five primary TG-132 quantitative metrics is currently measured. What the tool
+does measure well — NCC, NMI and SSD — appears in TG-132 §4.C.3 as a secondary route, with two
+explicit conditions:
+
+> "the metrics used to drive registration (i.e., SSD, CC, and MI) can also be used to assess
+> the registration **as long as the metric was not used in the registration algorithm itself**
+> […] **it is difficult to convert these metrics into quantitative measures of spatial
+> accuracy**."
+
+Both conditions matter in practice. If your TPS optimises mutual information, validating with
+NMI is circular. And a compliant NCC does not establish millimetric accuracy. The plugin
+raises an advisory saying so on every case where those metrics are available.
+
+Two further departures worth knowing about:
+
+- The plugin reports **HD95**, not MDA. HD95 is common in the segmentation literature but is
+  not the metric in Table III. MDA is the TG-132 recommendation.
+- The **site-specific threshold profiles** (Head & Neck, Brain/SRS, Pelvis, Thorax) go beyond
+  TG-132, which ties its tolerances to voxel dimension and contouring uncertainty rather than
+  to anatomical site. The DSC range of 0.80–0.90 comes from Table III; the rest are inherited
+  values pending calibration. See [VALIDATION.md](VALIDATION.md).
+
 ## What it actually measures
 
 This section is deliberately explicit about scope. The plugin produces a report intended to

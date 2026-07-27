@@ -144,7 +144,7 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBlock Text="REGISTRATION QUANTITATIVE AUDIT (AAPM TG-132 / TG-233)"
+                    <TextBlock Text="REGISTRATION QUANTITATIVE AUDIT (AAPM TG-132)"
                                Foreground="White" FontSize="14" FontWeight="Bold"/>
                     <TextBlock Foreground="#DDE7F0" FontSize="11.5" Margin="0,3,0,0">
                         <Run Text="Patient:"/>

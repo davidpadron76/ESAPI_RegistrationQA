@@ -100,6 +100,9 @@ namespace ESAPI_RegistrationQA.Services
             // --- Sampling quality --------------------------------------------------------
             AddSamplingAdvisory(set, measurements);
 
+            // --- What the similarity metrics do and do not establish ---------------------
+            AddSimilarityScopeAdvisory(set, metrics);
+
             // --- Transform provenance ----------------------------------------------------
             if (measurements != null && measurements.Transform == null)
             {
@@ -213,6 +216,38 @@ namespace ESAPI_RegistrationQA.Services
                     "MODALITY",
                     "Monomodal registration (" + pair + "). The reference metric is " + primaryName + "."));
             }
+        }
+
+        /// <summary>
+        /// States the two limits TG-132 places on intensity similarity metrics.
+        ///
+        /// Section 4.C.3 allows SSD, CC and MI to be used for assessment, but only when the
+        /// metric was not the one the registration algorithm optimised — otherwise the
+        /// assessment is circular — and it notes that these metrics are difficult to convert
+        /// into a quantitative measure of spatial accuracy.
+        ///
+        /// This matters because those three are the metrics this plugin computes best, and a
+        /// green NCC could easily be read as "geometrically accurate". It does not establish
+        /// that. The quantitative metrics TG-132 lists for spatial accuracy are in Table III:
+        /// TRE, MDA, DSC, Jacobian determinant and consistency.
+        /// </summary>
+        private static void AddSimilarityScopeAdvisory(AdvisorySet set, List<MetricResult> metrics)
+        {
+            bool anySimilarityMeasured = metrics.Any(m =>
+                m.IsAvailable &&
+                (m.MetricKey == MetricKeys.Ncc || m.MetricKey == MetricKeys.Nmi || m.MetricKey == MetricKeys.Ssd));
+
+            if (!anySimilarityMeasured) return;
+
+            set.Advisories.Add(new Advisory(
+                AdvisorySeverity.Info,
+                "SCOPE OF SIMILARITY METRICS",
+                "TG-132 §4.C.3 admits SSD, CC and MI for assessing a registration only if the metric was " +
+                "not the one optimised by the registration algorithm itself; otherwise the assessment is " +
+                "circular. Confirm which metric drives your TPS registration. TG-132 also notes these " +
+                "metrics are difficult to convert into a measure of spatial accuracy: a compliant value " +
+                "does not establish millimetric accuracy. For that, Table III lists TRE, MDA, DSC, the " +
+                "Jacobian determinant and consistency."));
         }
 
         private static void AddSamplingAdvisory(AdvisorySet set, QaMeasurements measurements)
