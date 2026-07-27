@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Reflection;
 using ESAPI_RegistrationQA.Models;
 
@@ -22,6 +24,9 @@ namespace ESAPI_RegistrationQA.Services
 
         /// <summary>Geometry of the volume used as the sampling grid (the source image).</summary>
         private ImageGeometry _fixedGeometry;
+
+        /// <summary>Forward mapping source → registered, shared by the similarity and TRE paths.</summary>
+        private IPointMapper _mapper;
 
         public RegistrationAnalyzer(DiagnosticLog log)
         {
@@ -66,6 +71,12 @@ namespace ESAPI_RegistrationQA.Services
             // --- Rigid transform --------------------------------------------------------
             ExtractRigidTransform(registration, measurements, source, target);
 
+            // Built once and shared: the similarity sampling and the TRE both need to push
+            // points through the same registration, and for a deformable case that mapping
+            // is expensive to construct.
+            _mapper = BuildPointMapper(registration, measurements);
+            if (_mapper != null) _log.Info("mapping", _mapper.Description);
+
             // --- Intensity similarity ---------------------------------------------------
             if (source == null || target == null || !source.Success || !target.Success)
             {
@@ -87,6 +98,11 @@ namespace ESAPI_RegistrationQA.Services
 
             // --- Structures -------------------------------------------------------------
             ComputeStructureMetrics(registration, measurements);
+
+            // --- TG-132 Table III primary metrics ---------------------------------------
+            RecordNativeVoxelSize(source, target, measurements);
+            ComputeTargetRegistrationError(registration, sourceImage, registeredImage, measurements);
+            ComputeInverseConsistency(scriptContext, registration, sourceImage, registeredImage, measurements);
 
             foreach (DiagnosticEntry entry in _log.Entries)
                 measurements.Diagnostics.Add(entry.ToString());
@@ -283,22 +299,14 @@ namespace ESAPI_RegistrationQA.Services
             EsapiImageReader.LoadResult target,
             QaMeasurements measurements)
         {
-            IPointMapper mapper = BuildPointMapper(registration, measurements);
+            IPointMapper mapper = _mapper;
             if (mapper == null)
             {
-                string reason = measurements.IsDeformable
-                    ? "this is a deformable registration and the API exposes neither the deformation " +
-                      "vector field nor a point-by-point mapping method. Evaluating similarity using only " +
-                      "the linear component would describe a different transform from the one under audit."
-                    : "no valid transform is available with which to match voxels";
-
-                measurements.Nmi = MeasuredValue.Unavailable(reason);
-                measurements.Ncc = MeasuredValue.Unavailable(reason);
-                measurements.Ssd = MeasuredValue.Unavailable(reason);
+                measurements.Nmi = MeasuredValue.Unavailable(NoMappingReason(measurements));
+                measurements.Ncc = MeasuredValue.Unavailable(NoMappingReason(measurements));
+                measurements.Ssd = MeasuredValue.Unavailable(NoMappingReason(measurements));
                 return;
             }
-
-            _log.Info("similarity: mapping", mapper.Description);
 
             VoxelPairSet pairs = VoxelPairSampler.Pair(source.Volume, target.Volume, mapper);
             measurements.SampleCount = pairs.Count;
@@ -598,6 +606,299 @@ namespace ESAPI_RegistrationQA.Services
             return count;
         }
 
+        // ---------------------------------------------------------------- TG-132 Table III
+
+        private void RecordNativeVoxelSize(
+            EsapiImageReader.LoadResult source,
+            EsapiImageReader.LoadResult target,
+            QaMeasurements measurements)
+        {
+            double? a = source != null ? source.NativeVoxelSizeMm : null;
+            double? b = target != null ? target.NativeVoxelSizeMm : null;
+
+            if (a.HasValue && b.HasValue) measurements.NativeVoxelSizeMm = Math.Max(a.Value, b.Value);
+            else if (a.HasValue) measurements.NativeVoxelSizeMm = a;
+            else if (b.HasValue) measurements.NativeVoxelSizeMm = b;
+        }
+
+        /// <summary>
+        /// Target Registration Error over matched point landmarks — the primary accuracy
+        /// metric of TG-132 Table III, and the only one here expressed directly in
+        /// millimetres of spatial error.
+        ///
+        /// Each landmark is taken from the source image, pushed through the registration
+        /// mapping and compared with the same landmark on the registered image. The same
+        /// mapper as the intensity metrics is reused, so this works for a deformable
+        /// registration whenever the API exposes point-to-point mapping.
+        /// </summary>
+        private void ComputeTargetRegistrationError(
+            dynamic registration, dynamic sourceImage, dynamic registeredImage, QaMeasurements measurements)
+        {
+            if (sourceImage == null || registeredImage == null)
+            {
+                const string reason = "the registration does not expose both images, so landmarks cannot be paired";
+                measurements.TreMean = MeasuredValue.Unavailable(reason);
+                measurements.TreMax = MeasuredValue.Unavailable(reason);
+                return;
+            }
+
+            if (_mapper == null)
+            {
+                measurements.TreMean = MeasuredValue.Unavailable(NoMappingReason(measurements));
+                measurements.TreMax = MeasuredValue.Unavailable(NoMappingReason(measurements));
+                return;
+            }
+
+            List<Landmark> sourceLandmarks = LandmarkExtractor.Read(sourceImage, "source image", _log);
+            List<Landmark> targetLandmarks = LandmarkExtractor.Read(registeredImage, "registered image", _log);
+            List<Tuple<Landmark, Landmark>> pairs =
+                LandmarkExtractor.Match(sourceLandmarks, targetLandmarks, _log);
+
+            measurements.TreLandmarkCount = pairs.Count;
+
+            if (pairs.Count == 0)
+            {
+                string reason = string.Format(CultureInfo.InvariantCulture,
+                    "no point landmark is present on both series under the same identifier " +
+                    "(source: {0}, registered: {1}). TRE needs markers — DICOM type MARKER or ISOCENTER — " +
+                    "placed on the same anatomical feature in both image sets. Contour structures are not " +
+                    "used: their centre of mass shifts when the contour is edited.",
+                    sourceLandmarks.Count, targetLandmarks.Count);
+
+                measurements.TreMean = MeasuredValue.Unavailable(reason);
+                measurements.TreMax = MeasuredValue.Unavailable(reason);
+                return;
+            }
+
+            var errors = new List<double>();
+            var unmappable = new List<string>();
+
+            foreach (Tuple<Landmark, Landmark> pair in pairs)
+            {
+                Vec3 mapped;
+                if (!_mapper.TryMap(pair.Item1.Position, out mapped))
+                {
+                    unmappable.Add(pair.Item1.Id);
+                    continue;
+                }
+                errors.Add((mapped - pair.Item2.Position).Length);
+            }
+
+            if (unmappable.Count > 0)
+            {
+                _log.Warning("TRE",
+                    "could not map through the registration: " + string.Join(", ", unmappable.ToArray()));
+            }
+
+            if (errors.Count == 0)
+            {
+                const string reason = "no matched landmark could be mapped through the registration";
+                measurements.TreMean = MeasuredValue.Unavailable(reason);
+                measurements.TreMax = MeasuredValue.Unavailable(reason);
+                return;
+            }
+
+            double mean = errors.Sum() / errors.Count;
+            double max = errors.Max();
+
+            string note = string.Format(CultureInfo.InvariantCulture,
+                "{0} matched landmark(s)", errors.Count);
+
+            if (errors.Count < 3)
+            {
+                note += "; fewer than three landmarks, so this is an indication rather than a " +
+                        "characterisation of the registration accuracy";
+                _log.Warning("TRE", note);
+            }
+
+            measurements.TreMean = MeasuredValue.Measured(mean, note);
+            measurements.TreMax = MeasuredValue.Measured(max, note);
+
+            _log.Info("TRE", string.Format(CultureInfo.InvariantCulture,
+                "mean {0:F2} mm, max {1:F2} mm over {2} landmark(s)", mean, max, errors.Count));
+        }
+
+        /// <summary>
+        /// Inverse consistency per TG-132 §4.C.4: registering A to B and then B to A should
+        /// return every point to itself. Whatever displacement remains is the residual.
+        ///
+        /// It requires the reverse registration to exist in the workspace, which is why the
+        /// unavailability message says so explicitly — it is a check the user can enable by
+        /// creating one, not a permanent limitation.
+        ///
+        /// The residual is evaluated over a coarse grid rather than only the volume corners.
+        /// For a rigid pair the maximum would indeed fall on a corner, but a deformable
+        /// composition is not affine and its worst point can lie anywhere inside.
+        /// </summary>
+        private void ComputeInverseConsistency(
+            dynamic scriptContext, dynamic registration,
+            dynamic sourceImage, dynamic registeredImage, QaMeasurements measurements)
+        {
+            if (_mapper == null || _fixedGeometry == null)
+            {
+                measurements.InverseConsistency = MeasuredValue.Unavailable(
+                    "no forward mapping or image geometry is available");
+                return;
+            }
+
+            string sourceId = ReadImageId(sourceImage, "source image");
+            string targetId = ReadImageId(registeredImage, "registered image");
+
+            if (sourceId == null || targetId == null)
+            {
+                measurements.InverseConsistency = MeasuredValue.Unavailable(
+                    "the images do not expose identifiers, so the reverse registration cannot be located");
+                return;
+            }
+
+            dynamic reverse = FindReverseRegistration(scriptContext, registration, sourceId, targetId);
+
+            if (reverse == null)
+            {
+                measurements.InverseConsistency = MeasuredValue.Unavailable(string.Format(
+                    CultureInfo.InvariantCulture,
+                    "no reverse registration ({0} → {1}) was found in the workspace. Create it and re-run " +
+                    "to enable this check: TG-132 §4.C.4 evaluates consistency by registering in both " +
+                    "directions and composing the result.",
+                    targetId, sourceId));
+                return;
+            }
+
+            var reverseMeasurements = new QaMeasurements { IsDeformable = measurements.IsDeformable };
+            ExtractRigidTransform(reverse, reverseMeasurements, null, null);
+            IPointMapper reverseMapper = BuildPointMapper(reverse, reverseMeasurements);
+
+            if (reverseMapper == null)
+            {
+                measurements.InverseConsistency = MeasuredValue.Unavailable(
+                    "the reverse registration was found but no mapping could be built from it");
+                return;
+            }
+
+            double residual;
+            int evaluated;
+            if (!EvaluateRoundTripResidual(_mapper, reverseMapper, _fixedGeometry, out residual, out evaluated))
+            {
+                measurements.InverseConsistency = MeasuredValue.Unavailable(
+                    "the round trip could not be evaluated at any sampled point");
+                return;
+            }
+
+            measurements.InverseConsistency = MeasuredValue.Measured(residual, string.Format(
+                CultureInfo.InvariantCulture,
+                "worst residual over {0} points across the field of view, forward then reverse", evaluated));
+
+            _log.Info("inverse consistency", string.Format(
+                CultureInfo.InvariantCulture, "{0:F3} mm over {1} points", residual, evaluated));
+        }
+
+        private static bool EvaluateRoundTripResidual(
+            IPointMapper forward, IPointMapper reverse, ImageGeometry geometry,
+            out double worstResidual, out int evaluated)
+        {
+            worstResidual = 0.0;
+            evaluated = 0;
+
+            const int steps = 5;   // 5^3 = 125 points, cheap even with per-point API calls
+
+            for (int a = 0; a < steps; a++)
+            {
+                for (int b = 0; b < steps; b++)
+                {
+                    for (int c = 0; c < steps; c++)
+                    {
+                        double i = (geometry.XSize - 1) * a / (double)(steps - 1);
+                        double j = (geometry.YSize - 1) * b / (double)(steps - 1);
+                        double k = (geometry.ZSize - 1) * c / (double)(steps - 1);
+
+                        Vec3 origin = geometry.VoxelToPatient(i, j, k);
+
+                        Vec3 forwardPoint, roundTrip;
+                        if (!forward.TryMap(origin, out forwardPoint)) continue;
+                        if (!reverse.TryMap(forwardPoint, out roundTrip)) continue;
+
+                        double residual = (roundTrip - origin).Length;
+                        if (residual > worstResidual) worstResidual = residual;
+                        evaluated++;
+                    }
+                }
+            }
+
+            return evaluated > 0;
+        }
+
+        private string ReadImageId(dynamic imageLike, string label)
+        {
+            if (imageLike == null) return null;
+
+            dynamic value;
+            string source;
+            if (Dyn.TryGetFirst("identifier of " + label, _log, out value, out source,
+                    Dyn.Alt("Image.Id", () => imageLike.Image.Id),
+                    Dyn.Alt("Id", () => imageLike.Id)))
+            {
+                return Convert.ToString(value, CultureInfo.InvariantCulture);
+            }
+
+            return null;
+        }
+
+        private dynamic FindReverseRegistration(
+            dynamic scriptContext, dynamic activeRegistration, string sourceId, string targetId)
+        {
+            dynamic registrations;
+            string collection;
+
+            if (!Dyn.TryGetFirst("workspace: registration collection", _log, out registrations, out collection,
+                    Dyn.Alt("Patient.Registrations", () => scriptContext.Patient.Registrations),
+                    Dyn.Alt("Registrations", () => scriptContext.Registrations),
+                    Dyn.Alt("Patient.MIRSRegistrations", () => scriptContext.Patient.MIRSRegistrations)))
+            {
+                _log.Info("inverse consistency",
+                    "the API exposes no collection of registrations, so the reverse one cannot be located");
+                return null;
+            }
+
+            dynamic found = null;
+
+            Dyn.TryInvoke("workspace: scan registrations (" + collection + ")", () =>
+            {
+                foreach (dynamic candidate in registrations)
+                {
+                    if (candidate == null) continue;
+                    if (ReferenceEquals((object)candidate, (object)activeRegistration)) continue;
+
+                    dynamic candidateSource, candidateTarget;
+                    if (!Dyn.TryGet("candidate SourceImage", () => candidate.SourceImage, null, out candidateSource)) continue;
+                    if (!Dyn.TryGet("candidate RegisteredImage", () => candidate.RegisteredImage, null, out candidateTarget)) continue;
+
+                    string candidateSourceId = ReadImageId(candidateSource, "candidate source");
+                    string candidateTargetId = ReadImageId(candidateTarget, "candidate target");
+
+                    bool isReverse =
+                        string.Equals(candidateSourceId, targetId, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(candidateTargetId, sourceId, StringComparison.OrdinalIgnoreCase);
+
+                    if (isReverse)
+                    {
+                        found = candidate;
+                        return;
+                    }
+                }
+            }, _log);
+
+            return found;
+        }
+
+        private static string NoMappingReason(QaMeasurements measurements)
+        {
+            return measurements.IsDeformable
+                ? "this is a deformable registration and the API exposes neither the deformation vector " +
+                  "field nor a point-by-point mapping method. Using only the linear component would " +
+                  "describe a different transform from the one under audit."
+                : "no valid transform is available with which to map points";
+        }
+
         // ---------------------------------------------------------------- utilities
 
         private static void MarkAllUnavailable(QaMeasurements measurements, string reason)
@@ -610,6 +911,9 @@ namespace ESAPI_RegistrationQA.Services
             measurements.Smoothness = MeasuredValue.Unavailable(reason);
             measurements.Dsc = MeasuredValue.Unavailable(reason);
             measurements.Hd95 = MeasuredValue.Unavailable(reason);
+            measurements.TreMean = MeasuredValue.Unavailable(reason);
+            measurements.TreMax = MeasuredValue.Unavailable(reason);
+            measurements.InverseConsistency = MeasuredValue.Unavailable(reason);
         }
     }
 }

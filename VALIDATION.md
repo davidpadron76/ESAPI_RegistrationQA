@@ -84,6 +84,29 @@ you can produce such a case, it is worth checking that the advisory appears.
 
 ---
 
+## 3b. TRE and inverse consistency
+
+These are the TG-132 Table III metrics and the most valuable ones to exercise, because they
+are new and untested.
+
+**TRE.** Place two or more markers on identifiable features — implanted fiducials, or bony
+landmarks — with the same structure identifier on both series. Run the plugin. Under a
+registration you trust, the mean TRE should sit at or below the maximum voxel dimension, which
+the report states for you in the provenance section.
+
+Combine this with test 2: apply a known 5 mm shift and the mean TRE should come out at 5 mm.
+That validates the landmark path and the axis convention at the same time.
+
+**Inverse consistency.** Create the reverse registration (B→A) alongside the forward one and
+re-run. The residual should be small; TG-132 sets the tolerance at the maximum voxel dimension.
+A rotational inconsistency vanishes at the centre of the volume and grows towards the
+periphery, which is why the plugin samples a grid across the whole field of view rather than
+the centre alone.
+
+If the reverse registration exists but the plugin reports the metric as unavailable, that
+means it could not enumerate the registrations in your Eclipse version. Please send the
+Diagnostics tab: that is exactly the kind of API difference this testing is meant to surface.
+
 ## 4. Multimodal pair
 
 **Setup.** A CT–MR registration of the same patient.
@@ -157,7 +180,9 @@ Open an issue at
 
 | Area | Status |
 |---|---|
-| DSC / HD95 | Not implemented. Reported as N/A with the reason stated. Requires contour rasterisation onto a common grid with structures matched by identifier. |
+| DSC / HD95 | Not implemented. Reported as N/A with the reason stated. Requires contour rasterisation onto a common grid with structures matched by identifier. TG-132 Table III specifies MDA rather than HD95. |
+| TRE | Measured, but only when point landmarks (DICOM type MARKER or ISOCENTER) exist on both series under the same identifier. Otherwise N/A with the counts found on each side. |
+| Inverse consistency | Measured, but only when the reverse registration exists in the workspace. Otherwise N/A saying so — it is a check you can enable, not a permanent limitation. |
 | Jacobian, DVF smoothness, max displacement for DIR | Not obtainable. They need the deformation vector field, which the scripting API does not expose. Reported as N/A rather than approximated from the linear component. |
 | Deformable intensity metrics | Computed only when the API exposes a point-to-point mapping. Whether it does appears to depend on the Eclipse version — this is one of the things the testing should establish. |
 | Threshold profiles | Inherited values, not recalibrated for the current metric definitions. See section 5. |
@@ -181,6 +206,9 @@ Open an issue at
 | 3 | Known rotation — other axes | 0.000° | | | |
 | 4 | CT–MR — NCC vs CT–CT | lower | | | |
 | 4 | CT–MR — multimodal advisory | present | | | |
+| 3b | TRE — landmarks matched | ≥ 2 | | | |
+| 3b | TRE mean under known shift | applied value | | | |
+| 3b | Inverse consistency residual | ≤ max voxel dim | | | |
 | 5 | Baseline — cases collected | ≥ 20 | | | |
 | — | Diagnostics tab | failures listed | | | |
 | — | Eclipse version | | | | |

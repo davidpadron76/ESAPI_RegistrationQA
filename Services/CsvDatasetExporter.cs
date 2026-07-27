@@ -36,7 +36,7 @@ namespace ESAPI_RegistrationQA.Services
         /// Bumped whenever columns are added, removed or redefined. Pooled files with
         /// different schema versions must not be concatenated blindly.
         /// </summary>
-        public const string SchemaVersion = "1";
+        public const string SchemaVersion = "2";
 
         private static readonly string[] Columns =
         {
@@ -57,6 +57,11 @@ namespace ESAPI_RegistrationQA.Services
             "Smoothness",
             "DSC",
             "HD95_mm",
+            "TRE_Mean_mm",
+            "TRE_Max_mm",
+            "TRE_Landmarks",
+            "InverseConsistency_mm",
+            "NativeVoxel_mm",
             "TranslationX_LR_mm",
             "TranslationY_AP_mm",
             "TranslationZ_CC_mm",
@@ -142,6 +147,13 @@ namespace ESAPI_RegistrationQA.Services
             row.Add(Metric(m, MetricKeys.Smoothness));
             row.Add(Metric(m, MetricKeys.Dsc));
             row.Add(Metric(m, MetricKeys.Hd95));
+            row.Add(Metric(m, MetricKeys.TreMean));
+            row.Add(Metric(m, MetricKeys.TreMax));
+            row.Add(m != null && m.TreLandmarkCount > 0
+                ? m.TreLandmarkCount.ToString(CultureInfo.InvariantCulture)
+                : string.Empty);
+            row.Add(Metric(m, MetricKeys.InverseConsistency));
+            row.Add(Number(m != null ? m.NativeVoxelSizeMm : null, "F2"));
 
             Vec3? translation = m != null && m.Transform != null ? m.Transform.Translation : (Vec3?)null;
             row.Add(Number(translation.HasValue ? translation.Value.X : (double?)null));

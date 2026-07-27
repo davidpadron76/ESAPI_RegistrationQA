@@ -49,6 +49,7 @@ namespace ESAPI_RegistrationQA.ViewModels
 
             IntensityMetrics = new ObservableCollection<MetricResult>();
             DeformationMetrics = new ObservableCollection<MetricResult>();
+            SpatialAccuracyMetrics = new ObservableCollection<MetricResult>();
             StructureQAMetrics = new ObservableCollection<MetricResult>();
             RigidTransformData = new ObservableCollection<RigidTransformItem>();
             Advisories = new ObservableCollection<Advisory>();
@@ -112,6 +113,7 @@ namespace ESAPI_RegistrationQA.ViewModels
 
         public ObservableCollection<MetricResult> IntensityMetrics { get; }
         public ObservableCollection<MetricResult> DeformationMetrics { get; }
+        public ObservableCollection<MetricResult> SpatialAccuracyMetrics { get; }
         public ObservableCollection<MetricResult> StructureQAMetrics { get; }
         public ObservableCollection<RigidTransformItem> RigidTransformData { get; }
         public ObservableCollection<Advisory> Advisories { get; }
@@ -213,11 +215,12 @@ namespace ESAPI_RegistrationQA.ViewModels
         {
             Replace(IntensityMetrics, MetricEvaluator.Evaluate(_measurements, ActiveProfile, MetricEvaluator.IntensityKeys));
             Replace(DeformationMetrics, MetricEvaluator.Evaluate(_measurements, ActiveProfile, MetricEvaluator.DeformationKeys));
+            Replace(SpatialAccuracyMetrics, MetricEvaluator.Evaluate(_measurements, ActiveProfile, MetricEvaluator.SpatialAccuracyKeys));
             Replace(StructureQAMetrics, MetricEvaluator.Evaluate(_measurements, ActiveProfile, MetricEvaluator.StructureKeys));
             Replace(RigidTransformData, MetricEvaluator.BuildRigidTransformRows(_measurements));
 
             AdvisorySet advisorySet = AdvisoryEngine.Build(
-                IntensityMetrics.Concat(DeformationMetrics).Concat(StructureQAMetrics),
+                IntensityMetrics.Concat(DeformationMetrics).Concat(SpatialAccuracyMetrics).Concat(StructureQAMetrics),
                 ActiveProfile,
                 _measurements);
 
@@ -263,7 +266,7 @@ namespace ESAPI_RegistrationQA.ViewModels
                 ProfileName = ActiveProfile?.ProfileName,
                 Measurements = _measurements,
                 Advisories = AdvisoryEngine.Build(
-                    IntensityMetrics.Concat(DeformationMetrics).Concat(StructureQAMetrics),
+                    IntensityMetrics.Concat(DeformationMetrics).Concat(SpatialAccuracyMetrics).Concat(StructureQAMetrics),
                     ActiveProfile,
                     _measurements),
                 IntensityMetrics = IntensityMetrics.ToList(),

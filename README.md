@@ -19,15 +19,25 @@ Table III is the list of quantitative metrics TG-132 recommends, with its tolera
 
 | TG-132 metric | Tolerance in Table III | In this tool |
 |---|---|---|
-| Target Registration Error (TRE) | Maximum voxel dimension (~2–3 mm) | Not implemented |
+| Target Registration Error (TRE) | Maximum voxel dimension (~2–3 mm) | **Measured** — mean and max over matched point landmarks |
 | Mean Distance to Agreement (MDA) | Contouring uncertainty or max voxel dimension (~2–3 mm) | Not implemented |
 | Dice Similarity Coefficient (DSC) | Within contouring uncertainty (~0.80–0.90) | Not implemented |
 | Jacobian determinant | No negative values; deviation from 1 as clinically expected | Analytic for rigid; not obtainable for DIR |
-| Consistency (inverse / transitivity) | Maximum voxel dimension (~2–3 mm) | Not implemented |
+| Consistency (inverse) | Maximum voxel dimension (~2–3 mm) | **Measured** — when the reverse registration exists |
 
-So none of the five primary TG-132 quantitative metrics is currently measured. What the tool
-does measure well — NCC, NMI and SSD — appears in TG-132 §4.C.3 as a secondary route, with two
-explicit conditions:
+TRE is the report's primary accuracy metric and the only one here expressed directly in
+millimetres of spatial error. It needs point landmarks — DICOM type `MARKER` or `ISOCENTER` —
+present on both series under the same identifier. Contour structures are deliberately
+excluded: their centre of mass shifts when the contour is edited, so it is not a landmark in
+the sense the report means.
+
+Inverse consistency needs the reverse registration to exist in the workspace. Create it and
+re-run to enable the check. Note what it does and does not show: a registration can be
+perfectly consistent and still wrong, so it evidences a stable algorithm rather than an
+accurate one.
+
+The remaining metrics the tool computes — NCC, NMI and SSD — appear in TG-132 §4.C.3 as a
+secondary route, with two explicit conditions:
 
 > "the metrics used to drive registration (i.e., SSD, CC, and MI) can also be used to assess
 > the registration **as long as the metric was not used in the registration algorithm itself**

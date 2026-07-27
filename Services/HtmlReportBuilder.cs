@@ -18,6 +18,7 @@ namespace ESAPI_RegistrationQA.Services
         public AdvisorySet Advisories { get; set; }
         public IList<MetricResult> IntensityMetrics { get; set; }
         public IList<MetricResult> DeformationMetrics { get; set; }
+        public IList<MetricResult> SpatialAccuracyMetrics { get; set; }
         public IList<MetricResult> StructureMetrics { get; set; }
         public IList<RigidTransformItem> RigidTransform { get; set; }
         public IList<DiagnosticEntry> Diagnostics { get; set; }
@@ -52,6 +53,7 @@ namespace ESAPI_RegistrationQA.Services
             AppendAdvisories(sb, data);
             AppendMetricsTable(sb, "1. Intensity similarity and topological metrics",
                 data.IntensityMetrics, data.DeformationMetrics);
+            AppendSpatialAccuracyTable(sb, data);
             AppendStructureTable(sb, data);
             AppendRigidTable(sb, data);
             AppendProvenance(sb, data);
@@ -133,9 +135,23 @@ namespace ESAPI_RegistrationQA.Services
             sb.Append("</table>");
         }
 
+        private static void AppendSpatialAccuracyTable(StringBuilder sb, ReportData data)
+        {
+            sb.Append("<h2>2. Spatial accuracy (TG-132 Table III)</h2>");
+            sb.Append("<p class='note'>These are the metrics TG-132 recommends for quantifying ");
+            sb.Append("registration accuracy. The tolerance in Table III is the maximum voxel ");
+            sb.Append("dimension (~2-3 mm) rather than a fixed value.</p>");
+            sb.Append("<table><tr><th>Metric</th><th>Value</th><th>Acceptance criterion</th><th>Status</th></tr>");
+
+            foreach (MetricResult metric in data.SpatialAccuracyMetrics ?? new List<MetricResult>())
+                AppendMetricRow(sb, metric);
+
+            sb.Append("</table>");
+        }
+
         private static void AppendStructureTable(StringBuilder sb, ReportData data)
         {
-            sb.Append("<h2>2. Structure and surface alignment</h2>");
+            sb.Append("<h2>3. Structure and surface alignment</h2>");
             sb.Append("<table><tr><th>Anatomical index</th><th>Value</th><th>Acceptance criterion</th><th>Status</th></tr>");
 
             foreach (MetricResult metric in data.StructureMetrics ?? new List<MetricResult>())
@@ -168,7 +184,7 @@ namespace ESAPI_RegistrationQA.Services
 
         private static void AppendRigidTable(StringBuilder sb, ReportData data)
         {
-            sb.Append("<h2>3. Rigid transformation parameters</h2>");
+            sb.Append("<h2>4. Rigid transformation parameters</h2>");
             sb.Append("<p class='note'>DICOM patient coordinates: X = left-right (LR), ");
             sb.Append("Y = anterior-posterior (AP), Z = cranio-caudal (CC). ");
             sb.Append("Euler angles in the intrinsic Rz·Ry·Rx convention.</p>");
@@ -192,7 +208,7 @@ namespace ESAPI_RegistrationQA.Services
             QaMeasurements m = data.Measurements;
             if (m == null) return;
 
-            sb.Append("<h2>4. Measurement provenance and traceability</h2>");
+            sb.Append("<h2>5. Measurement provenance and traceability</h2>");
             sb.Append("<table class='provenance'>");
 
             AppendProvenanceRow(sb, "Transform source", m.TransformSource);
@@ -216,6 +232,18 @@ namespace ESAPI_RegistrationQA.Services
                     m.EffectiveSamplingMm.Value.ToString("F2", CultureInfo.InvariantCulture) + " mm");
             }
 
+            if (m.NativeVoxelSizeMm.HasValue)
+            {
+                AppendProvenanceRow(sb, "Maximum native voxel dimension (TG-132 tolerance basis)",
+                    m.NativeVoxelSizeMm.Value.ToString("F2", CultureInfo.InvariantCulture) + " mm");
+            }
+
+            if (m.TreLandmarkCount > 0)
+            {
+                AppendProvenanceRow(sb, "Landmarks matched for TRE",
+                    m.TreLandmarkCount.ToString(CultureInfo.InvariantCulture));
+            }
+
             sb.Append("</table>");
         }
 
@@ -235,7 +263,7 @@ namespace ESAPI_RegistrationQA.Services
 
             if (relevant.Count == 0) return;
 
-            sb.Append("<h2>5. API access diagnostics</h2>");
+            sb.Append("<h2>6. API access diagnostics</h2>");
             sb.Append("<p class='note'>Issues recorded while reading the data. ");
             sb.Append("They are included so that every unevaluated metric has a traceable cause.</p>");
             sb.Append("<table class='diagnostics'><tr><th>Level</th><th>Operation</th><th>Detail</th></tr>");

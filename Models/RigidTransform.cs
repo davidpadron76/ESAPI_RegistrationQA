@@ -174,6 +174,31 @@ namespace ESAPI_RegistrationQA.Models
         }
 
         /// <summary>
+        /// Composition: the returned transform applies <paramref name="first"/> and then this
+        /// one, so result(p) = this.Apply(first.Apply(p)).
+        ///
+        /// Used for the inverse-consistency check: composing A→B with B→A should yield the
+        /// identity, and whatever it yields instead is the residual TG-132 §4.C.4 asks about.
+        /// </summary>
+        public RigidTransform ComposeAfter(RigidTransform first)
+        {
+            if (first == null) throw new ArgumentNullException("first");
+
+            var m = new double[4, 4];
+            for (int r = 0; r < 4; r++)
+            {
+                for (int c = 0; c < 4; c++)
+                {
+                    double sum = 0.0;
+                    for (int k = 0; k < 4; k++)
+                        sum += _m[r, k] * first[k, c];
+                    m[r, c] = sum;
+                }
+            }
+            return new RigidTransform(m);
+        }
+
+        /// <summary>
         /// Largest displacement induced within a volume. For an affine map the displacement
         /// magnitude is a convex function of the point, so its maximum over a box is always
         /// attained at a vertex: evaluating the eight corners gives the exact value, not an

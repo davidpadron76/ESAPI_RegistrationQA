@@ -103,6 +103,9 @@ namespace ESAPI_RegistrationQA.Services
             // --- What the similarity metrics do and do not establish ---------------------
             AddSimilarityScopeAdvisory(set, metrics);
 
+            // --- TG-132 ties its spatial tolerances to the voxel size --------------------
+            AddVoxelToleranceAdvisory(set, metrics, measurements);
+
             // --- Transform provenance ----------------------------------------------------
             if (measurements != null && measurements.Transform == null)
             {
@@ -180,6 +183,22 @@ namespace ESAPI_RegistrationQA.Services
                     return "Anatomical overlap is out of tolerance. Slice-by-slice verification and manual " +
                            "adjustment of the propagated contours are recommended.";
 
+                case MetricKeys.TreMean:
+                    return "Landmark residual exceeds tolerance. TG-132 Table III sets this at the maximum " +
+                           "voxel dimension. This is a direct measure of spatial error, so it carries more " +
+                           "weight than any of the intensity metrics.";
+
+                case MetricKeys.TreMax:
+                    return "At least one landmark is displaced beyond tolerance even if the mean is " +
+                           "acceptable. Identify which one: a single large residual usually points to a " +
+                           "local misalignment rather than a global registration failure.";
+
+                case MetricKeys.InverseConsistency:
+                    return "Registering in both directions does not return points to their origin. Per " +
+                           "TG-132 §4.C.4 this evidences an unstable algorithm. Note that it does not by " +
+                           "itself prove inaccuracy — a registration can be consistently wrong — but a " +
+                           "large residual invalidates any accuracy claim.";
+
                 default:
                     return "Review the value against the profile criterion.";
             }
@@ -248,6 +267,42 @@ namespace ESAPI_RegistrationQA.Services
                 "metrics are difficult to convert into a measure of spatial accuracy: a compliant value " +
                 "does not establish millimetric accuracy. For that, Table III lists TRE, MDA, DSC, the " +
                 "Jacobian determinant and consistency."));
+        }
+
+        /// <summary>
+        /// TG-132 does not express the tolerance for TRE and consistency as a fixed number:
+        /// Table III says "maximum voxel dimension (~2–3 mm)". The profiles in this tool use
+        /// fixed values, so where the two disagree the reader needs to know the actual voxel
+        /// size in order to apply the report's rule rather than the profile's approximation.
+        /// </summary>
+        private static void AddVoxelToleranceAdvisory(
+            AdvisorySet set, List<MetricResult> metrics, QaMeasurements measurements)
+        {
+            if (measurements == null || !measurements.NativeVoxelSizeMm.HasValue) return;
+
+            bool anySpatialMeasured = metrics.Any(m =>
+                m.IsAvailable &&
+                (m.MetricKey == MetricKeys.TreMean ||
+                 m.MetricKey == MetricKeys.TreMax ||
+                 m.MetricKey == MetricKeys.InverseConsistency));
+
+            if (!anySpatialMeasured) return;
+
+            double voxel = measurements.NativeVoxelSizeMm.Value;
+
+            string detail = string.Format(CultureInfo.InvariantCulture,
+                "TG-132 Table III sets the tolerance for TRE and consistency at the maximum voxel " +
+                "dimension, which for this image pair is {0:F2} mm. The profile thresholds shown in the " +
+                "tables are fixed values; where they differ from {0:F2} mm, the report's rule is the one " +
+                "to apply.", voxel);
+
+            if (measurements.TreLandmarkCount > 0)
+            {
+                detail += string.Format(CultureInfo.InvariantCulture,
+                    " TRE was computed over {0} matched landmark(s).", measurements.TreLandmarkCount);
+            }
+
+            set.Advisories.Add(new Advisory(AdvisorySeverity.Info, "TOLERANCE BASIS", detail));
         }
 
         private static void AddSamplingAdvisory(AdvisorySet set, QaMeasurements measurements)

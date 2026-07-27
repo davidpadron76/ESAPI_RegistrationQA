@@ -72,6 +72,22 @@ namespace ESAPI_RegistrationQA.Models
         public MeasuredValue Dsc { get; set; }
         public MeasuredValue Hd95 { get; set; }
 
+        // TG-132 Table III primary metrics
+        public MeasuredValue TreMean { get; set; }
+        public MeasuredValue TreMax { get; set; }
+        public MeasuredValue InverseConsistency { get; set; }
+
+        /// <summary>Number of landmarks matched between the two image sets.</summary>
+        public int TreLandmarkCount { get; set; }
+
+        /// <summary>
+        /// Largest native voxel dimension across both images, in mm. TG-132 expresses the
+        /// tolerance for TRE, MDA and consistency as "maximum voxel dimension", so this is
+        /// the figure the reader needs in order to judge those metrics against the report.
+        /// It is the native size, not the subsampled one used for intensity metrics.
+        /// </summary>
+        public double? NativeVoxelSizeMm { get; set; }
+
         // Rigid transform
         public RigidTransform Transform { get; set; }
         public string TransformSource { get; set; }
@@ -100,6 +116,9 @@ namespace ESAPI_RegistrationQA.Models
             Smoothness = MeasuredValue.Unavailable(notMeasured);
             Dsc = MeasuredValue.Unavailable(notMeasured);
             Hd95 = MeasuredValue.Unavailable(notMeasured);
+            TreMean = MeasuredValue.Unavailable(notMeasured);
+            TreMax = MeasuredValue.Unavailable(notMeasured);
+            InverseConsistency = MeasuredValue.Unavailable(notMeasured);
         }
 
         public MeasuredValue ForKey(string metricKey)
@@ -114,6 +133,9 @@ namespace ESAPI_RegistrationQA.Models
                 case MetricKeys.Smoothness: return Smoothness;
                 case MetricKeys.Dsc: return Dsc;
                 case MetricKeys.Hd95: return Hd95;
+                case MetricKeys.TreMean: return TreMean;
+                case MetricKeys.TreMax: return TreMax;
+                case MetricKeys.InverseConsistency: return InverseConsistency;
                 default: return MeasuredValue.Unavailable("unknown metric: " + metricKey);
             }
         }

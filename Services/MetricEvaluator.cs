@@ -25,6 +25,16 @@ namespace ESAPI_RegistrationQA.Services
             MetricKeys.JacobianNegative, MetricKeys.MaxDisplacement, MetricKeys.Smoothness
         };
 
+        /// <summary>
+        /// The quantitative metrics of TG-132 Table III, grouped together because that is how
+        /// the report presents them and because they are the ones expressed in millimetres of
+        /// spatial error. DSC belongs to the same table.
+        /// </summary>
+        public static readonly string[] SpatialAccuracyKeys =
+        {
+            MetricKeys.TreMean, MetricKeys.TreMax, MetricKeys.InverseConsistency
+        };
+
         public static readonly string[] StructureKeys =
         {
             MetricKeys.Dsc, MetricKeys.Hd95

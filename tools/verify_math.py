@@ -376,6 +376,89 @@ check("64 bins for a large sample", choose_bins(2000000) == 64, str(choose_bins(
 check("54 bins at the deformable budget (60k)", choose_bins(60000) == 54, str(choose_bins(60000)))
 check("floor of 16 bins for a small sample", choose_bins(1000) == 16, str(choose_bins(1000)))
 
+print("\n=== Transform composition and inverse consistency ===")
+
+def mat4(R, t):
+    return [[R[0][0],R[0][1],R[0][2],t[0]],
+            [R[1][0],R[1][1],R[1][2],t[1]],
+            [R[2][0],R[2][1],R[2][2],t[2]],
+            [0,0,0,1]]
+
+def mm4(a, b):
+    """Replica of RigidTransform.ComposeAfter: result = a * b, i.e. apply b then a."""
+    return [[sum(a[i][k]*b[k][j] for k in range(4)) for j in range(4)] for i in range(4)]
+
+def apply4(m, p):
+    return tuple(m[i][0]*p[0] + m[i][1]*p[1] + m[i][2]*p[2] + m[i][3] for i in range(3))
+
+def inv_rigid(m):
+    """R^-1 = R^T, t^-1 = -R^T t  (RigidTransform.TryInvert)."""
+    Rt = [[m[c][r] for c in range(3)] for r in range(3)]
+    t = [m[0][3], m[1][3], m[2][3]]
+    ti = [-sum(Rt[r][c]*t[c] for c in range(3)) for r in range(3)]
+    return mat4(Rt, ti)
+
+Rf = matmul(rot_z(0.21), matmul(rot_y(-0.08), rot_x(0.13)))
+tf = (7.5, -3.25, 11.0)
+F = mat4(Rf, tf)
+Rv = inv_rigid(F)
+
+# A perfectly inverse-consistent pair composes to the identity.
+C = mm4(Rv, F)
+ident_err = max(abs(C[i][j] - (1.0 if i == j else 0.0)) for i in range(4) for j in range(4))
+check("forward composed with its exact inverse gives the identity", ident_err < 1e-12,
+      f"max deviation {ident_err:.2e}")
+
+# Residual over a grid: zero for the exact inverse.
+corners = [(x,y,z) for x in (-250,250) for y in (-250,250) for z in (-150,150)]
+residual = max(math.dist(apply4(C, p), p) for p in corners)
+check("round-trip residual is zero for an exactly inverse pair", residual < 1e-9,
+      f"{residual:.2e} mm")
+
+# Introduce a known 1.4 mm error in the reverse transform: the residual must recover it.
+known = 1.4
+Rv_bad = [row[:] for row in Rv]
+Rv_bad[0][3] += known
+C_bad = mm4(Rv_bad, F)
+residual_bad = max(math.dist(apply4(C_bad, p), p) for p in corners)
+check("a known reverse translation error appears as that residual",
+      abs(residual_bad - known) < 1e-9, f"{residual_bad:.6f} vs {known}")
+
+# A rotational inconsistency grows with distance from the centre, so the grid must include
+# the periphery: sampling only the centre would report zero.
+ang = math.radians(0.5)
+Rv_rot = mm4(mat4(rot_z(ang), (0,0,0)), Rv)
+C_rot = mm4(Rv_rot, F)
+residual_centre = math.dist(apply4(C_rot, (0,0,0)), (0,0,0))
+residual_edge = max(math.dist(apply4(C_rot, p), p) for p in corners)
+check("rotational inconsistency is invisible at the centre but not at the periphery",
+      residual_centre < residual_edge - 1.0,
+      f"centre {residual_centre:.4f} mm vs periphery {residual_edge:.4f} mm")
+
+print("\n=== Target Registration Error ===")
+
+def tre(mapper_matrix, source_points, target_points):
+    errs = [math.dist(apply4(mapper_matrix, s), t) for s, t in zip(source_points, target_points)]
+    return sum(errs)/len(errs), max(errs)
+
+landmarks = [(-80,-40,-100), (60,20,-30), (0,90,45), (110,-70,80)]
+# Perfect registration: every landmark maps exactly onto its counterpart.
+mapped = [apply4(F, p) for p in landmarks]
+mean_e, max_e = tre(F, landmarks, mapped)
+check("TRE is zero for a registration that maps landmarks exactly",
+      mean_e < 1e-9 and max_e < 1e-9, f"mean {mean_e:.2e}, max {max_e:.2e}")
+
+# Displace one landmark by a known 3 mm: the max must catch it, the mean must dilute it.
+perturbed = list(mapped)
+perturbed[2] = (mapped[2][0] + 3.0, mapped[2][1], mapped[2][2])
+mean_e, max_e = tre(F, landmarks, perturbed)
+check("TRE max recovers a single 3 mm landmark displacement",
+      abs(max_e - 3.0) < 1e-9, f"{max_e:.6f}")
+check("TRE mean dilutes it across the landmarks",
+      abs(mean_e - 3.0/len(landmarks)) < 1e-9, f"{mean_e:.6f} vs {3.0/len(landmarks):.6f}")
+check("reporting both mean and max is what exposes the outlier", max_e > 4*mean_e - 1e-9,
+      f"mean {mean_e:.4f}, max {max_e:.4f}")
+
 print()
 if FAILS:
     print(f"{len(FAILS)} check(s) FAILED:")

@@ -18,6 +18,11 @@ namespace ESAPI_RegistrationQA.Models
         public const string Smoothness = "Smoothness";
         public const string Dsc = "DSC";
         public const string Hd95 = "HD95";
+
+        // TG-132 Table III primary metrics.
+        public const string TreMean = "TRE_Mean";
+        public const string TreMax = "TRE_Max";
+        public const string InverseConsistency = "Inverse_Consistency";
     }
 
     /// <summary>
@@ -99,7 +104,32 @@ namespace ESAPI_RegistrationQA.Models
             Register(new MetricDefinition(
                 MetricKeys.Hd95, "HD95 (Hausdorff)", "mm", false,
                 "95th-percentile Hausdorff distance between the reference and propagated surfaces. " +
-                "Excludes the 5% most deviant points. Requires the same matched pair as the DSC."));
+                "Excludes the 5% most deviant points. Requires the same matched pair as the DSC. " +
+                "Note that TG-132 Table III specifies Mean Distance to Agreement (MDA) rather than " +
+                "HD95; HD95 is common in the segmentation literature but is not the report's metric."));
+
+            Register(new MetricDefinition(
+                MetricKeys.TreMean, "TRE (mean)", "mm", false,
+                "Target Registration Error, averaged over matched landmarks. Each landmark is taken " +
+                "from the source image, mapped through the registration, and compared with the same " +
+                "landmark on the registered image. This is the primary accuracy metric of TG-132 " +
+                "Table III and the only one here expressed directly in millimetres of spatial error. " +
+                "Tolerance in Table III is the maximum voxel dimension (~2-3 mm)."));
+
+            Register(new MetricDefinition(
+                MetricKeys.TreMax, "TRE (max)", "mm", false,
+                "Largest single-landmark Target Registration Error. The mean can conceal one badly " +
+                "mismatched landmark, which is usually the clinically relevant case, so both are " +
+                "reported."));
+
+            Register(new MetricDefinition(
+                MetricKeys.InverseConsistency, "Inverse consistency", "mm", false,
+                "Residual displacement after mapping a point forward through the registration and " +
+                "back through the reverse registration. TG-132 §4.C.4: a registration should be " +
+                "consistent in magnitude and opposite in direction, so the composition should return " +
+                "each point to itself. It does not verify accuracy directly — a registration can be " +
+                "consistently wrong — but it evidences a stable, well-behaved algorithm. Tolerance in " +
+                "Table III is the maximum voxel dimension (~2-3 mm)."));
         }
 
         private static void Register(MetricDefinition definition)

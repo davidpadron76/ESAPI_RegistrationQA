@@ -27,6 +27,14 @@ namespace ESAPI_RegistrationQA.Services
             public ImageModality Modality { get; set; }
             public string Problem { get; set; }
             public bool Success { get { return Volume != null; } }
+
+            /// <summary>
+            /// Largest native voxel dimension in mm, before subsampling. TG-132 expresses the
+            /// tolerance for TRE and consistency as "maximum voxel dimension", so this is the
+            /// number those metrics have to be judged against — not the coarser sampling
+            /// resolution used for the intensity metrics.
+            /// </summary>
+            public double? NativeVoxelSizeMm { get; set; }
         }
 
         public static LoadResult Load(dynamic imageLike, string label, DiagnosticLog log)
@@ -71,6 +79,7 @@ namespace ESAPI_RegistrationQA.Services
             }
 
             result.Modality = ReadModality(imageLike, frame, label, log);
+            result.NativeVoxelSizeMm = geometry.CoarsestResolution;
 
             IntensityScale scale = ProbeIntensityScale(frame, label, log);
 

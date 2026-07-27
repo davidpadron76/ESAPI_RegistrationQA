@@ -248,6 +248,39 @@
                 </Grid>
             </TabItem>
 
+            <!-- TG-132 Table III primary metrics -->
+            <TabItem Header="Spatial Accuracy">
+                <GroupBox Header="TG-132 Table III — metrics expressed in millimetres of spatial error" Margin="0,10,0,0">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Margin="10,6,10,0" TextWrapping="Wrap"
+                                   FontWeight="Normal" FontSize="10.5" Foreground="#607D8B"
+                                   Text="TG-132 sets the tolerance for these at the maximum voxel dimension (~2-3 mm), not at a fixed value. TRE needs point landmarks (DICOM type MARKER or ISOCENTER) present on both series under the same identifier. Inverse consistency needs the reverse registration to exist in the workspace."/>
+                        <DataGrid ItemsSource="{Binding SpatialAccuracyMetrics}" Style="{StaticResource MetricGridStyle}"
+                                  RowHeight="NaN">
+                            <DataGrid.Columns>
+                                <DataGridTemplateColumn Header="Metric" Width="2*"
+                                                        CellTemplate="{StaticResource MetricNameTemplate}"/>
+                                <DataGridTemplateColumn Header="Value" Width="100"
+                                                        CellTemplate="{StaticResource MetricValueTemplate}"/>
+                                <DataGridTextColumn Header="Criterion" Binding="{Binding ThresholdCriteria}" Width="160"/>
+                                <DataGridTemplateColumn Header="Status" Width="80"
+                                                        CellTemplate="{StaticResource StatusBadgeTemplate}"/>
+                                <DataGridTextColumn Header="Reason" Binding="{Binding UnavailableReason}" Width="3*">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="TextWrapping" Value="Wrap"/>
+                                            <Setter Property="Foreground" Value="#777777"/>
+                                            <Setter Property="FontSize" Value="10.5"/>
+                                            <Setter Property="Margin" Value="0,4"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </GroupBox>
+            </TabItem>
+
             <!-- Structures -->
             <TabItem Header="Structures &amp; Surface">
                 <GroupBox Header="Anatomical alignment (DSC / HD95)" Margin="0,10,0,0">

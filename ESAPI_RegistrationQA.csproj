@@ -125,6 +125,7 @@
     <Compile Include="Services\Dyn.cs" />
     <Compile Include="Services\EsapiImageReader.cs" />
     <Compile Include="Services\HtmlReportBuilder.cs" />
+    <Compile Include="Services\LandmarkExtractor.cs" />
     <Compile Include="Services\MetricEvaluator.cs" />
     <Compile Include="Services\PointMapper.cs" />
     <Compile Include="Services\RegistrationAnalyzer.cs" />
