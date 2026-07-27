@@ -63,6 +63,7 @@ namespace ESAPI_RegistrationQA.ViewModels
             RegContext = new RegistrationContext();
 
             ExportReportCommand = new RelayCommand(ExecuteExportReport, _ => _measurements != null);
+            ExportCsvCommand = new RelayCommand(ExecuteExportCsv, _ => _measurements != null);
 
             RunMeasurement();
         }
@@ -117,6 +118,7 @@ namespace ESAPI_RegistrationQA.ViewModels
         public ObservableCollection<DiagnosticEntry> Diagnostics { get; }
 
         public RelayCommand ExportReportCommand { get; }
+        public RelayCommand ExportCsvCommand { get; }
 
         public string DiagnosticsSummary
         {
@@ -200,6 +202,7 @@ namespace ESAPI_RegistrationQA.ViewModels
 
             ReevaluateThresholds();
             ExportReportCommand.RaiseCanExecuteChanged();
+            ExportCsvCommand.RaiseCanExecuteChanged();
         }
 
         /// <summary>
@@ -251,6 +254,26 @@ namespace ESAPI_RegistrationQA.ViewModels
 
         // ------------------------------------------------------------------ export
 
+        /// <summary>Snapshot of the current state, shared by both export paths.</summary>
+        private ReportData BuildReportData()
+        {
+            return new ReportData
+            {
+                PatientId = PatientId,
+                ProfileName = ActiveProfile?.ProfileName,
+                Measurements = _measurements,
+                Advisories = AdvisoryEngine.Build(
+                    IntensityMetrics.Concat(DeformationMetrics).Concat(StructureQAMetrics),
+                    ActiveProfile,
+                    _measurements),
+                IntensityMetrics = IntensityMetrics.ToList(),
+                DeformationMetrics = DeformationMetrics.ToList(),
+                StructureMetrics = StructureQAMetrics.ToList(),
+                RigidTransform = RigidTransformData.ToList(),
+                Diagnostics = Diagnostics.ToList()
+            };
+        }
+
         private void ExecuteExportReport(object parameter)
         {
             var dialog = new SaveFileDialog
@@ -266,23 +289,7 @@ namespace ESAPI_RegistrationQA.ViewModels
 
             try
             {
-                var data = new ReportData
-                {
-                    PatientId = PatientId,
-                    ProfileName = ActiveProfile?.ProfileName,
-                    Measurements = _measurements,
-                    Advisories = AdvisoryEngine.Build(
-                        IntensityMetrics.Concat(DeformationMetrics).Concat(StructureQAMetrics),
-                        ActiveProfile,
-                        _measurements),
-                    IntensityMetrics = IntensityMetrics.ToList(),
-                    DeformationMetrics = DeformationMetrics.ToList(),
-                    StructureMetrics = StructureQAMetrics.ToList(),
-                    RigidTransform = RigidTransformData.ToList(),
-                    Diagnostics = Diagnostics.ToList()
-                };
-
-                HtmlReportBuilder.Save(data, dialog.FileName);
+                HtmlReportBuilder.Save(BuildReportData(), dialog.FileName);
 
                 MessageBox.Show(
                     "Report exported successfully.",
@@ -292,6 +299,54 @@ namespace ESAPI_RegistrationQA.ViewModels
             {
                 MessageBox.Show(
                     $"The report could not be generated:{Environment.NewLine}{DiagnosticLog.Describe(ex)}",
+                    "Export error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// Appends the current case to a cumulative CSV dataset.
+        ///
+        /// The dialog offers a fixed default file name rather than a per-patient one,
+        /// because the intended use is to point every audit at the same file and let it grow
+        /// into a local baseline. Selecting an existing file appends to it.
+        /// </summary>
+        private void ExecuteExportCsv(object parameter)
+        {
+            var dialog = new SaveFileDialog
+            {
+                Filter = "CSV dataset (*.csv)|*.csv",
+                DefaultExt = "csv",
+                Title = "Append this case to a registration QA dataset",
+                FileName = "RegistrationQA_dataset.csv",
+                OverwritePrompt = false
+            };
+
+            if (dialog.ShowDialog() != true) return;
+
+            try
+            {
+                CsvDatasetExporter.AppendResult result =
+                    CsvDatasetExporter.Append(BuildReportData(), dialog.FileName);
+
+                string message = result.FileCreated
+                    ? "Dataset created and this case added."
+                    : "Case appended to the existing dataset.";
+
+                if (result.TotalRows >= 0)
+                    message += $"{Environment.NewLine}{result.TotalRows} case(s) in the file.";
+
+                message += Environment.NewLine + Environment.NewLine +
+                           "No patient identifier is written to the file. Fill the PhysicistVerdict " +
+                           "column with your own judgement of the registration: that column is what " +
+                           "makes it possible to derive tolerance limits from the data.";
+
+                MessageBox.Show(message, "Dataset updated",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"The dataset could not be written:{Environment.NewLine}{DiagnosticLog.Describe(ex)}",
                     "Export error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }

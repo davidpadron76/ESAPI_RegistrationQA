@@ -44,6 +44,24 @@ would describe a different transform from the one under audit.
   specific operation and exception, in a dedicated tab and in the report.
 * **A4 HTML report:** with HTML escaping, invariant-culture number formatting, a data
   provenance section, and the assembly version that generated it.
+* **Cumulative CSV dataset:** one row per audited registration, appended to a file of your
+  choosing, carrying the measurements plus their provenance (voxel pairs, overlap, effective
+  sampling). No patient identifier is written. Intended for building a local baseline
+  distribution and, pooled across centres, for deriving tolerance limits from practice
+  instead of from inherited values.
+
+## Validation status
+
+The numbers are measurements; the semaphore colours are provisional.
+
+What has been verified: the pure mathematics, through 38 analytic checks in
+`tools/verify_math.py`. What has not: anything touching the Varian API beyond a single Eclipse
+installation, and the tolerance limits, which were inherited before the metrics were
+reimplemented and have not been recalibrated against the current definitions.
+
+If you are evaluating the plugin, [VALIDATION.md](VALIDATION.md) has a four-test protocol that
+closes the open questions in an afternoon, plus a method for building a local baseline that is
+useful today despite the uncalibrated thresholds.
 
 ## Requirements
 
