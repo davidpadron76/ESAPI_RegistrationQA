@@ -3,9 +3,10 @@
 ## Why this document exists
 
 The tool has never been checked against a known answer. What has been verified is the pure
-mathematics — 38 analytic checks in `tools/verify_math.py`, covering Euler extraction, matrix
-convention detection, voxel↔patient round-trips and the similarity metrics against their
-theoretical values — plus the fact that it builds and runs.
+mathematics — 46 analytic checks in `tools/verify_math.py`, covering Euler extraction, matrix
+convention detection, voxel↔patient round-trips, the similarity metrics against their
+theoretical values, transform composition, and TRE against known landmark displacements —
+plus the fact that it builds and runs.
 
 Everything that touches the Varian API has been exercised on exactly one Eclipse
 installation. And the tolerance limits in the four anatomical profiles were inherited from
@@ -16,8 +17,9 @@ So: **the numbers are measurements, the colours are provisional.** Read the valu
 semaphore as a placeholder until the thresholds are derived from real data.
 
 That is what this protocol is for. Tests 1 to 4 take an afternoon and close the open
-questions that cannot be answered without an Eclipse in front of you. Section 5 is the part
-that turns a group of testers into a dataset.
+questions that cannot be answered without an Eclipse in front of you. Test 3b covers the two
+TG-132 Table III metrics, which are the newest code and have never run against real data.
+Section 5 is the part that turns a group of testers into a dataset.
 
 ---
 

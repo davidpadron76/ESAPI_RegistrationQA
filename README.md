@@ -73,9 +73,11 @@ both in the interface and in the report.
 | **Max displacement** | ✅ Measured (rigid) | Exact maximum over the eight FOV corners. |
 | **Jacobian < 0** | ✅ Exact by definition (rigid) | 0% — a rigid transform has \|J\| = 1 everywhere. |
 | **Smoothness** | ✅ Exact by definition (rigid) | 1.0 — the field gradient is constant. |
+| **TRE (mean and max)** | ✅ Measured | Matched point landmarks pushed through the registration and compared with their counterparts. TG-132's primary accuracy metric. Needs MARKER or ISOCENTER structures with the same identifier on both series. |
+| **Inverse consistency** | ✅ Measured | Forward then reverse mapping over a grid across the field of view; the residual is what remains. Needs the reverse registration to exist in the workspace. |
 | **Jacobian, displacement and smoothness** | ❌ **N/A for deformable** | Require traversing the deformation vector field (DVF), which the Varian scripting API does not expose. |
 | **DSC** | ❌ **N/A** | Requires rasterising a structure pair matched by identifier onto a common grid. Not implemented. |
-| **HD95** | ❌ **N/A** | Same. |
+| **HD95** | ❌ **N/A** | Same. TG-132 Table III specifies MDA rather than HD95. |
 
 For **deformable** registrations, if the API exposes a point-by-point mapping method
 (`TransformPoint` or equivalent), the intensity metrics are computed by traversing the
@@ -108,12 +110,17 @@ would describe a different transform from the one under audit.
 
 The numbers are measurements; the semaphore colours are provisional.
 
-What has been verified: the pure mathematics, through 38 analytic checks in
-`tools/verify_math.py`. What has not: anything touching the Varian API beyond a single Eclipse
-installation, and the tolerance limits, which were inherited before the metrics were
-reimplemented and have not been recalibrated against the current definitions.
+What has been verified: the pure mathematics, through 46 analytic checks in
+`tools/verify_math.py` — Euler extraction, matrix convention detection, voxel↔patient
+round-trips, the similarity metrics against their theoretical values, transform composition,
+and TRE against known landmark displacements.
 
-If you are evaluating the plugin, [VALIDATION.md](VALIDATION.md) has a four-test protocol that
+What has not: anything touching the Varian API beyond a single Eclipse installation. TRE and
+inverse consistency in particular have never run against real data. And the tolerance limits
+were inherited before the metrics were reimplemented, so they have not been recalibrated
+against the current definitions — except the DSC range, which comes from Table III.
+
+If you are evaluating the plugin, [VALIDATION.md](VALIDATION.md) has a test protocol that
 closes the open questions in an afternoon, plus a method for building a local baseline that is
 useful today despite the uncalibrated thresholds.
 
