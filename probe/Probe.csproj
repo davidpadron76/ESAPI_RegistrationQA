@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+
+  <!--
+    A separate, disposable project. It shares nothing with the audit plugin: no models, no
+    services, no XAML. One file, one purpose — report what the Varian API actually returns —
+    and it can be deleted the day that question is answered.
+
+    Same two overridable paths as the main project, so it builds and lands where Eclipse looks
+    without editing anything.
+  -->
+  <PropertyGroup>
+    <VarianScriptingPath Condition=" '$(VarianScriptingPath)' == '' AND '$(VARIANSCRIPTINGPATH)' != '' ">$(VARIANSCRIPTINGPATH)</VarianScriptingPath>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(VarianScriptingPath)' == '' ">
+    <_VarianProbe1>D:\Program Files (x86)\Varian\ProductLine\Workspaces\VMS.IRS.Workspace</_VarianProbe1>
+    <_VarianProbe2>C:\Program Files (x86)\Varian\ProductLine\Workspaces\VMS.IRS.Workspace</_VarianProbe2>
+    <_VarianProbe3>D:\Program Files\Varian\ProductLine\Workspaces\VMS.IRS.Workspace</_VarianProbe3>
+    <_VarianProbe4>C:\Program Files\Varian\ProductLine\Workspaces\VMS.IRS.Workspace</_VarianProbe4>
+
+    <VarianScriptingPath Condition=" Exists('$(_VarianProbe1)\VMS.IRS.Scripting.dll') ">$(_VarianProbe1)</VarianScriptingPath>
+    <VarianScriptingPath Condition=" '$(VarianScriptingPath)' == '' AND Exists('$(_VarianProbe2)\VMS.IRS.Scripting.dll') ">$(_VarianProbe2)</VarianScriptingPath>
+    <VarianScriptingPath Condition=" '$(VarianScriptingPath)' == '' AND Exists('$(_VarianProbe3)\VMS.IRS.Scripting.dll') ">$(_VarianProbe3)</VarianScriptingPath>
+    <VarianScriptingPath Condition=" '$(VarianScriptingPath)' == '' AND Exists('$(_VarianProbe4)\VMS.IRS.Scripting.dll') ">$(_VarianProbe4)</VarianScriptingPath>
+    <VarianScriptingPath Condition=" '$(VarianScriptingPath)' == '' ">$(_VarianProbe1)</VarianScriptingPath>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <EclipsePluginsPath Condition=" '$(EclipsePluginsPath)' == '' AND '$(ECLIPSEPLUGINSPATH)' != '' ">$(ECLIPSEPLUGINSPATH)</EclipsePluginsPath>
+    <EclipsePluginsPath Condition=" '$(EclipsePluginsPath)' == '' ">$(USERPROFILE)\Documents\Contouring Scripting API\Projects\plugins</EclipsePluginsPath>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Release</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{6C1E5A42-9B77-4E3D-8F21-2A5D4C7B9E10}</ProjectGuid>
+    <OutputType>library</OutputType>
+    <RootNamespace>VMS.IRS.Scripting</RootNamespace>
+    <AssemblyName>ESAPI_Probe</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <TargetFrameworkProfile />
+    <LangVersion>7.3</LangVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
+    <PlatformTarget>x64</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>$(EclipsePluginsPath)\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|AnyCPU'">
+    <PlatformTarget>x64</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>$(EclipsePluginsPath)\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Xaml">
+      <RequiredTargetFramework>4.0</RequiredTargetFramework>
+    </Reference>
+    <Reference Include="WindowsBase" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="VMS.CA.Scripting">
+      <HintPath>$(VarianScriptingPath)\VMS.CA.Scripting.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="VMS.IRS.Scripting">
+      <HintPath>$(VarianScriptingPath)\VMS.IRS.Scripting.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="Probe.cs" />
+  </ItemGroup>
+
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+
+  <Target Name="ReportProbeDestination" AfterTargets="Build">
+    <Message Importance="high" Text="ESAPI_Probe.dll written to: $(EclipsePluginsPath)" />
+  </Target>
+
+  <Target Name="CheckVarianAssemblies" BeforeTargets="ResolveAssemblyReferences;CoreCompile">
+    <Error Condition="!Exists('$(VarianScriptingPath)\VMS.IRS.Scripting.dll')"
+           Text="VMS.IRS.Scripting.dll was not found in '$(VarianScriptingPath)'. Set VarianScriptingPath to the Varian workspace directory." />
+  </Target>
+</Project>
