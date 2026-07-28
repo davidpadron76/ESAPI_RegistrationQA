@@ -78,7 +78,7 @@ There are two ways a metric can have no number, and they are treated differently
 | **NCC** | ✅ Measured | Pearson correlation over voxel pairs matched by applying the registration transform. Signed, range [-1, 1]. |
 | **NMI** | ✅ Measured | Studholme NMI, `(H(A)+H(B))/H(A,B)`, over the actual joint histogram. Bin count adapts to sample size. |
 | **SSD** | ✅ Measured | Mean squared difference normalised by the square of the robust range (P1–P99) of the reference image. |
-| **Translations and Euler angles** | ✅ Measured | From the registration matrix, with automatic convention detection, orthonormality verification and explicit gimbal-lock handling. |
+| **Translations and Euler angles** | ✅ Measured | From the registration matrix, with automatic convention detection, orthonormality verification and explicit gimbal-lock handling. If the matrix cannot be read there is no substitute: everything derived from it is reported as unavailable. |
 | **TRE (mean and max)** | ✅ Measured | Matched point landmarks pushed through the registration. Needs MARKER or ISOCENTER structures with the same identifier on both series. |
 | **Inverse consistency** | ✅ Measured | Forward then reverse mapping over a grid across the field of view. Needs the reverse registration to exist in the workspace. |
 | **Max displacement** | ✅ Measured (rigid) | Exact maximum over the eight FOV corners. |
@@ -118,7 +118,7 @@ transform from the one under audit.
 
 The numbers are measurements; the semaphore colours are provisional.
 
-What has been verified: the pure mathematics, through 67 analytic checks in
+What has been verified: the pure mathematics, through 64 analytic checks in
 `tools/verify_math.py` — Euler extraction, matrix convention detection, voxel↔patient
 round-trips, the similarity metrics against their theoretical values, transform composition,
 TRE against known landmark displacements, the distance transform against brute force, and DSC
@@ -200,7 +200,13 @@ while metrics remain unevaluated:
 
 ## Known limitations
 
-* DSC and HD95 are not implemented (see the scope table).
+* **Everything rests on reading the registration matrix from the API, and the property that
+  holds it varies between Eclipse versions.** A dozen property paths are probed, each
+  accepted in any of seven container shapes (2-D array, jagged, flat 16- or 12-element
+  row-major, `[r,c]` or `[i]` indexer, `m00..m33` or `M11..M44` members), followed by a
+  reflection sweep of the registration object. When all of that fails, the object's type and
+  member list are written to the diagnostics tab — send that and the Eclipse version, and the
+  right property can be probed by name.
 * Topological metrics for deformable registrations depend on the DVF, which is not
   accessible from the scripting API.
 * Computation runs synchronously on the UI thread. Sampling is capped at ~2·10⁶ voxel pairs

@@ -298,49 +298,12 @@ namespace ESAPI_RegistrationQA.Models
             return true;
         }
 
-        /// <summary>
-        /// Relative rigid transform between two image frames, derived from their direction
-        /// cosines and origins: R = R_to · R_fromᵀ and t = O_to − R · O_from.
-        ///
-        /// This replaces the previous calculation, which subtracted individual components of
-        /// the direction vectors and multiplied them by 180/π. That subtraction only
-        /// approximates the true angle under a small-angle assumption and for whichever axis
-        /// happened to line up.
-        /// </summary>
-        public static RigidTransform FromFrames(ImageGeometry from, ImageGeometry to)
-        {
-            // The columns of R_from and R_to are the direction cosines of each frame.
-            var rotation = new double[3, 3];
-
-            Vec3[] fromAxes = { from.XDirection, from.YDirection, from.ZDirection };
-            Vec3[] toAxes = { to.XDirection, to.YDirection, to.ZDirection };
-
-            // R = R_to · R_fromᵀ  →  R[r,c] = Σ_a  toAxes[a][r] · fromAxes[a][c]
-            for (int r = 0; r < 3; r++)
-            {
-                for (int c = 0; c < 3; c++)
-                {
-                    double sum = 0.0;
-                    for (int a = 0; a < 3; a++)
-                        sum += Component(toAxes[a], r) * Component(fromAxes[a], c);
-                    rotation[r, c] = sum;
-                }
-            }
-
-            var rotated = new Vec3(
-                rotation[0, 0] * from.Origin.X + rotation[0, 1] * from.Origin.Y + rotation[0, 2] * from.Origin.Z,
-                rotation[1, 0] * from.Origin.X + rotation[1, 1] * from.Origin.Y + rotation[1, 2] * from.Origin.Z,
-                rotation[2, 0] * from.Origin.X + rotation[2, 1] * from.Origin.Y + rotation[2, 2] * from.Origin.Z);
-
-            return FromRotationAndTranslation(rotation, to.Origin - rotated);
-        }
-
-        private static double Component(Vec3 v, int index)
-        {
-            if (index == 0) return v.X;
-            if (index == 1) return v.Y;
-            return v.Z;
-        }
+        // FromFrames — the relative rigid transform between two image frames — used to live
+        // here as the fallback for when the API exposed no registration matrix. It has been
+        // removed along with the fallback. The quantity it computed is real, but it is the
+        // difference in how the two series were framed, not the registration, and presenting
+        // it as the transform produced a 171 mm "maximum displacement" that turned a verdict
+        // red on a number nobody had measured.
 
         private static double[,] Transpose(double[,] m)
         {

@@ -238,34 +238,10 @@ for _ in range(5000):
     worst = max(worst, abs(bi-i), abs(bj-j), abs(bk-k))
 check("exact round-trip on oblique geometry", worst < 1e-9, f"max error {worst:.2e} voxels")
 
-print("\n=== FromFrames: relative transform between frames ===")
-def from_frames(fr, to):
-    """Replica of RigidTransform.FromFrames: R = R_to * R_from^T, t = O_to - R*O_from."""
-    fa = [fr.xd, fr.yd, fr.zd]
-    ta = [to.xd, to.yd, to.zd]
-    R = [[sum(ta[x][r]*fa[x][c] for x in range(3)) for c in range(3)] for r in range(3)]
-    rot_o = [sum(R[r][c]*fr.o[c] for c in range(3)) for r in range(3)]
-    t = [to.o[r] - rot_o[r] for r in range(3)]
-    return R, t
-
-# One frame rotated 12deg relative to the other and shifted: the relative transform must
-# map the origin of the first exactly onto the origin of the second.
-g2 = Geom((-240.0, -180.0, -395.0), (1,0,0), (0,1,0), (0,0,1),
-          0.9765625, 0.9765625, 2.5, 512, 512, 160)
-R, t = from_frames(g, g2)
-mapped = apply(R, t, g.o)
-check("maps the source frame origin onto the target one",
-      all(abs(mapped[i]-g2.o[i]) < 1e-9 for i in range(3)),
-      f"{mapped} vs {g2.o}")
-good, det = is_orthonormal(R)
-check("the relative rotation is orthonormal", good, f"det={det}")
-
-# The bug this fixes: subtracting components of the direction vectors.
-old_rx = (g2.yd[1] - g.yd[1]) * 57.2958     # XDirection.y in the original
-true_angle = math.degrees(a)
-check("the previous formula (component subtraction) gave a wrong angle",
-      abs(old_rx - true_angle) > 1.0,
-      f"old={old_rx:.3f}deg vs true={true_angle:.3f}deg")
+# The relative transform between the two image frames used to be computed here, as a
+# fallback for when the API exposed no registration matrix. Both the method and its checks
+# were removed with the fallback: the quantity is real but it is not the registration, and
+# a tested implementation sitting in the tree is an invitation to wire it back in.
 
 # ---------------------------------------------------------------- Similitud
 

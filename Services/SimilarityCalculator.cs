@@ -104,9 +104,15 @@ namespace ESAPI_RegistrationQA.Services
             double varianceF = (n * sumF2) - (sumF * sumF);
             double varianceM = (n * sumM2) - (sumM * sumM);
 
-            if (varianceF <= 0 || varianceM <= 0)
+            // Written as !(v > 0) rather than v <= 0 so that NaN is rejected too. Every
+            // comparison against NaN is false, so the natural form lets a poisoned
+            // accumulator through and returns NaN metrics that look like a failed
+            // computation rather than bad input.
+            if (!(varianceF > 0) || !(varianceM > 0))
             {
-                result.Problem = "one of the images is constant over the overlapping region (zero variance)";
+                result.Problem = double.IsNaN(varianceF) || double.IsNaN(varianceM)
+                    ? "the intensity values contain non-finite entries, so the statistics cannot be computed"
+                    : "one of the images is constant over the overlapping region (zero variance)";
                 return result;
             }
 

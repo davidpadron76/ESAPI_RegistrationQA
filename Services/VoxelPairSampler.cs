@@ -103,7 +103,17 @@ namespace ESAPI_RegistrationQA.Services
                         float movingValue;
                         if (!movingVolume.TrySample(mi, mj, mk, out movingValue)) continue;
 
-                        fixedValues[paired] = fixedVolume[i, j, k];
+                        float fixedValue = fixedVolume[i, j, k];
+
+                        // A single non-finite voxel poisons every accumulator downstream, and
+                        // it does so silently: NaN fails every comparison, so the zero-variance
+                        // guard in the similarity calculator lets it through and the metrics
+                        // come out as NaN rather than as an error. Excluding the pair here is
+                        // the only place where the two values are still separable.
+                        if (float.IsNaN(fixedValue) || float.IsInfinity(fixedValue)) continue;
+                        if (float.IsNaN(movingValue) || float.IsInfinity(movingValue)) continue;
+
+                        fixedValues[paired] = fixedValue;
                         movingValues[paired] = movingValue;
                         paired++;
                     }

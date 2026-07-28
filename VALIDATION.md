@@ -3,7 +3,7 @@
 ## Why this document exists
 
 The tool has never been checked against a known answer. What has been verified is the pure
-mathematics — 67 analytic checks in `tools/verify_math.py`, covering Euler extraction, matrix
+mathematics — 64 analytic checks in `tools/verify_math.py`, covering Euler extraction, matrix
 convention detection, voxel↔patient round-trips, the similarity metrics against their
 theoretical values, transform composition, and TRE against known landmark displacements —
 plus the fact that it builds and runs.
@@ -20,6 +20,32 @@ That is what this protocol is for. Tests 1 to 4 take an afternoon and close the 
 questions that cannot be answered without an Eclipse in front of you. Test 3b covers the two
 TG-132 Table III metrics, which are the newest code and have never run against real data.
 Section 5 is the part that turns a group of testers into a dataset.
+
+---
+
+## 0. The registration matrix — run this before anything else
+
+**Setup.** Open any rigid registration and read the provenance line under the verdict.
+
+**Expected.** It begins `Transform: API matrix (…)`, naming the property and the container
+shape the matrix was read from.
+
+**If it says `not available — the API exposed no registration matrix`,** stop: nothing that
+requires mapping a point through the registration can be measured, so NCC, NMI, SSD, TRE,
+DSC, MDA, HD95, inverse consistency and maximum displacement will all read N/A. That is the
+correct behaviour, not a second fault.
+
+This happens because the property holding the matrix differs between Eclipse versions. The
+plugin probes a dozen paths, accepts seven container shapes, then sweeps the object by
+reflection; when all of that fails it writes the registration object's type and full member
+list into the **Diagnostics** tab. **Send that entry with your Eclipse version.** It is a
+one-line fix once the name is known, and it is the single most useful thing early testers can
+contribute.
+
+Earlier versions did not fail here — they silently substituted the relative transform between
+the two image frames. That is the difference in where each scan started, not the registration,
+and it produced a "maximum displacement" of 171 mm on a perfectly ordinary CT–CT pair, turning
+the verdict red on a number nobody had measured. The substitution has been removed.
 
 ---
 
@@ -213,6 +239,7 @@ Open an issue at
 | Jacobian, DVF smoothness, max displacement for DIR | Not obtainable. They need the deformation vector field, which the scripting API does not expose. Reported as N/A rather than approximated from the linear component. |
 | Deformable intensity metrics | Computed only when the API exposes a point-to-point mapping. Whether it does appears to depend on the Eclipse version — this is one of the things the testing should establish. |
 | Threshold profiles | Inherited values, not recalibrated for the current metric definitions. See section 5. |
+| Registration matrix | The property holding it varies between Eclipse versions. A dozen paths and seven container shapes are tried, then a reflection sweep. If none answers, everything downstream is N/A and the object's member list goes to the Diagnostics tab. See test 0. |
 | Direction cosines | If the API does not expose them, canonical axial orientation is assumed and a warning is logged. A tilted-gantry acquisition would be misread; the Diagnostics tab will say so. |
 | Performance | Runs synchronously on the UI thread, capped at ~2·10⁶ voxel pairs. The interface stops responding while it computes. |
 
@@ -222,6 +249,7 @@ Open an issue at
 
 | # | Test | Expected | Observed | Pass | Notes |
 |---|---|---|---|---|---|
+| 0 | **Matrix read from the API** | `API matrix (…)` | | | property path and shape |
 | 1 | Identity — NCC | 1.000 | | | |
 | 1 | Identity — NMI | 2.000 | | | |
 | 1 | Identity — SSD | 0.000 | | | |

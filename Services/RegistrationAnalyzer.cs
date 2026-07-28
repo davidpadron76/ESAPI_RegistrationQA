@@ -187,7 +187,10 @@ namespace ESAPI_RegistrationQA.Services
             EsapiImageReader.LoadResult source,
             EsapiImageReader.LoadResult target)
         {
-            double[,] raw = TryReadMatrix(registration);
+            string matrixSource;
+            // Cast so the call binds statically: with a dynamic argument the whole invocation
+            // is deferred to the runtime binder, out parameter included, for no benefit.
+            double[,] raw = MatrixReader.TryRead((object)registration, _log, out matrixSource);
 
             if (raw != null)
             {
@@ -196,7 +199,7 @@ namespace ESAPI_RegistrationQA.Services
                 if (RigidTransform.TryFromRawMatrix(raw, out transform, out note))
                 {
                     measurements.Transform = transform;
-                    measurements.TransformSource = "API matrix — " + note;
+                    measurements.TransformSource = "API matrix (" + matrixSource + ") — " + note;
                     measurements.RigidEulerAngles = transform.GetEulerAnglesDegrees();
 
                     _log.Info("transform: matrix", note);
@@ -213,80 +216,52 @@ namespace ESAPI_RegistrationQA.Services
                 _log.Failure("transform: matrix", note);
             }
 
-            // Fallback: relative transform between the two image frames.
+            // No transform. Everything downstream that needs one is left unavailable.
             //
-            // Important: this path is taken only when the matrix could not be read. The
-            // previous version also took it when the translation happened to be (0,0,0), so
-            // a legitimate identity registration — or a perfectly aligned one — had its
-            // correct reading discarded and replaced by the difference of series origins,
-            // which is a different quantity.
-            ImageGeometry sourceGeometry = source != null && source.Success ? source.Volume.Geometry : null;
-            ImageGeometry targetGeometry = target != null && target.Success ? target.Volume.Geometry : null;
+            // Earlier versions fell back to the relative transform between the two image
+            // frames. That fallback has been removed, because it is not an approximation of
+            // the registration — it is a different quantity, and a misleading one:
+            //
+            //  * Patient coordinates are already common to both series through the frame of
+            //    reference, so the difference between the two frames is the difference in
+            //    where each scan started, not a correction applied by the registration. On a
+            //    real pair it produced a "maximum displacement" of 171 mm and turned the
+            //    verdict red on the strength of a number nobody had measured.
+            //  * Fed to the point mapper it maps voxel (i,j,k) of one series onto voxel
+            //    (i,j,k) of the other, which is exactly the index-wise comparison this tool
+            //    was rewritten to eliminate. The overlap then comes out at 100 % by
+            //    construction, so even the provenance line stops being informative.
+            //
+            // The frame offset is still worth reporting, so it is logged — as an observation
+            // about the two series, clearly not as the registration.
+            measurements.TransformSource =
+                "not available — the API exposed no registration matrix";
 
-            if (sourceGeometry != null && targetGeometry != null)
-            {
-                RigidTransform transform = RigidTransform.FromFrames(sourceGeometry, targetGeometry);
-                measurements.Transform = transform;
-                measurements.TransformSource =
-                    "derived from the reference frames of both images (the API exposed no matrix)";
-                measurements.RigidEulerAngles = transform.GetEulerAnglesDegrees();
+            ReportFrameOffset(source, target);
 
-                _log.Warning("transform",
-                    "no matrix was obtained from the registration; the relative transform between the two " +
-                    "image frames was used instead. This describes the difference in series framing, which " +
-                    "only coincides with the registration if the latter is already baked into the geometry.");
-                return;
-            }
-
-            measurements.TransformSource = "not available";
             _log.Failure("transform",
-                "neither the registration matrix nor the image frames were accessible");
+                "no registration matrix could be read, so every metric that requires mapping a point " +
+                "through the registration is reported as unavailable rather than estimated. The " +
+                "member list of the registration object is in this tab: sending it with the Eclipse " +
+                "version is what allows the correct property to be probed directly.");
         }
 
-        private double[,] TryReadMatrix(dynamic registration)
+        /// <summary>
+        /// Logs how far apart the two series frames are. Purely descriptive: it says something
+        /// about how the images were acquired, nothing about the registration.
+        /// </summary>
+        private void ReportFrameOffset(
+            EsapiImageReader.LoadResult source, EsapiImageReader.LoadResult target)
         {
-            dynamic matrixObject;
-            string source;
+            if (source == null || target == null || !source.Success || !target.Success) return;
 
-            if (!Dyn.TryGetFirst("transform: matrix", _log, out matrixObject, out source,
-                    Dyn.Alt("RigidRegistration.Matrix", () => registration.RigidRegistration.Matrix),
-                    Dyn.Alt("Matrix", () => registration.Matrix),
-                    Dyn.Alt("TransformMatrix", () => registration.TransformMatrix),
-                    Dyn.Alt("RigidTransformMatrix", () => registration.RigidTransformMatrix)))
-            {
-                return null;
-            }
+            Vec3 offset = target.Volume.Geometry.Origin - source.Volume.Geometry.Origin;
 
-            var raw = new double[4, 4];
-
-            bool read = Dyn.TryInvoke("transform: read matrix cells (" + source + ")", () =>
-            {
-                for (int r = 0; r < 4; r++)
-                {
-                    for (int c = 0; c < 4; c++)
-                    {
-                        raw[r, c] = Convert.ToDouble(matrixObject[r, c], CultureInfo.InvariantCulture);
-                    }
-                }
-            }, _log);
-
-            if (!read) return null;
-
-            // An all-zero matrix indicates that [r,c] indexing is not what was expected.
-            bool allZero = true;
-            for (int r = 0; r < 4 && allZero; r++)
-                for (int c = 0; c < 4 && allZero; c++)
-                    if (Math.Abs(raw[r, c]) > 1e-12) allZero = false;
-
-            if (allZero)
-            {
-                _log.Failure("transform: matrix",
-                    "the matrix read via " + source + " is identically zero; [row,column] indexing " +
-                    "does not match what was expected");
-                return null;
-            }
-
-            return raw;
+            _log.Info("image frames", string.Format(CultureInfo.InvariantCulture,
+                "the two series origins differ by ({0:F1}, {1:F1}, {2:F1}) mm, magnitude {3:F1} mm. " +
+                "This is where each scan started, not a registration displacement, and it is not " +
+                "used as a transform.",
+                offset.X, offset.Y, offset.Z, offset.Length));
         }
 
         // ---------------------------------------------------------------- intensity
@@ -526,7 +501,10 @@ namespace ESAPI_RegistrationQA.Services
             if (measurements.Transform == null)
             {
                 measurements.MaxDisplacement = MeasuredValue.Unavailable(
-                    "no transform is available against which to evaluate displacement");
+                    "the registration matrix could not be read from the API, so there is no transform " +
+                    "whose displacement could be evaluated. The difference between the two series " +
+                    "origins is not a substitute: it describes how the scans were framed, not what the " +
+                    "registration does.");
                 return;
             }
 
@@ -883,7 +861,9 @@ namespace ESAPI_RegistrationQA.Services
             if (reverseMapper == null)
             {
                 measurements.InverseConsistency = MeasuredValue.Unavailable(
-                    "the reverse registration was found but no mapping could be built from it");
+                    "the reverse registration was found in the workspace, but its matrix could not be " +
+                    "read from the API either — the same reason the forward transform is missing. This " +
+                    "is one fault, not two: the check works as soon as the matrix can be read.");
                 return;
             }
 
@@ -1008,7 +988,9 @@ namespace ESAPI_RegistrationQA.Services
                 ? "this is a deformable registration and the API exposes neither the deformation vector " +
                   "field nor a point-by-point mapping method. Using only the linear component would " +
                   "describe a different transform from the one under audit."
-                : "no valid transform is available with which to map points";
+                : "the registration matrix could not be read from the API, so points cannot be mapped " +
+                  "through the registration. The diagnostics tab lists what the registration object " +
+                  "does expose in this Eclipse version.";
         }
 
         // ---------------------------------------------------------------- utilities

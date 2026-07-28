@@ -91,8 +91,87 @@ namespace ESAPI_RegistrationQA.Services
                 return result;
             }
 
+            string intensityProblem = DescribeIntensities(volume, label, log);
+            if (intensityProblem != null)
+            {
+                result.Problem = label + ": " + intensityProblem;
+                return result;
+            }
+
             result.Volume = volume;
             return result;
+        }
+
+        /// <summary>
+        /// Records what the volume actually contains and rejects it if the content is
+        /// degenerate.
+        ///
+        /// This exists because <c>GetVoxels</c> succeeding is not the same as
+        /// <c>GetVoxels</c> having filled the buffer. When it returns without writing — a
+        /// plane index the API rejects silently, a frame whose pixel data has not been paged
+        /// in — every voxel stays at zero. The volume then sails through every later stage:
+        /// the pairing reports a full two million voxel pairs at 100 % overlap, and only the
+        /// correlation fails, with "zero variance", four steps away from the actual cause.
+        ///
+        /// Catching it here means the diagnostics name the operation that failed rather than
+        /// its distant symptom. Returns null when the volume is usable, otherwise the reason
+        /// it is not.
+        /// </summary>
+        private static string DescribeIntensities(SampledVolume volume, string label, DiagnosticLog log)
+        {
+            double min = double.MaxValue, max = double.MinValue, sum = 0.0;
+            long count = 0, nonFinite = 0;
+
+            for (int k = 0; k < volume.Geometry.ZSize; k++)
+            {
+                for (int j = 0; j < volume.Geometry.YSize; j++)
+                {
+                    for (int i = 0; i < volume.Geometry.XSize; i++)
+                    {
+                        float value = volume[i, j, k];
+
+                        if (float.IsNaN(value) || float.IsInfinity(value))
+                        {
+                            nonFinite++;
+                            continue;
+                        }
+
+                        if (value < min) min = value;
+                        if (value > max) max = value;
+                        sum += value;
+                        count++;
+                    }
+                }
+            }
+
+            if (count == 0)
+                return "every voxel read back non-finite; the intensity values cannot be used";
+
+            log.Info(label + ": intensity range", string.Format(CultureInfo.InvariantCulture,
+                "min {0:F1}, max {1:F1}, mean {2:F1} over {3:N0} voxels{4}",
+                min, max, sum / count, count,
+                nonFinite > 0 ? string.Format(CultureInfo.InvariantCulture,
+                    ", {0:N0} non-finite (excluded)", nonFinite) : string.Empty));
+
+            if (nonFinite > 0)
+            {
+                // Left as a warning rather than a rejection: a handful of non-finite voxels
+                // is survivable, but they must not reach the accumulators, where a single NaN
+                // silently poisons every sum.
+                log.Warning(label + ": intensity values", string.Format(CultureInfo.InvariantCulture,
+                    "{0:N0} voxel(s) read back as NaN or infinity and are excluded from the metrics",
+                    nonFinite));
+            }
+
+            if (min >= max)
+            {
+                return string.Format(CultureInfo.InvariantCulture,
+                    "every voxel holds the same value ({0:F1}). GetVoxels reported success without " +
+                    "populating the buffer, so there is no image content to compare. This is an API " +
+                    "read failure, not a property of the image.", min);
+            }
+
+            return null;
         }
 
         // ------------------------------------------------------------------ geometry

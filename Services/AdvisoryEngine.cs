@@ -117,8 +117,11 @@ namespace ESAPI_RegistrationQA.Services
                 set.Advisories.Add(new Advisory(
                     AdvisorySeverity.Warning,
                     "TRANSFORM",
-                    "The registration transform could not be obtained. The rigid parameters shown do " +
-                    "not come from a valid reading."));
+                    "The registration matrix could not be read from the API, so no translation, rotation " +
+                    "or displacement is reported, and every metric that requires mapping a point through " +
+                    "the registration is unavailable. Nothing has been estimated in their place. The " +
+                    "property holding the matrix varies between Eclipse versions: the diagnostics tab " +
+                    "lists what this registration object does expose."));
             }
             else if (measurements != null && measurements.RigidEulerAngles.HasValue &&
                      measurements.RigidEulerAngles.Value.GimbalLock)
