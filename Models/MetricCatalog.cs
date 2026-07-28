@@ -220,9 +220,13 @@ namespace ESAPI_RegistrationQA.Models
                     "clinically expected.",
                 gating: true,
                 gatingBasis:
-                    "Table III sets an explicit tolerance and the report calls a negative determinant an " +
-                    "erroneous physical model of the patient. Note that the profile limits here are more " +
-                    "permissive than Table III, which admits no negative values at all."));
+                    "Table III sets an explicit tolerance — no negative values — and the report calls a " +
+                    "negative determinant an erroneous physical model of the patient. The profiles apply " +
+                    "it literally: the limit is 0 % in all four, so any folding at all is a breach. It is " +
+                    "deliberately not varied by anatomical site, because the report ties this tolerance to " +
+                    "the physics and not to the site. Where folding is confined to a region that does not " +
+                    "affect the intended use, the report asks for that influence to be evaluated; that " +
+                    "judgement is the physicist's and the tool does not pre-empt it by relaxing the limit."));
 
             Register(new MetricDefinition(
                 key: MetricKeys.MaxDisplacement,
@@ -272,12 +276,15 @@ namespace ESAPI_RegistrationQA.Models
                 standardBasis:
                     "Not in TG-132 Table III. Related to the report's observation in section 4.C.3 that " +
                     "large local changes in the Jacobian determinant can indicate a registration error.",
-                gating: true,
+                gating: false,
                 gatingBasis:
-                    "Gating, but the limits are inherited rather than derived, like the intensity metrics. " +
-                    "It does not misfire today because the only values it can take are 1.0 exactly, for a " +
-                    "rigid transform, or nothing at all for a deformable one. If the deformation field ever " +
-                    "becomes readable, revisit this before trusting the classification."));
+                    "TG-132 does not name this metric and its limits here were invented, exactly like " +
+                    "those of the intensity metrics. It is kept because for a rigid transform the value " +
+                    "1.0 is a true statement worth recording in a signed report — the field gradient is " +
+                    "constant, so no local irregularity is possible — but a statement that is true by " +
+                    "definition cannot fail anything, and for a deformable registration the metric is not " +
+                    "obtainable at all. If the deformation field ever becomes readable, derive real limits " +
+                    "before letting it gate."));
 
             // ---------------------------------------------------------- structures
 

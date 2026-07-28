@@ -100,20 +100,28 @@ namespace ESAPI_RegistrationQA.Models
             return string.Format(CultureInfo.InvariantCulture, "{0:0.###}{1}", limits.GreenLimit, suffix);
         }
 
-        // None of the four profiles carries limits for NMI, NCC or SSD any more. They used
-        // to, and the values were this project's own invention: TG-132 gives no tolerance for
-        // any of the three, and section 4.C.3 says they are difficult to convert into a
-        // measure of spatial accuracy. Those limits were producing NOT COMPLIANT verdicts. The
-        // metrics are still measured, still shown and still exported — see MetricCatalog for
-        // the position on each.
+        // What the four profiles no longer carry, and why.
+        //
+        // NMI, NCC, SSD and Smoothness have no limits here at all. The values they used to
+        // have were this project's own invention. TG-132 gives no tolerance for the first
+        // three and section 4.C.3 says they are difficult to convert into a measure of spatial
+        // accuracy; Smoothness it does not mention. All four were able to produce a
+        // NOT COMPLIANT verdict on that basis. They are still measured, shown and exported —
+        // MetricCatalog states the position on each.
+        //
+        // The Jacobian limits are 0/0 in every profile, and identical on purpose. Table III
+        // gives one tolerance, "no negative values", and ties it to the physics rather than to
+        // the anatomical site: the report calls a negative determinant an erroneous physical
+        // model of the patient, which is as true in a lung as in a brain. The previous values
+        // admitted between 1 % and 4 % of folded voxels, so the tool was more permissive than
+        // the standard it cites — on its own authority, and silently.
 
         // 1. Head and neck (ART H&N)
         public static ThresholdProfile CreateDefaultHN()
         {
             var profile = new ThresholdProfile { ProfileName = "ART Head & Neck" };
-            profile.Limits.Add(MetricKeys.JacobianNegative, new ThresholdLimits(1.0, 2.5));
+            profile.Limits.Add(MetricKeys.JacobianNegative, new ThresholdLimits(0.0, 0.0));
             profile.Limits.Add(MetricKeys.MaxDisplacement, new ThresholdLimits(15.0, 22.0));
-            profile.Limits.Add(MetricKeys.Smoothness, new ThresholdLimits(0.90, 0.80));
             profile.Limits.Add(MetricKeys.Dsc, new ThresholdLimits(0.85, 0.75));
             profile.Limits.Add(MetricKeys.Mda, new ThresholdLimits(2.0, 3.0));
             profile.Limits.Add(MetricKeys.Hd95, new ThresholdLimits(3.0, 5.0));
@@ -127,9 +135,8 @@ namespace ESAPI_RegistrationQA.Models
         public static ThresholdProfile CreateBrainSRS()
         {
             var profile = new ThresholdProfile { ProfileName = "Brain / SRS" };
-            profile.Limits.Add(MetricKeys.JacobianNegative, new ThresholdLimits(0.2, 1.0));
+            profile.Limits.Add(MetricKeys.JacobianNegative, new ThresholdLimits(0.0, 0.0));
             profile.Limits.Add(MetricKeys.MaxDisplacement, new ThresholdLimits(5.0, 10.0));
-            profile.Limits.Add(MetricKeys.Smoothness, new ThresholdLimits(0.95, 0.88));
             profile.Limits.Add(MetricKeys.Dsc, new ThresholdLimits(0.90, 0.82));
             profile.Limits.Add(MetricKeys.Mda, new ThresholdLimits(1.0, 2.0));
             profile.Limits.Add(MetricKeys.Hd95, new ThresholdLimits(2.0, 3.5));
@@ -143,9 +150,8 @@ namespace ESAPI_RegistrationQA.Models
         public static ThresholdProfile CreatePelvis()
         {
             var profile = new ThresholdProfile { ProfileName = "Pelvis / Prostate" };
-            profile.Limits.Add(MetricKeys.JacobianNegative, new ThresholdLimits(1.5, 3.0));
+            profile.Limits.Add(MetricKeys.JacobianNegative, new ThresholdLimits(0.0, 0.0));
             profile.Limits.Add(MetricKeys.MaxDisplacement, new ThresholdLimits(20.0, 30.0));
-            profile.Limits.Add(MetricKeys.Smoothness, new ThresholdLimits(0.88, 0.78));
             profile.Limits.Add(MetricKeys.Dsc, new ThresholdLimits(0.80, 0.70));
             profile.Limits.Add(MetricKeys.Mda, new ThresholdLimits(2.5, 3.5));
             profile.Limits.Add(MetricKeys.Hd95, new ThresholdLimits(4.0, 6.0));
@@ -159,9 +165,8 @@ namespace ESAPI_RegistrationQA.Models
         public static ThresholdProfile CreateThorax()
         {
             var profile = new ThresholdProfile { ProfileName = "Thorax / Lung" };
-            profile.Limits.Add(MetricKeys.JacobianNegative, new ThresholdLimits(2.0, 4.0));
+            profile.Limits.Add(MetricKeys.JacobianNegative, new ThresholdLimits(0.0, 0.0));
             profile.Limits.Add(MetricKeys.MaxDisplacement, new ThresholdLimits(25.0, 35.0));
-            profile.Limits.Add(MetricKeys.Smoothness, new ThresholdLimits(0.85, 0.75));
             profile.Limits.Add(MetricKeys.Dsc, new ThresholdLimits(0.80, 0.70));
             profile.Limits.Add(MetricKeys.Mda, new ThresholdLimits(3.0, 4.5));
             profile.Limits.Add(MetricKeys.Hd95, new ThresholdLimits(4.5, 6.5));

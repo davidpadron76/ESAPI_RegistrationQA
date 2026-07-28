@@ -49,6 +49,32 @@ the verdict red on a number nobody had measured. The substitution has been remov
 
 ---
 
+## 0b. Deformable registration — the point mapping
+
+**Setup.** Open a deformable registration. Any one will do.
+
+**Expected.** The Diagnostics tab contains a line beginning `deformable mapping: using …`, naming
+the method being used to push points through the deformation field.
+
+**If instead every metric reads N/A and the verdict is NO EVIDENCE,** no such method was found.
+That is one fault, not twelve: the intensity metrics need the mapping to pair voxels, DSC, MDA
+and HD95 need it to carry a contour across, TRE needs it for the landmarks, and consistency
+needs it twice. The linear component is not used as a substitute, because it describes a
+different transform from the one being audited.
+
+Eight method names are probed on the registration and on seven possible wrapper properties, and
+a candidate is accepted only after being probed with two real points — a stub that returns its
+input unchanged is rejected rather than reported as a perfect registration. When none answers,
+the object's type and member list go to the Diagnostics tab. **Send that line with your Eclipse
+version.**
+
+One thing worth checking if the mapping does work: the direction. The API gives no way to tell
+whether the method maps source→registered or the reverse. If TRE comes out systematically large
+while the fusion looks correct on screen, that is the likely explanation — report it, as the
+method name is recorded in the report.
+
+---
+
 ## 1. Identity registration
 
 **Setup.** Register a CT to itself, or select an identity registration if the workspace has
@@ -247,10 +273,11 @@ Open an issue at
 | TRE | Measured, but only when point landmarks (DICOM type MARKER or ISOCENTER) exist on both series under the same identifier. Otherwise N/A with the counts found on each side. |
 | Inverse consistency | Measured, but only when the reverse registration exists in the workspace. Otherwise N/A saying so — it is a check you can enable, not a permanent limitation. |
 | Jacobian, DVF smoothness, max displacement for DIR | Not obtainable. They need the deformation vector field, which the scripting API does not expose. Reported as N/A rather than approximated from the linear component. |
-| Deformable intensity metrics | Computed only when the API exposes a point-to-point mapping. Whether it does appears to depend on the Eclipse version — this is one of the things the testing should establish. |
+| Deformable registrations | Everything depends on finding a point-by-point mapping method on the registration object. Without it every metric is N/A and the verdict is NO EVIDENCE. See test 0b. |
 | NCC / NMI / SSD tolerances | None exist. TG-132 gives no limit for any of the three and §4.C.3 says they do not convert into spatial accuracy. Shown as **INFO** — value, no colour, no effect on the verdict. Section 5 is how you make them actionable. |
+| Smoothness tolerance | Same: not named in TG-132, limits were invented. Shown as **INFO**. For a rigid transform the value is 1.0 by definition. |
 | Max displacement tolerance | Applied only when both series share a DICOM frame of reference. Otherwise the magnitude spans two coordinate systems and is shown as **INFO**. |
-| Jacobian tolerance | The profiles admit 1–4 % negative values; TG-132 Table III admits none. More permissive than the report, deliberately flagged and not yet resolved. |
+| Jacobian tolerance | 0 % in every profile, matching Table III's "no negative values". Not varied by anatomical site: the report ties this tolerance to the physics. |
 | Threshold profiles | Inherited values, not recalibrated for the current metric definitions. See section 5. |
 | Registration matrix | The property holding it varies between Eclipse versions. A dozen paths and seven container shapes are tried, then a reflection sweep. If none answers, everything downstream is N/A and the object's member list goes to the Diagnostics tab. See test 0. |
 | Direction cosines | If the API does not expose them, canonical axial orientation is assumed and a warning is logged. A tilted-gantry acquisition would be misread; the Diagnostics tab will say so. |
@@ -264,6 +291,7 @@ Open an issue at
 |---|---|---|---|---|---|
 | 0 | **Matrix read from the API** | `API matrix (…)` | | | property path and shape |
 | 0 | Frame of Reference read | same / different | | | affects whether Max Displacement is graded |
+| 0b | **Deformable: point mapping found** | method named in Diagnostics | | | if not, everything is N/A |
 | 1 | Identity — NCC | 1.000 | | | |
 | 1 | Identity — NMI | 2.000 | | | |
 | 1 | Identity — SSD | 0.000 | | | |

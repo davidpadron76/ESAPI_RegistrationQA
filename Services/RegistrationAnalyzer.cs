@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Reflection;
 using ESAPI_RegistrationQA.Models;
 
 namespace ESAPI_RegistrationQA.Services
@@ -397,7 +396,10 @@ namespace ESAPI_RegistrationQA.Services
         /// </summary>
         private IPointMapper BuildPointMapper(dynamic registration, QaMeasurements measurements)
         {
-            DynamicPointMapper deformableMapper = TryBuildDeformableMapper(registration);
+            // Tried first even for a registration Eclipse calls rigid: a point-by-point
+            // mapping straight from the API needs no convention detection and no matrix.
+            DynamicPointMapper deformableMapper =
+                DeformableMapperReader.TryBuild((object)registration, _log);
             if (deformableMapper != null) return deformableMapper;
 
             if (measurements.IsDeformable) return null;
@@ -407,120 +409,6 @@ namespace ESAPI_RegistrationQA.Services
             return new RigidPointMapper(
                 measurements.Transform,
                 "rigid matrix — " + measurements.TransformSource);
-        }
-
-        /// <summary>
-        /// Looks up a point-mapping method on the registration object by reflection. It is
-        /// probed with a real point and only accepted if it returns something finite: the
-        /// mere existence of the method does not guarantee it is implemented in this version.
-        /// </summary>
-        private DynamicPointMapper TryBuildDeformableMapper(dynamic registration)
-        {
-            object registrationObject = registration;
-            if (registrationObject == null) return null;
-
-            Type registrationType = registrationObject.GetType();
-            string[] candidateNames = { "TransformPoint", "MapPoint", "TransformPointToRegistered", "DeformPoint" };
-
-            foreach (string name in candidateNames)
-            {
-                MethodInfo method = registrationType.GetMethod(
-                    name, BindingFlags.Public | BindingFlags.Instance);
-
-                if (method == null) continue;
-
-                ParameterInfo[] parameters = method.GetParameters();
-                if (parameters.Length != 1) continue;
-
-                Type vectorType = parameters[0].ParameterType;
-                Func<Vec3, object> toVector = BuildVectorFactory(vectorType);
-                Func<object, Vec3?> fromVector = BuildVectorReader(method.ReturnType);
-
-                if (toVector == null || fromVector == null)
-                {
-                    _log.Warning("deformable mapping: " + name,
-                        "the method was found but the vector type " + vectorType.Name +
-                        " could not be constructed or read");
-                    continue;
-                }
-
-                Func<Vec3, Vec3?> map = point =>
-                {
-                    object result = method.Invoke(registrationObject, new[] { toVector(point) });
-                    return fromVector(result);
-                };
-
-                // Probe: if it does not return a finite point, the method is not usable.
-                try
-                {
-                    Vec3? probe = map(new Vec3(0, 0, 0));
-                    if (!probe.HasValue || !probe.Value.IsFinite)
-                    {
-                        _log.Warning("deformable mapping: " + name, "the probe did not return a finite point");
-                        continue;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _log.Warning("deformable mapping: " + name, "the probe failed — " + DiagnosticLog.Describe(ex));
-                    continue;
-                }
-
-                _log.Info("deformable mapping",
-                    "will use " + registrationType.Name + "." + name + " to map points through the registration");
-
-                return new DynamicPointMapper(map,
-                    "point-by-point mapping via " + name + " (traverses the deformation field)");
-            }
-
-            return null;
-        }
-
-        private static Func<Vec3, object> BuildVectorFactory(Type vectorType)
-        {
-            FieldInfo fx = vectorType.GetField("x", BindingFlags.Public | BindingFlags.Instance);
-            FieldInfo fy = vectorType.GetField("y", BindingFlags.Public | BindingFlags.Instance);
-            FieldInfo fz = vectorType.GetField("z", BindingFlags.Public | BindingFlags.Instance);
-
-            if (fx != null && fy != null && fz != null)
-            {
-                return point =>
-                {
-                    object boxed = Activator.CreateInstance(vectorType);
-                    fx.SetValue(boxed, point.X);
-                    fy.SetValue(boxed, point.Y);
-                    fz.SetValue(boxed, point.Z);
-                    return boxed;
-                };
-            }
-
-            ConstructorInfo constructor = vectorType.GetConstructor(
-                new[] { typeof(double), typeof(double), typeof(double) });
-
-            if (constructor != null)
-                return point => constructor.Invoke(new object[] { point.X, point.Y, point.Z });
-
-            return null;
-        }
-
-        private static Func<object, Vec3?> BuildVectorReader(Type vectorType)
-        {
-            if (vectorType == null || vectorType == typeof(void)) return null;
-
-            FieldInfo fx = vectorType.GetField("x", BindingFlags.Public | BindingFlags.Instance);
-            FieldInfo fy = vectorType.GetField("y", BindingFlags.Public | BindingFlags.Instance);
-            FieldInfo fz = vectorType.GetField("z", BindingFlags.Public | BindingFlags.Instance);
-
-            if (fx == null || fy == null || fz == null) return null;
-
-            return value =>
-            {
-                if (value == null) return null;
-                return new Vec3(
-                    Convert.ToDouble(fx.GetValue(value), CultureInfo.InvariantCulture),
-                    Convert.ToDouble(fy.GetValue(value), CultureInfo.InvariantCulture),
-                    Convert.ToDouble(fz.GetValue(value), CultureInfo.InvariantCulture));
-            };
         }
 
         // ---------------------------------------------------------------- deformation
@@ -540,9 +428,16 @@ namespace ESAPI_RegistrationQA.Services
         {
             if (measurements.IsDeformable)
             {
+                // Worth being precise about why, because the answer changed once point-by-point
+                // mapping started working: these three are not computed because the API
+                // exposes no vector field, and reconstructing one by finite differences of the
+                // point mapping is a different piece of work with its own error budget — not
+                // because they are unobtainable in principle. What they cannot be derived from
+                // is the linear component, which describes a different transform.
                 const string reason =
-                    "requires traversing the deformation vector field (DVF), which the Varian scripting " +
-                    "API does not expose. It cannot be derived from the linear matrix or from the images.";
+                    "requires the deformation vector field, which the Varian scripting API does not " +
+                    "expose. It is not derived from the linear component, which would describe a " +
+                    "different transform from the one under audit.";
 
                 measurements.JacobianNegativePercent = MeasuredValue.NotApplicable(reason);
                 measurements.Smoothness = MeasuredValue.NotApplicable(reason);

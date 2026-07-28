@@ -29,9 +29,9 @@ number.
 | **NCC** | Does the anatomy line up, same modality? | §4.C.3, admitted for assessment | **No** — no tolerance exists | Measured |
 | **NMI** | Does it line up when intensities are not linearly comparable (CT-MR, CT-PET)? | §4.C.3, admitted for assessment | **No** — no tolerance exists | Measured |
 | **SSD** | Are there local intensity differences beyond the overall alignment? | §4.C.3, admitted for assessment | **No** — no tolerance exists | Measured |
-| **Jacobian < 0** | Has the deformation folded tissue onto itself? | Table III | Yes | Exact for rigid · N/A for DIR |
+| **Jacobian < 0** | Has the deformation folded tissue onto itself? | Table III, no negative values | Yes, at 0 % in every profile | Exact for rigid · N/A for DIR |
 | **Max Displacement** | How far has the registration moved the anatomy? | Not tabulated; plausibility check | Only within one frame of reference | Exact for rigid · N/A for DIR |
-| **Smoothness** | Is the deformation physically plausible? | Not tabulated; related to §4.C.3 | Yes, on inherited limits | Exact for rigid · N/A for DIR |
+| **Smoothness** | Is the deformation physically plausible? | Not tabulated; related to §4.C.3 | **No** — limits were invented | Exact for rigid · N/A for DIR |
 | **DSC** | Do the same organs end up in the same place? | Table III, ~0.80–0.90 | Yes | Measured |
 | **MDA** | On average, how far apart are the two organ surfaces? | Table III, ~2–3 mm | Yes | Measured |
 | **HD95** | How far apart are the surfaces where they disagree most? | Not tabulated; report specifies MDA | Yes | Measured |
@@ -66,6 +66,19 @@ correction the registration applies. Across two frames — two scanners, or a CT
 matrix must also span the offset between the two coordinate systems, and a correct registration
 can exceed any limit for that reason alone. When the frames differ, or when either UID cannot
 be read, the value is reported without a classification and an advisory says why.
+
+**Smoothness follows the intensity metrics, for the same reason.** TG-132 does not name it and
+its limits were invented too. It stays on screen because 1.0 for a rigid transform is a true
+statement worth recording — the field gradient is constant, so no local irregularity is
+possible — but a statement true by definition cannot fail anything.
+
+**The Jacobian limit is now 0 % in all four profiles.** Table III admits no negative values;
+the profiles used to admit between 1 % and 4 %, so the tool was more permissive than the
+standard it cites, on its own authority. The limit is deliberately not varied by anatomical
+site: the report ties this tolerance to the physics, and a folded voxel is as unphysical in a
+lung as in a brain. Where the folding is confined to a region that does not affect the intended
+use, TG-132 asks for that influence to be evaluated — that judgement is the physicist's, and
+the tool does not pre-empt it by relaxing the limit.
 
 Each metric declares its position in `Models/MetricCatalog.cs`, in a `GatingBasis` field the
 constructor refuses to leave blank, and the same text is printed in the report appendix.
@@ -111,10 +124,16 @@ There are two ways a metric can have no number, and they are treated differently
 | **Jacobian, displacement and smoothness** | ❌ **N/A for deformable** | Require traversing the deformation vector field, which the Varian scripting API does not expose. |
 | **DSC, MDA and HD95** | ✅ Measured | Both structures rasterised onto one grid — the registered one carried through the registration first — then compared through a single distance transform. Needs contours with the same identifier on both series. |
 
-For **deformable** registrations, if the API exposes a point-by-point mapping method, the
-intensity metrics and the TRE are computed by traversing the deformation field. If it does
-not, they are marked N/A: applying only the linear component would describe a different
-transform from the one under audit.
+For **deformable** registrations everything depends on finding a point-by-point mapping method
+on the registration object: the intensity metrics need it to pair voxels, DSC/MDA/HD95 to carry
+a contour across, TRE for the landmarks, consistency twice. If none is found, all of them are
+marked N/A — applying only the linear component would describe a different transform from the
+one under audit — and the diagnostics tab lists what the object does expose.
+
+A method is accepted only after being probed with two real points, so that a stub returning its
+input unchanged is rejected rather than silently reported as a perfect registration. Which
+direction it maps in cannot be verified through the API; the method that answered is named in
+the report so the assumption stays visible.
 
 ## Features
 

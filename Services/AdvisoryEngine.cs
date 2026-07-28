@@ -148,7 +148,7 @@ namespace ESAPI_RegistrationQA.Services
             string limit = profile != null ? profile.DescribeGreenLimit(metric.MetricKey) : "—";
             string measured = metric.DisplayValue;
 
-            string interpretation = InterpretBreach(metric.MetricKey, severity);
+            string interpretation = InterpretBreach(metric.MetricKey);
 
             return new Advisory(
                 severity,
@@ -162,34 +162,38 @@ namespace ESAPI_RegistrationQA.Services
         /// Clinical interpretation attached to each metric. Selected by canonical key, not
         /// by substring of the display name: renaming a UI label must not silently stop an
         /// advisory from firing.
+        ///
+        /// The severity no longer varies the text. The only metric that used to distinguish
+        /// red from yellow was the Jacobian, and it now has no yellow band.
         /// </summary>
-        private static string InterpretBreach(string metricKey, AdvisorySeverity severity)
+        private static string InterpretBreach(string metricKey)
         {
             switch (metricKey)
             {
+                // There is no yellow band for this one: TG-132 Table III admits no negative
+                // values, so the profiles set both limits at 0 and any folding at all is a
+                // breach.
                 case MetricKeys.JacobianNegative:
-                    return severity == AdvisorySeverity.Critical
-                        ? "Indicates grid folding: unphysical topological inversion in the deformation " +
-                          "field. The registration is NOT suitable for dose accumulation or for direct " +
-                          "contour propagation."
-                        : "Local folding is present in the deformation field. Verify the affected regions " +
-                          "before propagating contours.";
+                    return "Grid folding: an unphysical topological inversion in the deformation field. " +
+                           "TG-132 Table III admits no negative Jacobian values, which is why any " +
+                           "non-zero percentage breaches. The report asks for the influence of the " +
+                           "affected regions on the intended use to be evaluated; until that is done the " +
+                           "registration is not suitable for dose accumulation or for direct contour " +
+                           "propagation.";
 
                 case MetricKeys.MaxDisplacement:
                     return "High vector displacement. Confirm that it corresponds to a real anatomical " +
-                           "change and not to a correlation error at the FOV boundaries.";
+                           "change and not to a correlation error at the FOV boundaries. This advisory " +
+                           "only appears when both series share a frame of reference; otherwise the " +
+                           "metric is not classified at all.";
 
-                case MetricKeys.Smoothness:
-                    return "Irregular deformation field. May indicate algorithm overfitting in low-contrast " +
-                           "regions.";
-
-                case MetricKeys.Nmi:
-                case MetricKeys.Ncc:
-                case MetricKeys.Ssd:
-                    return "Possible contrast differences, metal artefacts, FOV truncation, or a genuine " +
-                           "misalignment. Review the overlay slice by slice.";
+                // NCC, NMI, SSD and Smoothness are deliberately absent from this switch. They
+                // no longer gate, so they cannot reach a red or yellow state and no breach
+                // advisory can be raised for them. Arms that can never execute would suggest
+                // otherwise.
 
                 case MetricKeys.Dsc:
+                case MetricKeys.Mda:
                 case MetricKeys.Hd95:
                     return "Anatomical overlap is out of tolerance. Slice-by-slice verification and manual " +
                            "adjustment of the propagated contours are recommended.";

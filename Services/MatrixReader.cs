@@ -173,11 +173,22 @@ namespace ESAPI_RegistrationQA.Services
 
         private static IEnumerable<PropertyInfo> ReadableProperties(object instance)
         {
+            // Named differently from PropertiesOfType on purpose rather than overloaded:
+            // Type is itself an object, so an overload pair would silently accept a Type here
+            // and describe the members of System.Type instead of the type in hand.
             if (instance == null) return Enumerable.Empty<PropertyInfo>();
+
+            try { return PropertiesOfType(instance.GetType()); }
+            catch { return Enumerable.Empty<PropertyInfo>(); }
+        }
+
+        private static IEnumerable<PropertyInfo> PropertiesOfType(Type type)
+        {
+            if (type == null) return Enumerable.Empty<PropertyInfo>();
 
             try
             {
-                return instance.GetType()
+                return type
                     .GetProperties(BindingFlags.Public | BindingFlags.Instance)
                     .Where(p => p.CanRead && p.GetIndexParameters().Length == 0)
                     .ToList();
@@ -214,16 +225,57 @@ namespace ESAPI_RegistrationQA.Services
         {
             if (log == null) return;
 
-            Type type;
-            try { type = registration.GetType(); }
-            catch { return; }
+            log.Failure("transform: matrix",
+                "no 4x4 matrix could be read from the registration. " + DescribeMemberSurface(registration));
+        }
+
+        /// <summary>
+        /// The type name and public member surface of an API object, as a single line for the
+        /// diagnostics tab.
+        ///
+        /// Shared with the deformable mapping search, which fails for the same underlying
+        /// reason and needs the same evidence: differences between Eclipse versions cannot be
+        /// reproduced outside a clinic, so the plugin has to report what it found rather than
+        /// what it expected.
+        /// </summary>
+        public static string DescribeMemberSurface(object instance)
+        {
+            if (instance == null) return "The object is null.";
+
+            try { return DescribeType(instance.GetType()); }
+            catch { return "The object's type could not be determined."; }
+        }
+
+        /// <summary>
+        /// Same, for a type known statically rather than through an instance.
+        ///
+        /// Kept separate because passing a <see cref="Type"/> to the overload above would
+        /// describe the members of <c>System.Type</c> itself, which is a great deal of text
+        /// about the wrong object.
+        /// </summary>
+        public static string DescribeType(Type type)
+        {
+            if (type == null) return "The type is null.";
 
             var members = new List<string>();
 
-            foreach (PropertyInfo property in ReadableProperties(registration))
+            foreach (PropertyInfo property in PropertiesOfType(type))
             {
                 members.Add(property.Name + " : " + FriendlyTypeName(property.PropertyType));
                 if (members.Count >= MaxMembersReported) break;
+            }
+
+            try
+            {
+                foreach (FieldInfo field in type.GetFields(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    if (members.Count >= MaxMembersReported) break;
+                    members.Add(field.Name + " : " + FriendlyTypeName(field.FieldType) + " (field)");
+                }
+            }
+            catch
+            {
+                // Diagnostic only.
             }
 
             try
@@ -242,17 +294,15 @@ namespace ESAPI_RegistrationQA.Services
             catch
             {
                 // Enumerating methods is diagnostic only; a failure here must not mask the
-                // real message below.
+                // message this text is embedded in.
             }
 
             var text = new StringBuilder();
-            text.Append("no 4x4 matrix could be read from the registration. The object is of type '");
-            text.Append(type.FullName);
-            text.Append("' and exposes: ");
+            text.Append("The object is of type '").Append(type.FullName).Append("' and exposes: ");
             text.Append(members.Count > 0 ? string.Join(" | ", members.ToArray()) : "(no readable members)");
             if (members.Count >= MaxMembersReported) text.Append(" | …(truncated)");
 
-            log.Failure("transform: matrix", text.ToString());
+            return text.ToString();
         }
 
         // ------------------------------------------------------------------ interpreting
