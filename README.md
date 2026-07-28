@@ -80,6 +80,13 @@ lung as in a brain. Where the folding is confined to a region that does not affe
 use, TG-132 asks for that influence to be evaluated — that judgement is the physicist's, and
 the tool does not pre-empt it by relaxing the limit.
 
+**A value that is true by definition does not count as verification.** On a rigid transform the
+Jacobian is 0 % and the smoothness 1.0 — not because this registration is good, but because
+every rigid transform in existence gives those numbers. They are still shown, since a signed
+report should record what the transform guarantees, but they are excluded from the verdict's
+tally of evaluated metrics. Left in, they produced a `PARTIALLY COMPLIANT` on a case where
+neither image would load at all, on the strength of "the 1 evaluated metric meets the profile".
+
 Each metric declares its position in `Models/MetricCatalog.cs`, in a `GatingBasis` field the
 constructor refuses to leave blank, and the same text is printed in the report appendix.
 

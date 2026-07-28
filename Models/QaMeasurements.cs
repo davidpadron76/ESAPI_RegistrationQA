@@ -45,12 +45,26 @@ namespace ESAPI_RegistrationQA.Models
         /// <summary>How the value was obtained, when it does exist.</summary>
         public string Note { get; private set; }
 
-        private MeasuredValue(double? value, MeasurementState state, string reason, string note)
+        /// <summary>
+        /// True when the value follows from the kind of transform rather than from this
+        /// registration: a rigid transform has |J| = 1 and a constant field gradient, so those
+        /// two metrics come out identical on every rigid registration ever audited.
+        ///
+        /// The value is still worth showing — it is a true statement about what a rigid
+        /// transform guarantees, and a signed report should carry it. What it must not do is
+        /// count as evidence that something was verified. Left unmarked, it did: a case where
+        /// the images would not load at all was reported as PARTIALLY COMPLIANT because "the 1
+        /// evaluated metric meets the profile", and that one metric was a tautology.
+        /// </summary>
+        public bool IsAnalytic { get; private set; }
+
+        private MeasuredValue(double? value, MeasurementState state, string reason, string note, bool isAnalytic)
         {
             Value = value;
             State = state;
             UnavailableReason = reason;
             Note = note;
+            IsAnalytic = isAnalytic;
         }
 
         public bool IsAvailable { get { return State == MeasurementState.Measured; } }
@@ -63,14 +77,27 @@ namespace ESAPI_RegistrationQA.Models
             if (double.IsNaN(value) || double.IsInfinity(value))
                 return Unavailable("the computation produced a non-finite value");
 
-            return new MeasuredValue(value, MeasurementState.Measured, null, note);
+            return new MeasuredValue(value, MeasurementState.Measured, null, note, false);
+        }
+
+        /// <summary>
+        /// A value that follows from the definition of the transform rather than from a
+        /// measurement of this registration. Shown like any other, but excluded from the count
+        /// of metrics that establish compliance. See <see cref="IsAnalytic"/>.
+        /// </summary>
+        public static MeasuredValue Analytic(double value, string note)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value))
+                return Unavailable("the computation produced a non-finite value");
+
+            return new MeasuredValue(value, MeasurementState.Measured, null, note, true);
         }
 
         /// <summary>The metric was attempted and failed. It stays visible as N/A.</summary>
         public static MeasuredValue Unavailable(string reason)
         {
             return new MeasuredValue(null, MeasurementState.Unavailable,
-                reason ?? "reason not specified", null);
+                reason ?? "reason not specified", null, false);
         }
 
         /// <summary>
@@ -85,7 +112,7 @@ namespace ESAPI_RegistrationQA.Models
         public static MeasuredValue NotApplicable(string reason)
         {
             return new MeasuredValue(null, MeasurementState.NotApplicable,
-                reason ?? "does not apply to this case", null);
+                reason ?? "does not apply to this case", null, false);
         }
     }
 

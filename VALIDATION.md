@@ -49,6 +49,35 @@ the verdict red on a number nobody had measured. The substitution has been remov
 
 ---
 
+## 0a. Are the voxels actually being read?
+
+**Setup.** Any registration. Diagnostics tab.
+
+**Expected.** Two lines per series:
+
+```
+GetVoxels        reading voxels through Frame.GetVoxels(int, ushort[x,y])
+intensity range  min -1000.0, max 1200.0, mean -350.0 over 2,015,232 voxels
+```
+
+The carrier and buffer shape named will depend on your Eclipse version. What matters is the
+second line: **min and max must differ.** If they are equal, the API returned without writing
+anything and the audit has nothing to work with — no intensity metrics, and no structure metrics
+either, since the sampling grid is only kept when a volume loads.
+
+This is the failure the first field test hit. `Frame.GetVoxels(int, ushort[*,*])` accepted the
+call, threw nothing, and left the buffer at zero, which after the HU ramp reads as a uniform
+−1000 HU across the whole volume. The plugin now tries every combination of carrier
+(`Frame`, `Image`, the image object) and buffer shape, and accepts one only once it has written
+non-constant data to a probe plane — a third, a half and two thirds of the way through the
+volume, never plane 0, which on a head CT is uniform air and would look identical to a buffer
+that was never touched.
+
+If every combination fails, the diagnostics list each attempt with why, plus the full member
+surface of every candidate object. **Send that.**
+
+---
+
 ## 0b. Deformable registration — the point mapping
 
 **Setup.** Open a deformable registration. Any one will do.
@@ -291,6 +320,7 @@ Open an issue at
 |---|---|---|---|---|---|
 | 0 | **Matrix read from the API** | `API matrix (…)` | | | property path and shape |
 | 0 | Frame of Reference read | same / different | | | affects whether Max Displacement is graded |
+| 0a | **Voxels read: min ≠ max** | real HU range | | | if equal, nothing downstream works |
 | 0b | **Deformable: point mapping found** | method named in Diagnostics | | | if not, everything is N/A |
 | 1 | Identity — NCC | 1.000 | | | |
 | 1 | Identity — NMI | 2.000 | | | |

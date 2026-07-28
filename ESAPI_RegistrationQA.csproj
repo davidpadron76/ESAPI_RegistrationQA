@@ -156,6 +156,7 @@
     <Compile Include="Services\SampledVolume.cs" />
     <Compile Include="Services\SimilarityCalculator.cs" />
     <Compile Include="Services\VoxelPairSampler.cs" />
+    <Compile Include="Services\VoxelPlaneReader.cs" />
 
     <Compile Include="UI\MainControl.xaml.cs">
       <DependentUpon>MainControl.xaml</DependentUpon>

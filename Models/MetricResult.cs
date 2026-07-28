@@ -55,6 +55,13 @@ namespace ESAPI_RegistrationQA.Models
         /// <summary>How the value was obtained (e.g. "exact by definition").</summary>
         public string MeasurementNote { get; set; }
 
+        /// <summary>
+        /// True when the value follows from the kind of transform rather than from this
+        /// registration. Shown like any other value, but excluded from the count of metrics
+        /// that can establish compliance. See <see cref="MeasuredValue.IsAnalytic"/>.
+        /// </summary>
+        public bool IsAnalytic { get; set; }
+
         public DateTime Timestamp { get; set; }
 
         public MetricResult()

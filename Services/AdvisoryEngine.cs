@@ -388,13 +388,24 @@ namespace ESAPI_RegistrationQA.Services
             string registrationId = measurements != null ? measurements.RegistrationId : "(unknown)";
             int red = metrics.Count(m => m.Status == QASemaphore.Red);
             int yellow = metrics.Count(m => m.Status == QASemaphore.Yellow);
-            int green = metrics.Count(m => m.Status == QASemaphore.Green);
+
+            // Analytic values are excluded from the green count on purpose. A rigid transform
+            // has |J| = 1 and a constant field gradient by definition, so those two metrics
+            // pass on every rigid registration ever audited and say nothing about this one.
+            // Counting them made a case whose images would not load at all come out as
+            // PARTIALLY COMPLIANT, on the strength of "the 1 evaluated metric meets the
+            // profile" — a tautology standing in for verification.
+            int green = metrics.Count(m => m.Status == QASemaphore.Green && !m.IsAnalytic);
+            int analytic = metrics.Count(m => m.IsAnalytic && m.Status != QASemaphore.NotAvailable);
 
             // Measured, but with no tolerance behind them, so they cannot count towards
             // compliance or against it. They are counted separately because the difference
             // between "nothing was measured" and "things were measured that cannot decide"
             // is exactly what the reader needs in order to know what to do next.
-            int informational = metrics.Count(m => m.Status == QASemaphore.Informational);
+            // Analytic values are excluded here too. Smoothness on a rigid transform is both
+            // informational and a tautology, and counting it would let the verdict announce
+            // that one metric was measured when nothing about this registration was.
+            int informational = metrics.Count(m => m.Status == QASemaphore.Informational && !m.IsAnalytic);
 
             if (red > 0)
             {
@@ -434,8 +445,14 @@ namespace ESAPI_RegistrationQA.Services
                 set.OverallSeverity = AdvisorySeverity.Warning;
                 set.OverallStatus = string.Format(CultureInfo.InvariantCulture,
                     "NO EVIDENCE — No metric of registration '{0}' could be evaluated. " +
-                    "See the diagnostics tab for what failed.",
-                    registrationId);
+                    "See the diagnostics tab for what failed.{1}",
+                    registrationId,
+                    analytic > 0
+                        ? string.Format(CultureInfo.InvariantCulture,
+                            " The {0} metric(s) shown with a value are exact by definition for this " +
+                            "kind of transform and would read the same on any registration, so they " +
+                            "verify nothing.", analytic)
+                        : string.Empty);
                 return;
             }
 

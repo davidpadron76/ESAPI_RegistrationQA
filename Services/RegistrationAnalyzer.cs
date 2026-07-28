@@ -132,15 +132,22 @@ namespace ESAPI_RegistrationQA.Services
         /// </summary>
         private void ClassifyRegistration(dynamic registration, QaMeasurements measurements)
         {
+            ReportRegistrationStatus(registration);
+
             dynamic value;
             string source;
 
-            if (Dyn.TryGetFirst("registration: declared type", _log, out value, out source,
+            // The log is deliberately null here. On VMS.IRS neither property exists — the
+            // registration object's member list confirms it — so their absence is the normal
+            // case and not something to report as a failure. The class name is the real source
+            // of this information on that API, and it is reliable: MIRSRigidRegistration and
+            // MIRSNonRigidRegistration are distinct types.
+            if (Dyn.TryGetFirst("registration: declared type", null, out value, out source,
                     Dyn.Alt("RegistrationType", () => registration.RegistrationType),
                     Dyn.Alt("Type", () => registration.Type)))
             {
                 string text = Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
-                _log.Info("registration: declared type", text + " (via " + source + ")");
+                _log.Info("registration: type", text + " (via " + source + ")");
                 ApplyTypeText(text, measurements);
                 return;
             }
@@ -149,11 +156,38 @@ namespace ESAPI_RegistrationQA.Services
             Dyn.TryInvoke("registration: CLR type name",
                 () => { clrTypeName = ((object)registration).GetType().Name; }, _log);
 
-            _log.Warning("registration: type",
-                "the API does not expose the registration type; inferring it from the CLR class name '" +
-                clrTypeName + "', which is fragile across versions");
+            _log.Info("registration: type",
+                "taken from the class name '" + clrTypeName + "'. This API exposes no " +
+                "RegistrationType or Type property, so the class name is the only source; it " +
+                "distinguishes rigid from non-rigid reliably, but a future version could rename " +
+                "the class without notice.");
 
             ApplyTypeText(clrTypeName, measurements);
+        }
+
+        /// <summary>
+        /// Records the registration's approval status where the API offers it.
+        ///
+        /// Purely contextual, and not turned into a metric: whether a registration has been
+        /// approved in Eclipse says who signed it off, not whether it is geometrically
+        /// accurate. But it belongs in a report that will be countersigned, because auditing a
+        /// registration that was never approved for clinical use means something different
+        /// from auditing one that was.
+        /// </summary>
+        private void ReportRegistrationStatus(dynamic registration)
+        {
+            dynamic value;
+            string source;
+
+            if (!Dyn.TryGetFirst("registration: status", null, out value, out source,
+                    Dyn.Alt("Status", () => registration.Status),
+                    Dyn.Alt("ApprovalStatus", () => registration.ApprovalStatus)))
+            {
+                return;
+            }
+
+            _log.Info("registration: status",
+                Convert.ToString(value, CultureInfo.InvariantCulture) + " (via " + source + ")");
         }
 
         private static void ApplyTypeText(string text, QaMeasurements measurements)
@@ -396,13 +430,20 @@ namespace ESAPI_RegistrationQA.Services
         /// </summary>
         private IPointMapper BuildPointMapper(dynamic registration, QaMeasurements measurements)
         {
-            // Tried first even for a registration Eclipse calls rigid: a point-by-point
-            // mapping straight from the API needs no convention detection and no matrix.
-            DynamicPointMapper deformableMapper =
-                DeformableMapperReader.TryBuild((object)registration, _log);
-            if (deformableMapper != null) return deformableMapper;
+            // Only a deformable registration needs this search, and only there is its absence
+            // a fault worth reporting. Running it on a rigid registration produced a diagnostic
+            // failure saying no deformation mapping was found on a MIRSRigidRegistration —
+            // true, expected, and pure noise in a tab whose whole purpose is to point at the
+            // one thing that actually went wrong.
+            if (measurements.IsDeformable)
+            {
+                DynamicPointMapper deformableMapper =
+                    DeformableMapperReader.TryBuild((object)registration, _log);
 
-            if (measurements.IsDeformable) return null;
+                // No fallback to the linear component: it describes a different transform from
+                // the one under audit.
+                return deformableMapper;
+            }
 
             if (measurements.Transform == null) return null;
 
@@ -448,10 +489,14 @@ namespace ESAPI_RegistrationQA.Services
 
             const string analyticNote = "exact by definition for a rigid transform, not estimated";
 
-            measurements.JacobianNegativePercent = MeasuredValue.Measured(0.0,
+            // Analytic, not measured: these two follow from the transform being rigid and come
+            // out identical on every rigid registration. They are shown, because they are true
+            // statements a signed report should carry, but they cannot count as evidence that
+            // this particular registration was verified.
+            measurements.JacobianNegativePercent = MeasuredValue.Analytic(0.0,
                 "|J| = 1 at every point of a rigid transform: no folding is possible. " + analyticNote);
 
-            measurements.Smoothness = MeasuredValue.Measured(1.0,
+            measurements.Smoothness = MeasuredValue.Analytic(1.0,
                 "the gradient of the displacement field is constant. " + analyticNote);
 
             if (measurements.Transform == null)

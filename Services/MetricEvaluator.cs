@@ -127,7 +127,10 @@ namespace ESAPI_RegistrationQA.Services
                     Value = value,
                     Status = QASemaphore.Informational,
                     ThresholdCriteria = ungatedReason,
-                    MeasurementNote = measured.Note
+                    MeasurementNote = measured.Note,
+                    // Smoothness arrives here and is also a tautology on a rigid transform.
+                    // Without this the verdict would count it as a metric that was measured.
+                    IsAnalytic = measured.IsAnalytic
                 };
             }
 
@@ -140,6 +143,7 @@ namespace ESAPI_RegistrationQA.Services
                 Status = profile != null ? profile.Evaluate(key, value) : QASemaphore.NotAvailable,
                 ThresholdCriteria = profile != null ? profile.DescribeCriteria(key) : "—",
                 MeasurementNote = measured.Note,
+                IsAnalytic = measured.IsAnalytic,
                 UnavailableReason = profile != null && profile.TryGetLimits(key, out _)
                     ? null
                     : "the active profile defines no threshold for this metric"

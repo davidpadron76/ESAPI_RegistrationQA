@@ -136,6 +136,13 @@ namespace ESAPI_RegistrationQA.Services
         /// Returns the first accessor that succeeds from a list of alternatives, recording
         /// which one worked. Useful when the same information lives under different property
         /// names depending on the API version.
+        ///
+        /// An alternative that does not answer is not a fault — it is how the search works.
+        /// Trying four property names and finding the fourth is a success, and the earlier
+        /// three misses belong at Info, not at Failure. Getting that wrong made a working
+        /// Eclipse report five failures, none of which was the actual problem, while the real
+        /// fault sat further down the list as an Info line. Only exhausting every alternative
+        /// is recorded as a failure.
         /// </summary>
         public static bool TryGetFirst(
             string operation,
@@ -149,18 +156,65 @@ namespace ESAPI_RegistrationQA.Services
 
             if (alternatives == null) return false;
 
+            var misses = new System.Collections.Generic.List<string>();
+
             foreach (var alternative in alternatives)
             {
                 dynamic candidate;
-                if (TryGet(operation + " (" + alternative.Item1 + ")", alternative.Item2, log, out candidate))
+                string miss;
+
+                if (TryGetQuiet(alternative.Item2, out candidate, out miss))
                 {
                     value = candidate;
                     usedAlternative = alternative.Item1;
+
+                    if (log != null && misses.Count > 0)
+                    {
+                        log.Info(operation,
+                            "resolved via " + alternative.Item1 + "; earlier alternatives did not answer — " +
+                            string.Join("; ", misses.ToArray()));
+                    }
+
                     return true;
                 }
+
+                misses.Add(alternative.Item1 + " (" + miss + ")");
+            }
+
+            if (log != null)
+            {
+                log.Failure(operation,
+                    "no alternative answered — " + string.Join("; ", misses.ToArray()));
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Evaluates an accessor without logging, reporting why it did not answer so the
+        /// caller can decide what severity the miss deserves.
+        /// </summary>
+        private static bool TryGetQuiet(Func<object> accessor, out dynamic value, out string reason)
+        {
+            value = null;
+            reason = null;
+
+            try
+            {
+                object result = accessor();
+                if (result == null)
+                {
+                    reason = "present but null";
+                    return false;
+                }
+                value = result;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                reason = DiagnosticLog.Describe(ex);
+                return false;
+            }
         }
 
         public static Tuple<string, Func<object>> Alt(string name, Func<object> accessor)
