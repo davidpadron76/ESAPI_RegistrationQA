@@ -141,17 +141,27 @@ useful today despite the uncalibrated thresholds.
 
 ## Building
 
-The Varian assemblies are located through the `VarianScriptingPath` property, which defaults
-to `C:\Program Files (x86)\Varian\ProductLine\Workspaces\VMS.IRS.Workspace`.
+Two paths drive the build, and both have defaults that work on a standard installation.
 
-For a different path, use any of these three options:
+| Property | Default | What it is |
+|---|---|---|
+| `VarianScriptingPath` | Probes the usual Varian install locations | Where `VMS.IRS.Scripting.dll` lives |
+| `EclipsePluginsPath` | `%USERPROFILE%\Documents\Contouring Scripting API\Projects\plugins` | Where the built assembly is written |
+
+**The build output goes straight into the Eclipse plugins folder**, not into `bin\`. Eclipse
+only lists scripts it finds there, so building anywhere else produces an assembly that
+compiles cleanly and cannot be invoked. The destination is printed at the end of every build
+so there is never any doubt about where the DLL ended up.
+
+Override either property in any of three ways:
 
 ```powershell
 # environment variable
+$env:EclipsePluginsPath = "D:\Scripts\plugins"
 $env:VarianScriptingPath = "D:\Program Files (x86)\Varian\...\VMS.IRS.Workspace"
 
 # or on the command line
-msbuild ESAPI_RegistrationQA.csproj /p:VarianScriptingPath="D:\..."
+msbuild ESAPI_RegistrationQA.csproj /p:EclipsePluginsPath="D:\Scripts\plugins"
 ```
 
 Or a `Directory.Build.props` next to the solution (best left unversioned):
@@ -160,6 +170,7 @@ Or a `Directory.Build.props` next to the solution (best left unversioned):
 <Project>
   <PropertyGroup>
     <VarianScriptingPath>D:\Program Files (x86)\Varian\...\VMS.IRS.Workspace</VarianScriptingPath>
+    <EclipsePluginsPath>D:\Scripts\plugins</EclipsePluginsPath>
   </PropertyGroup>
 </Project>
 ```
@@ -168,9 +179,11 @@ The project builds as **x64**, which is what Eclipse 15.6 and later require.
 
 ## Usage
 
-1. Build in Release.
-2. Copy the assembly to the application's scripts directory (or to System Scripts).
-3. Launch from **Contouring / Registration → Tools → Scripts**.
+1. Build in Release. The assembly is written to `EclipsePluginsPath` automatically.
+2. Launch from **Contouring / Registration → Tools → Scripts**.
+
+If the script does not appear in the list, check the destination printed by the build against
+the folder shown in the Eclipse script dialog.
 
 ## Reading the verdict
 
