@@ -106,6 +106,7 @@ namespace ESAPI_RegistrationQA.Models
             profile.Limits.Add(MetricKeys.MaxDisplacement, new ThresholdLimits(15.0, 22.0));
             profile.Limits.Add(MetricKeys.Smoothness, new ThresholdLimits(0.90, 0.80));
             profile.Limits.Add(MetricKeys.Dsc, new ThresholdLimits(0.85, 0.75));
+            profile.Limits.Add(MetricKeys.Mda, new ThresholdLimits(2.0, 3.0));
             profile.Limits.Add(MetricKeys.Hd95, new ThresholdLimits(3.0, 5.0));
             profile.Limits.Add(MetricKeys.TreMean, new ThresholdLimits(2.0, 3.0));
             profile.Limits.Add(MetricKeys.TreMax, new ThresholdLimits(3.0, 5.0));
@@ -124,6 +125,7 @@ namespace ESAPI_RegistrationQA.Models
             profile.Limits.Add(MetricKeys.MaxDisplacement, new ThresholdLimits(5.0, 10.0));
             profile.Limits.Add(MetricKeys.Smoothness, new ThresholdLimits(0.95, 0.88));
             profile.Limits.Add(MetricKeys.Dsc, new ThresholdLimits(0.90, 0.82));
+            profile.Limits.Add(MetricKeys.Mda, new ThresholdLimits(1.0, 2.0));
             profile.Limits.Add(MetricKeys.Hd95, new ThresholdLimits(2.0, 3.5));
             profile.Limits.Add(MetricKeys.TreMean, new ThresholdLimits(1.0, 2.0));
             profile.Limits.Add(MetricKeys.TreMax, new ThresholdLimits(1.5, 2.5));
@@ -142,6 +144,7 @@ namespace ESAPI_RegistrationQA.Models
             profile.Limits.Add(MetricKeys.MaxDisplacement, new ThresholdLimits(20.0, 30.0));
             profile.Limits.Add(MetricKeys.Smoothness, new ThresholdLimits(0.88, 0.78));
             profile.Limits.Add(MetricKeys.Dsc, new ThresholdLimits(0.80, 0.70));
+            profile.Limits.Add(MetricKeys.Mda, new ThresholdLimits(2.5, 3.5));
             profile.Limits.Add(MetricKeys.Hd95, new ThresholdLimits(4.0, 6.0));
             profile.Limits.Add(MetricKeys.TreMean, new ThresholdLimits(2.5, 3.5));
             profile.Limits.Add(MetricKeys.TreMax, new ThresholdLimits(4.0, 6.0));
@@ -160,6 +163,7 @@ namespace ESAPI_RegistrationQA.Models
             profile.Limits.Add(MetricKeys.MaxDisplacement, new ThresholdLimits(25.0, 35.0));
             profile.Limits.Add(MetricKeys.Smoothness, new ThresholdLimits(0.85, 0.75));
             profile.Limits.Add(MetricKeys.Dsc, new ThresholdLimits(0.80, 0.70));
+            profile.Limits.Add(MetricKeys.Mda, new ThresholdLimits(3.0, 4.5));
             profile.Limits.Add(MetricKeys.Hd95, new ThresholdLimits(4.5, 6.5));
             profile.Limits.Add(MetricKeys.TreMean, new ThresholdLimits(3.0, 5.0));
             profile.Limits.Add(MetricKeys.TreMax, new ThresholdLimits(5.0, 8.0));

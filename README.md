@@ -32,8 +32,9 @@ number.
 | **Jacobian < 0** | Has the deformation folded tissue onto itself? | Table III | Exact for rigid · N/A for DIR |
 | **Max Displacement** | How far has the registration moved the anatomy? | Not tabulated; plausibility check | Exact for rigid · N/A for DIR |
 | **Smoothness** | Is the deformation physically plausible? | Not tabulated; related to §4.C.3 | Exact for rigid · N/A for DIR |
-| **DSC** | Do the same organs end up in the same place? | Table III, ~0.80–0.90 | Not implemented |
-| **HD95** | How far apart are the surfaces where they disagree most? | Not tabulated; report specifies MDA | Not implemented |
+| **DSC** | Do the same organs end up in the same place? | Table III, ~0.80–0.90 | Measured |
+| **MDA** | On average, how far apart are the two organ surfaces? | Table III, ~2–3 mm | Measured |
+| **HD95** | How far apart are the surfaces where they disagree most? | Not tabulated; report specifies MDA | Measured |
 | **TRE (mean)** | How large is the spatial error, in millimetres? | Table III, primary metric | Measured |
 | **TRE (max)** | Is any single landmark badly placed? | Table III; mean/max split is ours | Measured |
 | **Inverse consistency** | Is the algorithm behaving stably? | §4.C.4 and Table III | Measured |
@@ -47,9 +48,10 @@ every case where those metrics are available.
 
 Where the tool departs from the report, deliberately:
 
-- **HD95 instead of MDA.** Table III specifies Mean Distance to Agreement. HD95 is what the
-  segmentation literature reports, which keeps local results comparable with published
-  series. MDA is worth adding alongside it rather than in its place.
+- **HD95 alongside MDA.** Only MDA is in Table III. HD95 is kept as well because it is what
+  the segmentation literature reports, which keeps local results comparable with published
+  series. Read together they separate a uniform offset from a local failure: on two
+  concentric surfaces the two agree, and they diverge as the disagreement becomes uneven.
 - **Site-specific threshold profiles.** TG-132 ties its tolerances to voxel dimension and
   contouring uncertainty rather than to anatomical site. The DSC range comes from Table III;
   the rest are inherited values pending calibration against real data. See
@@ -58,8 +60,18 @@ Where the tool departs from the report, deliberately:
 ## What it actually measures
 
 The plugin produces a report intended to be signed by a medical physicist, so it **never
-substitutes a metric it could not measure with a plausible-looking value**: it marks it *N/A*
-with the specific reason, visible in the interface and in the report.
+substitutes a metric it could not measure with a plausible-looking value**.
+
+There are two ways a metric can have no number, and they are treated differently:
+
+- **It does not apply to this case** — a deformation metric on a rigid registration, TRE with
+  no landmarks placed. The row is **not shown at all**: it would say the same thing on every
+  case, and a table full of N/A in a signed document suggests missing data when nothing is
+  missing. The omission is accounted for in the diagnostics tab and in a dedicated section of
+  the report, with what would be needed to obtain it.
+- **It was attempted and failed** — the volume would not load, the joint histogram could not
+  be built. This one **stays visible as N/A** with its reason, because it points at something
+  to fix and hiding it would bury the fault.
 
 | Metric | Status | How it is obtained |
 |---|---|---|
@@ -73,7 +85,7 @@ with the specific reason, visible in the interface and in the report.
 | **Jacobian < 0** | ✅ Exact by definition (rigid) | 0% — a rigid transform has \|J\| = 1 everywhere. |
 | **Smoothness** | ✅ Exact by definition (rigid) | 1.0 — the field gradient is constant. |
 | **Jacobian, displacement and smoothness** | ❌ **N/A for deformable** | Require traversing the deformation vector field, which the Varian scripting API does not expose. |
-| **DSC / HD95** | ❌ **N/A** | Require rasterising a structure pair matched by identifier onto a common grid. Not implemented. |
+| **DSC, MDA and HD95** | ✅ Measured | Both structures rasterised onto one grid — the registered one carried through the registration first — then compared through a single distance transform. Needs contours with the same identifier on both series. |
 
 For **deformable** registrations, if the API exposes a point-by-point mapping method, the
 intensity metrics and the TRE are computed by traversing the deformation field. If it does
@@ -106,10 +118,11 @@ transform from the one under audit.
 
 The numbers are measurements; the semaphore colours are provisional.
 
-What has been verified: the pure mathematics, through 52 analytic checks in
+What has been verified: the pure mathematics, through 67 analytic checks in
 `tools/verify_math.py` — Euler extraction, matrix convention detection, voxel↔patient
 round-trips, the similarity metrics against their theoretical values, transform composition,
-and TRE against known landmark displacements.
+TRE against known landmark displacements, the distance transform against brute force, and DSC
+against the analytic intersection volume of two spheres.
 
 What has not: anything touching the Varian API beyond a single Eclipse installation. TRE and
 inverse consistency in particular have never run against real data. And the tolerance limits

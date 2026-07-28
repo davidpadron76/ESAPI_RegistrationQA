@@ -37,9 +37,20 @@ namespace ESAPI_RegistrationQA.Services
 
         public static readonly string[] StructureKeys =
         {
-            MetricKeys.Dsc, MetricKeys.Hd95
+            MetricKeys.Dsc, MetricKeys.Mda, MetricKeys.Hd95
         };
 
+        /// <summary>
+        /// Evaluates a group of metrics, omitting those that do not apply to this case.
+        ///
+        /// A metric that could never be filled here — a deformation metric on a rigid
+        /// registration, a landmark metric with no landmarks — would show the same N/A on
+        /// every case for ever. It is dropped from the table and recorded in the diagnostics
+        /// instead, so the omission stays traceable without occupying a row.
+        ///
+        /// A metric that was attempted and failed is kept. That one points at something to
+        /// fix, and hiding it would bury the fault.
+        /// </summary>
         public static List<MetricResult> Evaluate(
             QaMeasurements measurements, ThresholdProfile profile, IEnumerable<string> keys)
         {
@@ -47,7 +58,30 @@ namespace ESAPI_RegistrationQA.Services
             if (keys == null) return results;
 
             foreach (string key in keys)
+            {
+                if (measurements != null && measurements.ForKey(key).IsNotApplicable) continue;
                 results.Add(EvaluateOne(measurements, profile, key));
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// The metrics that did not apply to this case, with the reason. Feeds the
+        /// diagnostics view and the report, which is where the omissions are accounted for.
+        /// </summary>
+        public static List<MetricResult> NotApplicable(QaMeasurements measurements)
+        {
+            var results = new List<MetricResult>();
+            if (measurements == null) return results;
+
+            foreach (MetricDefinition definition in MetricCatalog.All)
+            {
+                MeasuredValue measured = measurements.ForKey(definition.Key);
+                if (!measured.IsNotApplicable) continue;
+
+                results.Add(MetricResult.Unavailable(definition.Key, measured.UnavailableReason));
+            }
 
             return results;
         }

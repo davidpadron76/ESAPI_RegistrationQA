@@ -36,7 +36,7 @@ namespace ESAPI_RegistrationQA.Services
         /// Bumped whenever columns are added, removed or redefined. Pooled files with
         /// different schema versions must not be concatenated blindly.
         /// </summary>
-        public const string SchemaVersion = "2";
+        public const string SchemaVersion = "3";
 
         private static readonly string[] Columns =
         {
@@ -56,7 +56,10 @@ namespace ESAPI_RegistrationQA.Services
             "MaxDisplacement_mm",
             "Smoothness",
             "DSC",
+            "MDA_mm",
             "HD95_mm",
+            "StructurePairs",
+            "WorstStructure",
             "TRE_Mean_mm",
             "TRE_Max_mm",
             "TRE_Landmarks",
@@ -77,6 +80,7 @@ namespace ESAPI_RegistrationQA.Services
             "ToolVerdict",
             "DiagnosticFailures",
             "DiagnosticWarnings",
+            "NotApplicable",
             "PhysicistVerdict",
             "Notes"
         };
@@ -146,7 +150,12 @@ namespace ESAPI_RegistrationQA.Services
             row.Add(Metric(m, MetricKeys.MaxDisplacement));
             row.Add(Metric(m, MetricKeys.Smoothness));
             row.Add(Metric(m, MetricKeys.Dsc));
+            row.Add(Metric(m, MetricKeys.Mda));
             row.Add(Metric(m, MetricKeys.Hd95));
+            row.Add(m != null && m.StructurePairCount > 0
+                ? m.StructurePairCount.ToString(CultureInfo.InvariantCulture)
+                : string.Empty);
+            row.Add(m != null ? (m.WorstStructureId ?? string.Empty) : string.Empty);
             row.Add(Metric(m, MetricKeys.TreMean));
             row.Add(Metric(m, MetricKeys.TreMax));
             row.Add(m != null && m.TreLandmarkCount > 0
@@ -186,6 +195,11 @@ namespace ESAPI_RegistrationQA.Services
             row.Add(failures.ToString(CultureInfo.InvariantCulture));
             row.Add(warnings.ToString(CultureInfo.InvariantCulture));
 
+            // Which metrics did not apply to this case. Empty cells alone cannot distinguish
+            // a metric that failed from one that never applied, and pooled analysis needs
+            // that difference: the first is a data quality problem, the second is not.
+            row.Add(NotApplicableKeys(m));
+
             // The two columns the tool cannot fill. PhysicistVerdict is the ground-truth
             // label: without a human judgement next to each measurement there is nothing to
             // calibrate a threshold against.
@@ -193,6 +207,20 @@ namespace ESAPI_RegistrationQA.Services
             row.Add(string.Empty);
 
             return row;
+        }
+
+        private static string NotApplicableKeys(QaMeasurements measurements)
+        {
+            if (measurements == null) return string.Empty;
+
+            var keys = new List<string>();
+            foreach (MetricDefinition definition in MetricCatalog.All)
+            {
+                if (measurements.ForKey(definition.Key).IsNotApplicable)
+                    keys.Add(definition.Key);
+            }
+
+            return string.Join(";", keys.ToArray());
         }
 
         private static string Metric(QaMeasurements measurements, string key)

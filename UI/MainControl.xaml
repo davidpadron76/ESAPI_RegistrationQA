@@ -8,6 +8,8 @@
 
     <UserControl.Resources>
 
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+
         <!-- Semaphore palette. A single point of definition for all three tables. -->
         <SolidColorBrush x:Key="StatusGreenBg"  Color="#C8E6C9"/>
         <SolidColorBrush x:Key="StatusGreenFg"  Color="#2E7D32"/>
@@ -218,7 +220,8 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
-                    <GroupBox Grid.Column="0" Header="Intensity similarity">
+                    <GroupBox Grid.Column="0" Header="Intensity similarity"
+                              Visibility="{Binding HasIntensityMetrics, Converter={StaticResource BoolToVisibility}}">
                         <DataGrid ItemsSource="{Binding IntensityMetrics}" Style="{StaticResource MetricGridStyle}">
                             <DataGrid.Columns>
                                 <DataGridTemplateColumn Header="Metric" Width="*"
@@ -232,7 +235,8 @@
                         </DataGrid>
                     </GroupBox>
 
-                    <GroupBox Grid.Column="2" Header="Deformation and topology">
+                    <GroupBox Grid.Column="2" Header="Deformation and topology"
+                              Visibility="{Binding HasDeformationMetrics, Converter={StaticResource BoolToVisibility}}">
                         <DataGrid ItemsSource="{Binding DeformationMetrics}" Style="{StaticResource MetricGridStyle}">
                             <DataGrid.Columns>
                                 <DataGridTemplateColumn Header="Metric" Width="*"
@@ -249,7 +253,8 @@
             </TabItem>
 
             <!-- TG-132 Table III primary metrics -->
-            <TabItem Header="Spatial Accuracy">
+            <TabItem Header="Spatial Accuracy"
+                     Visibility="{Binding HasSpatialAccuracyMetrics, Converter={StaticResource BoolToVisibility}}">
                 <GroupBox Header="TG-132 Table III — metrics expressed in millimetres of spatial error" Margin="0,10,0,0">
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Top" Margin="10,6,10,0" TextWrapping="Wrap"
@@ -282,7 +287,8 @@
             </TabItem>
 
             <!-- Structures -->
-            <TabItem Header="Structures &amp; Surface">
+            <TabItem Header="Structures &amp; Surface"
+                     Visibility="{Binding HasStructureMetrics, Converter={StaticResource BoolToVisibility}}">
                 <GroupBox Header="Anatomical alignment (DSC / HD95)" Margin="0,10,0,0">
                     <DataGrid ItemsSource="{Binding StructureQAMetrics}" Style="{StaticResource MetricGridStyle}">
                         <DataGrid.Columns>
@@ -293,16 +299,6 @@
                             <DataGridTextColumn Header="Criterion" Binding="{Binding ThresholdCriteria}" Width="160"/>
                             <DataGridTemplateColumn Header="Status" Width="80"
                                                     CellTemplate="{StaticResource StatusBadgeTemplate}"/>
-                            <DataGridTextColumn Header="Reason" Binding="{Binding UnavailableReason}" Width="3*">
-                                <DataGridTextColumn.ElementStyle>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="TextWrapping" Value="Wrap"/>
-                                        <Setter Property="Foreground" Value="#777777"/>
-                                        <Setter Property="FontSize" Value="10.5"/>
-                                        <Setter Property="Margin" Value="0,4"/>
-                                    </Style>
-                                </DataGridTextColumn.ElementStyle>
-                            </DataGridTextColumn>
                         </DataGrid.Columns>
                     </DataGrid>
                 </GroupBox>
@@ -370,6 +366,28 @@
                         <TextBlock DockPanel.Dock="Top" Text="{Binding DiagnosticsSummary}"
                                    Margin="10,6,10,0" FontWeight="SemiBold" FontSize="11"
                                    Foreground="#607D8B" TextWrapping="Wrap"/>
+                        <GroupBox DockPanel.Dock="Top" Header="Metrics not applicable to this case"
+                                  Margin="0,8,0,4" FontSize="11"
+                                  Visibility="{Binding HasNotApplicableMetrics, Converter={StaticResource BoolToVisibility}}">
+                            <DataGrid ItemsSource="{Binding NotApplicableMetrics}"
+                                      Style="{StaticResource MetricGridStyle}" RowHeight="NaN"
+                                      MaxHeight="180">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Metric" Binding="{Binding MetricName}" Width="2*"/>
+                                    <DataGridTextColumn Header="Why it does not apply"
+                                                        Binding="{Binding UnavailableReason}" Width="5*">
+                                        <DataGridTextColumn.ElementStyle>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="TextWrapping" Value="Wrap"/>
+                                                <Setter Property="Foreground" Value="#777777"/>
+                                                <Setter Property="FontSize" Value="10.5"/>
+                                                <Setter Property="Margin" Value="0,4"/>
+                                            </Style>
+                                        </DataGridTextColumn.ElementStyle>
+                                    </DataGridTextColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </GroupBox>
                         <DataGrid ItemsSource="{Binding Diagnostics}" Style="{StaticResource MetricGridStyle}"
                                   RowHeight="NaN">
                             <DataGrid.Columns>

@@ -96,11 +96,9 @@ namespace ESAPI_RegistrationQA.Services
             // --- Deformation / topology -------------------------------------------------
             ComputeDeformationMetrics(measurements);
 
-            // --- Structures -------------------------------------------------------------
-            ComputeStructureMetrics(registration, measurements);
-
             // --- TG-132 Table III primary metrics ---------------------------------------
             RecordNativeVoxelSize(source, target, measurements);
+            ComputeStructureMetrics(sourceImage, registeredImage, measurements);
             ComputeTargetRegistrationError(registration, sourceImage, registeredImage, measurements);
             ComputeInverseConsistency(scriptContext, registration, sourceImage, registeredImage, measurements);
 
@@ -510,9 +508,10 @@ namespace ESAPI_RegistrationQA.Services
                     "requires traversing the deformation vector field (DVF), which the Varian scripting " +
                     "API does not expose. It cannot be derived from the linear matrix or from the images.";
 
-                measurements.JacobianNegativePercent = MeasuredValue.Unavailable(reason);
-                measurements.Smoothness = MeasuredValue.Unavailable(reason);
-                measurements.MaxDisplacement = MeasuredValue.Unavailable(reason);
+                measurements.JacobianNegativePercent = MeasuredValue.NotApplicable(reason);
+                measurements.Smoothness = MeasuredValue.NotApplicable(reason);
+                measurements.MaxDisplacement = MeasuredValue.NotApplicable(reason);
+                _log.Info("deformation metrics", reason);
                 return;
             }
 
@@ -550,60 +549,169 @@ namespace ESAPI_RegistrationQA.Services
         // ---------------------------------------------------------------- structures
 
         /// <summary>
-        /// DSC and HD95 require a matched pair: a reference contour and that same contour
-        /// propagated through the registration, identifiable with each other.
+        /// DSC, MDA and HD95 over the contour structures present on both series.
+        ///
+        /// Both structures are rasterised onto the same sampling grid — the one belonging to
+        /// the source image — with the registered structure carried through the registration
+        /// mapping first. From there the three metrics share a single distance transform.
+        ///
+        /// When several structures match, the worst case is reported rather than an average.
+        /// A mean across organs of very different size says nothing: a Dice of 0.85 is
+        /// excellent for a parotid and poor for a whole lung, so averaging them produces a
+        /// number that describes neither.
         ///
         /// The previous version walked <c>StructureSets[0]</c>, summed volumes and hashes of
         /// the identifiers, and turned that sum into a DSC through modular arithmetic. The
         /// result bore no relation to any overlap.
         /// </summary>
-        private void ComputeStructureMetrics(dynamic registration, QaMeasurements measurements)
+        private void ComputeStructureMetrics(
+            dynamic sourceImage, dynamic registeredImage, QaMeasurements measurements)
         {
-            int sourceStructures = CountStructures(() => registration.SourceImage.Image.StructureSets, "source image");
-            int targetStructures = CountStructures(() => registration.RegisteredImage.Image.StructureSets, "registered image");
-
-            string reason;
-
-            if (sourceStructures == 0 || targetStructures == 0)
+            if (sourceImage == null || registeredImage == null)
             {
-                reason = "there are no contours on both series (source: " + sourceStructures +
-                         ", registered: " + targetStructures + "). DSC and HD95 compare a reference contour " +
-                         "with that same contour after propagation; with only one contoured series there is " +
-                         "no pair to compare.";
-            }
-            else
-            {
-                reason = "contours exist on both series (source: " + sourceStructures +
-                         ", registered: " + targetStructures + "), but computing DSC and HD95 requires " +
-                         "rasterising both contours onto a common grid and matching them by identifier. " +
-                         "Not implemented in this version.";
+                const string reason = "the registration does not expose both images, so structures cannot be paired";
+                measurements.Dsc = MeasuredValue.Unavailable(reason);
+                measurements.Mda = MeasuredValue.Unavailable(reason);
+                measurements.Hd95 = MeasuredValue.Unavailable(reason);
+                return;
             }
 
-            measurements.Dsc = MeasuredValue.Unavailable(reason);
-            measurements.Hd95 = MeasuredValue.Unavailable(reason);
+            if (_mapper == null || _fixedGeometry == null)
+            {
+                measurements.Dsc = MeasuredValue.Unavailable(NoMappingReason(measurements));
+                measurements.Mda = MeasuredValue.Unavailable(NoMappingReason(measurements));
+                measurements.Hd95 = MeasuredValue.Unavailable(NoMappingReason(measurements));
+                return;
+            }
 
-            _log.Warning("structures", reason);
+            List<StructureRasterizer.NamedStructure> sourceStructures =
+                StructureRasterizer.ReadContourStructures(sourceImage, "source image", _log);
+            List<StructureRasterizer.NamedStructure> targetStructures =
+                StructureRasterizer.ReadContourStructures(registeredImage, "registered image", _log);
+
+            var targetById = new Dictionary<string, StructureRasterizer.NamedStructure>(
+                StringComparer.OrdinalIgnoreCase);
+            foreach (StructureRasterizer.NamedStructure structure in targetStructures)
+                targetById[structure.Id] = structure;
+
+            var pairs = new List<Tuple<StructureRasterizer.NamedStructure, StructureRasterizer.NamedStructure>>();
+            foreach (StructureRasterizer.NamedStructure structure in sourceStructures)
+            {
+                StructureRasterizer.NamedStructure counterpart;
+                if (targetById.TryGetValue(structure.Id, out counterpart))
+                    pairs.Add(Tuple.Create(structure, counterpart));
+            }
+
+            measurements.StructurePairCount = pairs.Count;
+
+            if (pairs.Count == 0)
+            {
+                string reason = string.Format(CultureInfo.InvariantCulture,
+                    "no contour structure carries the same identifier on both series (source: {0}, " +
+                    "registered: {1}). These metrics compare a reference contour with the same contour " +
+                    "after propagation, so a matching pair is required. Copying the structure to the " +
+                    "second series under the same name enables them.",
+                    sourceStructures.Count, targetStructures.Count);
+
+                measurements.Dsc = MeasuredValue.NotApplicable(reason);
+                measurements.Mda = MeasuredValue.NotApplicable(reason);
+                measurements.Hd95 = MeasuredValue.NotApplicable(reason);
+                _log.Info("structures", reason);
+                return;
+            }
+
+            // The comparison grid is coarser than the sampling grid used for intensity: a
+            // contour surface does not need sub-millimetre sampling to be characterised, and
+            // the distance transform runs over the whole volume for every structure pair.
+            ImageGeometry grid = BuildComparisonGrid(_fixedGeometry);
+
+            double worstDsc = double.MaxValue, worstMda = 0.0, worstHd95 = 0.0;
+            string worstId = null;
+            int evaluated = 0;
+
+            foreach (var pair in pairs)
+            {
+                bool[] maskSource = StructureRasterizer.Rasterise(pair.Item1.Contours, grid, null);
+                bool[] maskTarget = StructureRasterizer.Rasterise(pair.Item2.Contours, grid, _mapper);
+
+                SurfaceComparison comparison = SurfaceMetrics.Compare(
+                    maskSource, maskTarget,
+                    grid.XSize, grid.YSize, grid.ZSize,
+                    grid.XRes, grid.YRes, grid.ZRes);
+
+                if (!string.IsNullOrEmpty(comparison.Problem))
+                {
+                    _log.Warning("structures: " + pair.Item1.Id, comparison.Problem);
+                    continue;
+                }
+
+                evaluated++;
+
+                if (comparison.Dsc.Value < worstDsc)
+                {
+                    worstDsc = comparison.Dsc.Value;
+                    worstId = pair.Item1.Id;
+                }
+                if (comparison.MeanDistanceToAgreement.Value > worstMda)
+                    worstMda = comparison.MeanDistanceToAgreement.Value;
+                if (comparison.Hd95.Value > worstHd95)
+                    worstHd95 = comparison.Hd95.Value;
+
+                _log.Info("structures: " + pair.Item1.Id, string.Format(CultureInfo.InvariantCulture,
+                    "DSC {0:F3}, MDA {1:F2} mm, HD95 {2:F2} mm",
+                    comparison.Dsc.Value, comparison.MeanDistanceToAgreement.Value, comparison.Hd95.Value));
+            }
+
+            if (evaluated == 0)
+            {
+                const string reason = "no matched structure could be rasterised onto the comparison grid";
+                measurements.Dsc = MeasuredValue.Unavailable(reason);
+                measurements.Mda = MeasuredValue.Unavailable(reason);
+                measurements.Hd95 = MeasuredValue.Unavailable(reason);
+                return;
+            }
+
+            measurements.WorstStructureId = worstId;
+
+            string note = string.Format(CultureInfo.InvariantCulture,
+                "worst of {0} matched structure(s){1}; comparison grid {2:F1} mm",
+                evaluated,
+                worstId != null ? " (" + worstId + ")" : string.Empty,
+                grid.CoarsestResolution);
+
+            measurements.Dsc = MeasuredValue.Measured(worstDsc, note);
+            measurements.Mda = MeasuredValue.Measured(worstMda, note);
+            measurements.Hd95 = MeasuredValue.Measured(worstHd95, note);
         }
 
-        private int CountStructures(Func<object> structureSetsAccessor, string label)
+        /// <summary>
+        /// Grid on which both structures are rasterised. Capped at roughly 2 mm and 160
+        /// samples per axis: finer buys nothing for a contour surface and the distance
+        /// transform runs over the whole volume once per structure pair.
+        /// </summary>
+        private static ImageGeometry BuildComparisonGrid(ImageGeometry reference)
         {
-            dynamic structureSets;
-            if (!Dyn.TryGet("structures: StructureSets of " + label, structureSetsAccessor, _log, out structureSets))
-                return 0;
+            const double targetSpacingMm = 2.0;
+            const int maxSamplesPerAxis = 160;
 
-            int count = 0;
-            Dyn.TryInvoke("structures: count on " + label, () =>
-            {
-                foreach (dynamic structureSet in structureSets)
-                {
-                    foreach (dynamic structure in structureSet.Structures)
-                    {
-                        if (structure != null) count++;
-                    }
-                }
-            }, _log);
+            int stepX = Step(reference.XRes, reference.XSize, targetSpacingMm, maxSamplesPerAxis);
+            int stepY = Step(reference.YRes, reference.YSize, targetSpacingMm, maxSamplesPerAxis);
+            int stepZ = Step(reference.ZRes, reference.ZSize, targetSpacingMm, maxSamplesPerAxis);
 
-            return count;
+            return reference.Subsampled(
+                stepX, stepY, stepZ,
+                (reference.XSize + stepX - 1) / stepX,
+                (reference.YSize + stepY - 1) / stepY,
+                (reference.ZSize + stepZ - 1) / stepZ);
+        }
+
+        private static int Step(double resolution, int size, double targetSpacing, int maxSamples)
+        {
+            int step = resolution > 0 ? (int)Math.Floor(targetSpacing / resolution) : 1;
+            if (step < 1) step = 1;
+
+            while (size / step > maxSamples) step++;
+            return step;
         }
 
         // ---------------------------------------------------------------- TG-132 Table III
@@ -665,8 +773,9 @@ namespace ESAPI_RegistrationQA.Services
                     "used: their centre of mass shifts when the contour is edited.",
                     sourceLandmarks.Count, targetLandmarks.Count);
 
-                measurements.TreMean = MeasuredValue.Unavailable(reason);
-                measurements.TreMax = MeasuredValue.Unavailable(reason);
+                measurements.TreMean = MeasuredValue.NotApplicable(reason);
+                measurements.TreMax = MeasuredValue.NotApplicable(reason);
+                _log.Info("TRE", reason);
                 return;
             }
 
@@ -755,12 +864,15 @@ namespace ESAPI_RegistrationQA.Services
 
             if (reverse == null)
             {
-                measurements.InverseConsistency = MeasuredValue.Unavailable(string.Format(
+                string missingReverse = string.Format(
                     CultureInfo.InvariantCulture,
                     "no reverse registration ({0} → {1}) was found in the workspace. Create it and re-run " +
                     "to enable this check: TG-132 §4.C.4 evaluates consistency by registering in both " +
                     "directions and composing the result.",
-                    targetId, sourceId));
+                    targetId, sourceId);
+
+                measurements.InverseConsistency = MeasuredValue.NotApplicable(missingReverse);
+                _log.Info("inverse consistency", missingReverse);
                 return;
             }
 

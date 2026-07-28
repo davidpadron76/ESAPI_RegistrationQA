@@ -17,6 +17,7 @@ namespace ESAPI_RegistrationQA.Models
         public const string MaxDisplacement = "Max_Displacement";
         public const string Smoothness = "Smoothness";
         public const string Dsc = "DSC";
+        public const string Mda = "MDA";
         public const string Hd95 = "HD95";
         public const string TreMean = "TRE_Mean";
         public const string TreMax = "TRE_Max";
@@ -245,24 +246,44 @@ namespace ESAPI_RegistrationQA.Models
                     "approximately 0.80-0.90, and volume dependent."));
 
             Register(new MetricDefinition(
+                key: MetricKeys.Mda,
+                displayName: "MDA (mean surface distance)",
+                unit: "mm",
+                higherIsBetter: false,
+                description:
+                    "Mean Distance to Agreement: the average distance between the reference and " +
+                    "propagated contour surfaces, taken symmetrically in both directions.",
+                clinicalQuestion:
+                    "On average, how far apart are the two versions of the same organ surface?",
+                decisionSupported:
+                    "Expressed in millimetres, so it can be set against a PTV margin or the contouring " +
+                    "uncertainty of the structure in a way the DSC cannot: a Dice value depends on the " +
+                    "volume of the organ, and 0.85 means something very different for a parotid and for " +
+                    "a whole lung. MDA is comparable across structures of different sizes.",
+                standardBasis:
+                    "TG-132 Table III. Tolerance: within the contouring uncertainty of the structure, " +
+                    "or the maximum voxel dimension, roughly 2-3 mm."));
+
+            Register(new MetricDefinition(
                 key: MetricKeys.Hd95,
                 displayName: "HD95 (Hausdorff)",
                 unit: "mm",
                 higherIsBetter: false,
                 description:
                     "95th-percentile Hausdorff distance between the reference and propagated surfaces, " +
-                    "excluding the 5% most deviant points.",
+                    "excluding the 5% most deviant points. Computed from the same distance transform as " +
+                    "the MDA; the two differ only in taking the 95th percentile instead of the mean.",
                 clinicalQuestion:
                     "How far apart are the contour surfaces where they disagree most?",
                 decisionSupported:
-                    "Complements the DSC, which can look acceptable for a large structure while one " +
-                    "boundary sits several millimetres off. For an organ at risk adjacent to the " +
-                    "target, that boundary is the part that matters.",
+                    "Complements the MDA and the DSC, both of which average over the whole surface and " +
+                    "can look acceptable while one boundary sits several millimetres off. For an organ " +
+                    "at risk adjacent to the target, that worst boundary is the part that matters. " +
+                    "Reading MDA and HD95 together separates a uniform offset from a local failure.",
                 standardBasis:
-                    "Not in TG-132 Table III, which specifies Mean Distance to Agreement instead. " +
-                    "Retained because HD95 is what the segmentation literature reports, so local " +
-                    "results stay comparable with published series. MDA remains worth adding alongside " +
-                    "it rather than in place of it."));
+                    "Not in TG-132 Table III, which specifies MDA. Retained alongside it because HD95 " +
+                    "is what the segmentation literature reports, so local results stay comparable with " +
+                    "published series."));
 
             // ---------------------------------------------------------- spatial accuracy
 

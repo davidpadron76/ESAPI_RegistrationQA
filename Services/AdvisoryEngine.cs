@@ -80,7 +80,12 @@ namespace ESAPI_RegistrationQA.Services
             foreach (MetricResult metric in metrics.Where(m => m.Status == QASemaphore.Yellow))
                 set.Advisories.Add(BuildBreachAdvisory(metric, profile, profileName, AdvisorySeverity.Warning));
 
-            // --- Metrics that were not evaluated -----------------------------------------
+            // --- Metrics that were attempted and failed ----------------------------------
+            //
+            // Only these reach the advisory list. Metrics that did not apply to the case have
+            // already been filtered out upstream and are accounted for in the diagnostics.
+            // Counting them here would have made every rigid registration "partially
+            // compliant" for failing to measure deformation metrics that never applied to it.
             List<MetricResult> unavailable = metrics
                 .Where(m => m.Status == QASemaphore.NotAvailable)
                 .ToList();

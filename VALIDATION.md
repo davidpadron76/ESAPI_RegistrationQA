@@ -3,7 +3,7 @@
 ## Why this document exists
 
 The tool has never been checked against a known answer. What has been verified is the pure
-mathematics — 52 analytic checks in `tools/verify_math.py`, covering Euler extraction, matrix
+mathematics — 67 analytic checks in `tools/verify_math.py`, covering Euler extraction, matrix
 convention detection, voxel↔patient round-trips, the similarity metrics against their
 theoretical values, transform composition, and TRE against known landmark displacements —
 plus the fact that it builds and runs.
@@ -109,6 +109,31 @@ If the reverse registration exists but the plugin reports the metric as unavaila
 means it could not enumerate the registrations in your Eclipse version. Please send the
 Diagnostics tab: that is exactly the kind of API difference this testing is meant to surface.
 
+## 3c. Structures and hidden metrics
+
+**Structures.** Copy a contour to the second series under the same identifier and re-run. DSC,
+MDA and HD95 should appear. Two checks worth making:
+
+- **MDA must come out below HD95** on the same structure. They are drawn from the same set of
+  surface distances, so MDA above HD95 would mean one of the two is wrong.
+- Contrast the DSC against whatever Eclipse or another tool reports for the same pair.
+
+When several structures match, the worst case is reported, not an average — a Dice of 0.85 is
+excellent for a parotid and poor for a whole lung, so averaging across organs produces a number
+that describes neither. The note beside the metric names which structure was worst.
+
+**Hidden metrics.** A metric that cannot apply is no longer shown as N/A; it is omitted and
+accounted for in the diagnostics tab instead. So:
+
+- On a **rigid** registration the deformation metrics should be absent, and the verdict must
+  not read "partially compliant" on their account.
+- On a case **without markers**, TRE should be absent, with the diagnostics tab saying that
+  MARKER structures sharing an identifier are what would enable it.
+- If you force a **genuine failure** — a registration whose image will not load — NCC, NMI and
+  SSD must still appear as N/A with their reason. That distinction is the point of the change:
+  a fault stays visible, a context mismatch disappears. If a real failure gets hidden, report
+  it.
+
 ## 4. Multimodal pair
 
 **Setup.** A CT–MR registration of the same patient.
@@ -182,7 +207,7 @@ Open an issue at
 
 | Area | Status |
 |---|---|
-| DSC / HD95 | Not implemented. Reported as N/A with the reason stated. Requires contour rasterisation onto a common grid with structures matched by identifier. TG-132 Table III specifies MDA rather than HD95. |
+| DSC / MDA / HD95 | Measured, but only when contour structures share an identifier across both series. Otherwise hidden, with the reason in the diagnostics tab. |
 | TRE | Measured, but only when point landmarks (DICOM type MARKER or ISOCENTER) exist on both series under the same identifier. Otherwise N/A with the counts found on each side. |
 | Inverse consistency | Measured, but only when the reverse registration exists in the workspace. Otherwise N/A saying so — it is a check you can enable, not a permanent limitation. |
 | Jacobian, DVF smoothness, max displacement for DIR | Not obtainable. They need the deformation vector field, which the scripting API does not expose. Reported as N/A rather than approximated from the linear component. |
@@ -211,6 +236,10 @@ Open an issue at
 | 3b | TRE — landmarks matched | ≥ 2 | | | |
 | 3b | TRE mean under known shift | applied value | | | |
 | 3b | Inverse consistency residual | ≤ max voxel dim | | | |
+| 3c | DSC on a matched structure | plausible | | | |
+| 3c | MDA < HD95 on the same structure | always | | | |
+| 3c | Rigid case: deformation metrics absent | absent | | | |
+| 3c | Real failure: NCC still shown as N/A | shown | | | |
 | 5 | Baseline — cases collected | ≥ 20 | | | |
 | — | Diagnostics tab | failures listed | | | |
 | — | Eclipse version | | | | |

@@ -4,6 +4,30 @@ using System.Collections.Generic;
 namespace ESAPI_RegistrationQA.Models
 {
     /// <summary>
+    /// Why a metric has no value.
+    ///
+    /// The distinction drives what the user sees. A metric that could not apply to this case
+    /// is noise on screen: it would say the same thing on every rigid registration for ever.
+    /// A metric that was attempted and failed is the opposite — it points at something to
+    /// fix, and hiding it would bury the fault.
+    /// </summary>
+    public enum MeasurementState
+    {
+        /// <summary>A value was obtained.</summary>
+        Measured,
+
+        /// <summary>Attempted and failed. Shown as N/A with the reason.</summary>
+        Unavailable,
+
+        /// <summary>
+        /// Cannot apply to this case at all — a deformation metric on a rigid registration,
+        /// a landmark metric with no landmarks. Hidden from the tables, recorded in the
+        /// diagnostics so the omission stays traceable.
+        /// </summary>
+        NotApplicable
+    }
+
+    /// <summary>
     /// A measured metric value, or its justified absence.
     ///
     /// It is deliberately impossible to construct a value without deciding whether it
@@ -13,31 +37,55 @@ namespace ESAPI_RegistrationQA.Models
     public sealed class MeasuredValue
     {
         public double? Value { get; private set; }
+        public MeasurementState State { get; private set; }
+
+        /// <summary>Why there is no value. Null when there is one.</summary>
         public string UnavailableReason { get; private set; }
 
         /// <summary>How the value was obtained, when it does exist.</summary>
         public string Note { get; private set; }
 
-        private MeasuredValue(double? value, string unavailableReason, string note)
+        private MeasuredValue(double? value, MeasurementState state, string reason, string note)
         {
             Value = value;
-            UnavailableReason = unavailableReason;
+            State = state;
+            UnavailableReason = reason;
             Note = note;
         }
 
-        public bool IsAvailable { get { return Value.HasValue; } }
+        public bool IsAvailable { get { return State == MeasurementState.Measured; } }
+
+        /// <summary>true when the metric should not be shown at all for this case.</summary>
+        public bool IsNotApplicable { get { return State == MeasurementState.NotApplicable; } }
 
         public static MeasuredValue Measured(double value, string note = null)
         {
             if (double.IsNaN(value) || double.IsInfinity(value))
                 return Unavailable("the computation produced a non-finite value");
 
-            return new MeasuredValue(value, null, note);
+            return new MeasuredValue(value, MeasurementState.Measured, null, note);
         }
 
+        /// <summary>The metric was attempted and failed. It stays visible as N/A.</summary>
         public static MeasuredValue Unavailable(string reason)
         {
-            return new MeasuredValue(null, reason ?? "reason not specified", null);
+            return new MeasuredValue(null, MeasurementState.Unavailable,
+                reason ?? "reason not specified", null);
+        }
+
+        /// <summary>
+        /// The metric does not apply to this case. It is hidden from the tables and recorded
+        /// in the diagnostics instead.
+        ///
+        /// The reason should say what would be needed to obtain it, where that is within the
+        /// user's control — placing markers, creating the reverse registration. For a
+        /// genuine limitation such as the deformation field not being exposed, it should say
+        /// so plainly.
+        /// </summary>
+        public static MeasuredValue NotApplicable(string reason)
+        {
+            return new MeasuredValue(null, MeasurementState.NotApplicable,
+                reason ?? "does not apply to this case", null);
         }
     }
 
@@ -70,7 +118,14 @@ namespace ESAPI_RegistrationQA.Models
 
         // Structures
         public MeasuredValue Dsc { get; set; }
+        public MeasuredValue Mda { get; set; }
         public MeasuredValue Hd95 { get; set; }
+
+        /// <summary>Number of contour structures matched by identifier between the two series.</summary>
+        public int StructurePairCount { get; set; }
+
+        /// <summary>Identifier of the structure that produced the worst surface agreement.</summary>
+        public string WorstStructureId { get; set; }
 
         // TG-132 Table III primary metrics
         public MeasuredValue TreMean { get; set; }
@@ -115,6 +170,7 @@ namespace ESAPI_RegistrationQA.Models
             MaxDisplacement = MeasuredValue.Unavailable(notMeasured);
             Smoothness = MeasuredValue.Unavailable(notMeasured);
             Dsc = MeasuredValue.Unavailable(notMeasured);
+            Mda = MeasuredValue.Unavailable(notMeasured);
             Hd95 = MeasuredValue.Unavailable(notMeasured);
             TreMean = MeasuredValue.Unavailable(notMeasured);
             TreMax = MeasuredValue.Unavailable(notMeasured);
@@ -132,6 +188,7 @@ namespace ESAPI_RegistrationQA.Models
                 case MetricKeys.MaxDisplacement: return MaxDisplacement;
                 case MetricKeys.Smoothness: return Smoothness;
                 case MetricKeys.Dsc: return Dsc;
+                case MetricKeys.Mda: return Mda;
                 case MetricKeys.Hd95: return Hd95;
                 case MetricKeys.TreMean: return TreMean;
                 case MetricKeys.TreMax: return TreMax;

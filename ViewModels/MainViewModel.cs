@@ -54,6 +54,7 @@ namespace ESAPI_RegistrationQA.ViewModels
             RigidTransformData = new ObservableCollection<RigidTransformItem>();
             Advisories = new ObservableCollection<Advisory>();
             Diagnostics = new ObservableCollection<DiagnosticEntry>();
+            NotApplicableMetrics = new ObservableCollection<MetricResult>();
 
             AvailableProfiles = ThresholdProfile.GetAllProfiles().AsReadOnly();
 
@@ -119,8 +120,21 @@ namespace ESAPI_RegistrationQA.ViewModels
         public ObservableCollection<Advisory> Advisories { get; }
         public ObservableCollection<DiagnosticEntry> Diagnostics { get; }
 
+        /// <summary>
+        /// Metrics that did not apply to this case. They are kept out of the metric tables —
+        /// a row that would say the same thing on every case is noise — and accounted for
+        /// here instead, so the omission stays visible and traceable.
+        /// </summary>
+        public ObservableCollection<MetricResult> NotApplicableMetrics { get; }
+
         public RelayCommand ExportReportCommand { get; }
         public RelayCommand ExportCsvCommand { get; }
+
+        public bool HasIntensityMetrics { get { return IntensityMetrics.Count > 0; } }
+        public bool HasDeformationMetrics { get { return DeformationMetrics.Count > 0; } }
+        public bool HasSpatialAccuracyMetrics { get { return SpatialAccuracyMetrics.Count > 0; } }
+        public bool HasStructureMetrics { get { return StructureQAMetrics.Count > 0; } }
+        public bool HasNotApplicableMetrics { get { return NotApplicableMetrics.Count > 0; } }
 
         public string DiagnosticsSummary
         {
@@ -218,9 +232,11 @@ namespace ESAPI_RegistrationQA.ViewModels
             Replace(SpatialAccuracyMetrics, MetricEvaluator.Evaluate(_measurements, ActiveProfile, MetricEvaluator.SpatialAccuracyKeys));
             Replace(StructureQAMetrics, MetricEvaluator.Evaluate(_measurements, ActiveProfile, MetricEvaluator.StructureKeys));
             Replace(RigidTransformData, MetricEvaluator.BuildRigidTransformRows(_measurements));
+            Replace(NotApplicableMetrics, MetricEvaluator.NotApplicable(_measurements));
 
             AdvisorySet advisorySet = AdvisoryEngine.Build(
-                IntensityMetrics.Concat(DeformationMetrics).Concat(SpatialAccuracyMetrics).Concat(StructureQAMetrics),
+                IntensityMetrics.Concat(DeformationMetrics)
+                    .Concat(SpatialAccuracyMetrics).Concat(StructureQAMetrics),
                 ActiveProfile,
                 _measurements);
 
@@ -228,6 +244,12 @@ namespace ESAPI_RegistrationQA.ViewModels
 
             GlobalStatusMessage = advisorySet.OverallStatus;
             GlobalStatus = ToSemaphore(advisorySet.OverallSeverity);
+
+            OnPropertyChanged(nameof(HasIntensityMetrics));
+            OnPropertyChanged(nameof(HasDeformationMetrics));
+            OnPropertyChanged(nameof(HasSpatialAccuracyMetrics));
+            OnPropertyChanged(nameof(HasStructureMetrics));
+            OnPropertyChanged(nameof(HasNotApplicableMetrics));
         }
 
         private static QASemaphore ToSemaphore(AdvisorySeverity severity)
@@ -266,7 +288,8 @@ namespace ESAPI_RegistrationQA.ViewModels
                 ProfileName = ActiveProfile?.ProfileName,
                 Measurements = _measurements,
                 Advisories = AdvisoryEngine.Build(
-                    IntensityMetrics.Concat(DeformationMetrics).Concat(SpatialAccuracyMetrics).Concat(StructureQAMetrics),
+                    IntensityMetrics.Concat(DeformationMetrics)
+                    .Concat(SpatialAccuracyMetrics).Concat(StructureQAMetrics),
                     ActiveProfile,
                     _measurements),
                 IntensityMetrics = IntensityMetrics.ToList(),

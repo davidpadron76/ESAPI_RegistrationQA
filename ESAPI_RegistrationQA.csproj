@@ -121,6 +121,9 @@
 
     <Compile Include="Services\AdvisoryEngine.cs" />
     <Compile Include="Services\CsvDatasetExporter.cs" />
+    <Compile Include="Services\DistanceTransform.cs" />
+    <Compile Include="Services\StructureRasterizer.cs" />
+    <Compile Include="Services\SurfaceMetrics.cs" />
     <Compile Include="Services\DiagnosticLog.cs" />
     <Compile Include="Services\Dyn.cs" />
     <Compile Include="Services\EsapiImageReader.cs" />
