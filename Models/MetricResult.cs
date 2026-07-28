@@ -3,7 +3,28 @@ using System.Globalization;
 
 namespace ESAPI_RegistrationQA.Models
 {
-    public enum QASemaphore { Green, Yellow, Red, NotAvailable }
+    public enum QASemaphore
+    {
+        Green,
+        Yellow,
+        Red,
+
+        /// <summary>
+        /// Measured and reported, but deliberately not classified against a tolerance.
+        ///
+        /// It exists to separate two situations an empty semaphore used to conflate: a metric
+        /// with no number, and a metric with a perfectly good number that no defensible
+        /// tolerance exists for. NCC, NMI and SSD are the second kind — TG-132 gives no limit
+        /// for any of them and §4.C.3 says outright that they are "difficult to convert into
+        /// quantitative measures of spatial accuracy" — so a red badge on one of them would
+        /// assert a spatial failure the metric cannot establish.
+        ///
+        /// A metric in this state never contributes to the verdict, in either direction.
+        /// </summary>
+        Informational,
+
+        NotAvailable
+    }
 
     /// <summary>
     /// The evaluated result of a metric: the measured value plus its classification against
@@ -64,7 +85,15 @@ namespace ESAPI_RegistrationQA.Models
 
         public string StatusText
         {
-            get { return Status == QASemaphore.NotAvailable ? "N/A" : Status.ToString(); }
+            get
+            {
+                switch (Status)
+                {
+                    case QASemaphore.NotAvailable: return "N/A";
+                    case QASemaphore.Informational: return "INFO";
+                    default: return Status.ToString();
+                }
+            }
         }
 
         /// <summary>
@@ -85,6 +114,15 @@ namespace ESAPI_RegistrationQA.Models
                     definition.Description + Environment.NewLine + Environment.NewLine +
                     "What it supports: " + definition.DecisionSupported + Environment.NewLine + Environment.NewLine +
                     "TG-132: " + definition.StandardBasis;
+
+                // The criterion column is narrow, so a metric shown as INFO can only say so in
+                // a few words there. The reasoning belongs somewhere the reader can reach it
+                // without opening the source, and the tooltip is the nearest such place.
+                if (Status == QASemaphore.Informational)
+                {
+                    text += Environment.NewLine + Environment.NewLine +
+                            "Not graded: " + definition.GatingBasis;
+                }
 
                 if (!string.IsNullOrEmpty(MeasurementNote))
                     text += Environment.NewLine + Environment.NewLine + "Note: " + MeasurementNote;

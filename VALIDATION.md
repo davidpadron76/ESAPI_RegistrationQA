@@ -148,6 +148,16 @@ When several structures match, the worst case is reported, not an average — a 
 excellent for a parotid and poor for a whole lung, so averaging across organs produces a number
 that describes neither. The note beside the metric names which structure was worst.
 
+**Three badges, three meanings.** Before reporting anything as a fault, check which one you are
+looking at:
+
+| Badge | Meaning |
+|---|---|
+| Green / Yellow / Red | Measured and classified against the profile. |
+| **INFO** (grey) | Measured, but the tool declines to grade it — no defensible tolerance. NCC, NMI and SSD always; maximum displacement when the two series are in different frames of reference. Never affects the verdict. |
+| **N/A** (grey) | Not measured. This one is a fault, and the reason is beside it. |
+| *(absent)* | Does not apply to this case. Accounted for in the diagnostics tab. |
+
 **Hidden metrics.** A metric that cannot apply is no longer shown as N/A; it is omitted and
 accounted for in the diagnostics tab instead. So:
 
@@ -238,6 +248,9 @@ Open an issue at
 | Inverse consistency | Measured, but only when the reverse registration exists in the workspace. Otherwise N/A saying so — it is a check you can enable, not a permanent limitation. |
 | Jacobian, DVF smoothness, max displacement for DIR | Not obtainable. They need the deformation vector field, which the scripting API does not expose. Reported as N/A rather than approximated from the linear component. |
 | Deformable intensity metrics | Computed only when the API exposes a point-to-point mapping. Whether it does appears to depend on the Eclipse version — this is one of the things the testing should establish. |
+| NCC / NMI / SSD tolerances | None exist. TG-132 gives no limit for any of the three and §4.C.3 says they do not convert into spatial accuracy. Shown as **INFO** — value, no colour, no effect on the verdict. Section 5 is how you make them actionable. |
+| Max displacement tolerance | Applied only when both series share a DICOM frame of reference. Otherwise the magnitude spans two coordinate systems and is shown as **INFO**. |
+| Jacobian tolerance | The profiles admit 1–4 % negative values; TG-132 Table III admits none. More permissive than the report, deliberately flagged and not yet resolved. |
 | Threshold profiles | Inherited values, not recalibrated for the current metric definitions. See section 5. |
 | Registration matrix | The property holding it varies between Eclipse versions. A dozen paths and seven container shapes are tried, then a reflection sweep. If none answers, everything downstream is N/A and the object's member list goes to the Diagnostics tab. See test 0. |
 | Direction cosines | If the API does not expose them, canonical axial orientation is assumed and a warning is logged. A tilted-gantry acquisition would be misread; the Diagnostics tab will say so. |
@@ -250,6 +263,7 @@ Open an issue at
 | # | Test | Expected | Observed | Pass | Notes |
 |---|---|---|---|---|---|
 | 0 | **Matrix read from the API** | `API matrix (…)` | | | property path and shape |
+| 0 | Frame of Reference read | same / different | | | affects whether Max Displacement is graded |
 | 1 | Identity — NCC | 1.000 | | | |
 | 1 | Identity — NMI | 2.000 | | | |
 | 1 | Identity — SSD | 0.000 | | | |

@@ -346,15 +346,22 @@ namespace ESAPI_RegistrationQA.Services
             sb.Append("<p class='note'>Metrics are included for the clinical decision they support. ");
             sb.Append("Those not named in TG-132 are marked as such together with the reason for ");
             sb.Append("retaining them; membership of the report is not by itself the criterion.</p>");
+            sb.Append("<p class='note'>The last column states whether the metric may drive the verdict. ");
+            sb.Append("Measuring a quantity and being entitled to fail a registration on it are ");
+            sb.Append("different claims: a metric with no defensible tolerance is reported as ");
+            sb.Append("<b>INFO</b> and counts neither for nor against compliance.</p>");
             sb.Append("<table class='rationale'><tr><th>Metric</th><th>Question it answers</th>");
-            sb.Append("<th>What it supports</th><th>Relation to TG-132</th></tr>");
+            sb.Append("<th>What it supports</th><th>Relation to TG-132</th>");
+            sb.Append("<th>Drives the verdict?</th></tr>");
 
             foreach (MetricDefinition definition in MetricCatalog.All)
             {
                 sb.Append("<tr><td><b>").Append(E(definition.DisplayName)).Append("</b></td><td>")
                   .Append(E(definition.ClinicalQuestion)).Append("</td><td>")
                   .Append(E(definition.DecisionSupported)).Append("</td><td>")
-                  .Append(E(definition.StandardBasis)).Append("</td></tr>");
+                  .Append(E(definition.StandardBasis)).Append("</td><td>")
+                  .Append(definition.Gating ? "<b>Yes</b>. " : "<b>No</b>. ")
+                  .Append(E(definition.GatingBasis)).Append("</td></tr>");
             }
 
             sb.Append("</table>");

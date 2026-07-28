@@ -36,7 +36,7 @@ namespace ESAPI_RegistrationQA.Services
         /// Bumped whenever columns are added, removed or redefined. Pooled files with
         /// different schema versions must not be concatenated blindly.
         /// </summary>
-        public const string SchemaVersion = "3";
+        public const string SchemaVersion = "4";
 
         private static readonly string[] Columns =
         {
@@ -54,6 +54,10 @@ namespace ESAPI_RegistrationQA.Services
             "SSD",
             "JacobianNegPercent",
             "MaxDisplacement_mm",
+            // Without it MaxDisplacement_mm is not analysable across a pooled dataset: within
+            // one frame of reference it is the correction the registration applies, across two
+            // it also spans the offset between the coordinate systems.
+            "SameFrameOfReference",
             "Smoothness",
             "DSC",
             "MDA_mm",
@@ -148,6 +152,9 @@ namespace ESAPI_RegistrationQA.Services
             row.Add(Metric(m, MetricKeys.Ssd));
             row.Add(Metric(m, MetricKeys.JacobianNegative));
             row.Add(Metric(m, MetricKeys.MaxDisplacement));
+            row.Add(m != null && m.SharesFrameOfReference.HasValue
+                ? (m.SharesFrameOfReference.Value ? "TRUE" : "FALSE")
+                : string.Empty);
             row.Add(Metric(m, MetricKeys.Smoothness));
             row.Add(Metric(m, MetricKeys.Dsc));
             row.Add(Metric(m, MetricKeys.Mda));

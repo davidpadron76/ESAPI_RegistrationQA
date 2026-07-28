@@ -228,7 +228,7 @@
                                                         CellTemplate="{StaticResource MetricNameTemplate}"/>
                                 <DataGridTemplateColumn Header="Value" Width="80"
                                                         CellTemplate="{StaticResource MetricValueTemplate}"/>
-                                <DataGridTextColumn Header="Criterion" Binding="{Binding ThresholdCriteria}" Width="130"/>
+                                <DataGridTextColumn Header="Criterion" Binding="{Binding ThresholdCriteria}" Width="170"/>
                                 <DataGridTemplateColumn Header="Status" Width="80"
                                                         CellTemplate="{StaticResource StatusBadgeTemplate}"/>
                             </DataGrid.Columns>
@@ -243,7 +243,7 @@
                                                         CellTemplate="{StaticResource MetricNameTemplate}"/>
                                 <DataGridTemplateColumn Header="Value" Width="80"
                                                         CellTemplate="{StaticResource MetricValueTemplate}"/>
-                                <DataGridTextColumn Header="Criterion" Binding="{Binding ThresholdCriteria}" Width="130"/>
+                                <DataGridTextColumn Header="Criterion" Binding="{Binding ThresholdCriteria}" Width="170"/>
                                 <DataGridTemplateColumn Header="Status" Width="80"
                                                         CellTemplate="{StaticResource StatusBadgeTemplate}"/>
                             </DataGrid.Columns>

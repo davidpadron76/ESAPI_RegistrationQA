@@ -68,6 +68,8 @@ namespace ESAPI_RegistrationQA.Services
 
             if (source != null && source.Success) _fixedGeometry = source.Volume.Geometry;
 
+            ReadFrameOfReference(sourceImage, registeredImage, measurements);
+
             // --- Rigid transform --------------------------------------------------------
             ExtractRigidTransform(registration, measurements, source, target);
 
@@ -177,6 +179,65 @@ namespace ESAPI_RegistrationQA.Services
             {
                 measurements.RegType = RegistrationType.Unknown;
             }
+        }
+
+        // ---------------------------------------------------------------- frame of reference
+
+        /// <summary>
+        /// Reads the DICOM Frame of Reference UID of both series.
+        ///
+        /// It is read for one specific decision: whether the maximum displacement is a
+        /// statement about the registration or about the two coordinate systems. Within a
+        /// single frame of reference the identity is the "no correction" state, so the
+        /// displacement is the correction being applied. Across two frames the matrix must
+        /// also span the offset between them, which is a property of how the scanners were
+        /// set up and can be arbitrarily large on a perfectly good registration.
+        /// </summary>
+        private void ReadFrameOfReference(
+            dynamic sourceImage, dynamic registeredImage, QaMeasurements measurements)
+        {
+            measurements.FixedFrameOfReferenceUid = ReadFrameOfReferenceUid(sourceImage, "source image");
+            measurements.MovingFrameOfReferenceUid = ReadFrameOfReferenceUid(registeredImage, "registered image");
+
+            bool? shares = measurements.SharesFrameOfReference;
+
+            if (!shares.HasValue)
+            {
+                _log.Warning("frame of reference",
+                    "at least one series does not expose its Frame of Reference UID, so it cannot be " +
+                    "established whether the two share a coordinate system. Maximum displacement is " +
+                    "therefore reported without a classification: across two frames of reference its " +
+                    "magnitude includes the offset between them and says nothing about the registration.");
+                return;
+            }
+
+            _log.Info("frame of reference", shares.Value
+                ? "both series share a Frame of Reference, so the maximum displacement is the correction " +
+                  "the registration applies and is classified against the profile."
+                : "the two series are in different Frames of Reference. The transform therefore spans two " +
+                  "coordinate systems, and its magnitude is not a registration correction. Maximum " +
+                  "displacement is reported without a classification.");
+        }
+
+        private string ReadFrameOfReferenceUid(dynamic imageLike, string label)
+        {
+            if (imageLike == null) return null;
+
+            dynamic value;
+            string source;
+            if (Dyn.TryGetFirst("frame of reference of " + label, _log, out value, out source,
+                    Dyn.Alt("Image.FOR", () => imageLike.Image.FOR),
+                    Dyn.Alt("FOR", () => imageLike.FOR),
+                    Dyn.Alt("Image.FrameOfReferenceUid", () => imageLike.Image.FrameOfReferenceUid),
+                    Dyn.Alt("FrameOfReferenceUid", () => imageLike.FrameOfReferenceUid),
+                    Dyn.Alt("Series.FOR", () => imageLike.Series.FOR)))
+            {
+                string uid = Convert.ToString(value, CultureInfo.InvariantCulture);
+                _log.Info("frame of reference of " + label, uid + " (via " + source + ")");
+                return uid;
+            }
+
+            return null;
         }
 
         // ---------------------------------------------------------------- transform

@@ -111,6 +111,26 @@ namespace ESAPI_RegistrationQA.Services
 
             double value = measured.Value.Value;
 
+            string ungatedReason = WhyNotGated(key, measurements);
+
+            if (ungatedReason != null)
+            {
+                // Measured, shown, exported — but with no classification, so it cannot move
+                // the verdict in either direction. The reason goes in the criterion column,
+                // where the reader is looking for the tolerance it would otherwise have been
+                // held to.
+                return new MetricResult
+                {
+                    MetricKey = key,
+                    MetricName = displayName,
+                    Unit = unit,
+                    Value = value,
+                    Status = QASemaphore.Informational,
+                    ThresholdCriteria = ungatedReason,
+                    MeasurementNote = measured.Note
+                };
+            }
+
             return new MetricResult
             {
                 MetricKey = key,
@@ -124,6 +144,37 @@ namespace ESAPI_RegistrationQA.Services
                     ? null
                     : "the active profile defines no threshold for this metric"
             };
+        }
+
+        /// <summary>
+        /// Why a measured metric is not classified, or null when it is.
+        ///
+        /// Two reasons, and they are different in kind. The first is permanent and belongs to
+        /// the metric: NCC, NMI and SSD have no tolerance in TG-132 and no route from their
+        /// value to a distance, so any limit would be invented. The second is a property of
+        /// this particular image pair: the maximum displacement is only the correction the
+        /// registration applies when both series share a frame of reference. Across two frames
+        /// the transform must also span the offset between the coordinate systems, and a
+        /// correct registration can exceed any profile limit with nothing wrong.
+        /// </summary>
+        private static string WhyNotGated(string key, QaMeasurements measurements)
+        {
+            // Kept short: this text lands in a narrow column. The full reasoning is in the
+            // metric tooltip and in the report appendix, both fed from MetricCatalog.
+            if (!MetricCatalog.IsGating(key))
+            {
+                return "no TG-132 tolerance";
+            }
+
+            if (key == MetricKeys.MaxDisplacement)
+            {
+                bool? shares = measurements != null ? measurements.SharesFrameOfReference : null;
+
+                if (shares == null) return "not graded — frame of reference unknown";
+                if (!shares.Value) return "not graded — different frames of reference";
+            }
+
+            return null;
         }
 
         /// <summary>

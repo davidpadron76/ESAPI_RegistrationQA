@@ -24,20 +24,20 @@ constructor refuses a metric that leaves it blank. The same table is printed as 
 to every exported report, so whoever countersigns the document can see the basis for each
 number.
 
-| Metric | Question it answers | Relation to TG-132 | Status |
-|---|---|---|---|
-| **NCC** | Does the anatomy line up, same modality? | §4.C.3, admitted for assessment | Measured |
-| **NMI** | Does it line up when intensities are not linearly comparable (CT-MR, CT-PET)? | §4.C.3, admitted for assessment | Measured |
-| **SSD** | Are there local intensity differences beyond the overall alignment? | §4.C.3, admitted for assessment | Measured |
-| **Jacobian < 0** | Has the deformation folded tissue onto itself? | Table III | Exact for rigid · N/A for DIR |
-| **Max Displacement** | How far has the registration moved the anatomy? | Not tabulated; plausibility check | Exact for rigid · N/A for DIR |
-| **Smoothness** | Is the deformation physically plausible? | Not tabulated; related to §4.C.3 | Exact for rigid · N/A for DIR |
-| **DSC** | Do the same organs end up in the same place? | Table III, ~0.80–0.90 | Measured |
-| **MDA** | On average, how far apart are the two organ surfaces? | Table III, ~2–3 mm | Measured |
-| **HD95** | How far apart are the surfaces where they disagree most? | Not tabulated; report specifies MDA | Measured |
-| **TRE (mean)** | How large is the spatial error, in millimetres? | Table III, primary metric | Measured |
-| **TRE (max)** | Is any single landmark badly placed? | Table III; mean/max split is ours | Measured |
-| **Inverse consistency** | Is the algorithm behaving stably? | §4.C.4 and Table III | Measured |
+| Metric | Question it answers | Relation to TG-132 | Drives the verdict? | Status |
+|---|---|---|---|---|
+| **NCC** | Does the anatomy line up, same modality? | §4.C.3, admitted for assessment | **No** — no tolerance exists | Measured |
+| **NMI** | Does it line up when intensities are not linearly comparable (CT-MR, CT-PET)? | §4.C.3, admitted for assessment | **No** — no tolerance exists | Measured |
+| **SSD** | Are there local intensity differences beyond the overall alignment? | §4.C.3, admitted for assessment | **No** — no tolerance exists | Measured |
+| **Jacobian < 0** | Has the deformation folded tissue onto itself? | Table III | Yes | Exact for rigid · N/A for DIR |
+| **Max Displacement** | How far has the registration moved the anatomy? | Not tabulated; plausibility check | Only within one frame of reference | Exact for rigid · N/A for DIR |
+| **Smoothness** | Is the deformation physically plausible? | Not tabulated; related to §4.C.3 | Yes, on inherited limits | Exact for rigid · N/A for DIR |
+| **DSC** | Do the same organs end up in the same place? | Table III, ~0.80–0.90 | Yes | Measured |
+| **MDA** | On average, how far apart are the two organ surfaces? | Table III, ~2–3 mm | Yes | Measured |
+| **HD95** | How far apart are the surfaces where they disagree most? | Not tabulated; report specifies MDA | Yes | Measured |
+| **TRE (mean)** | How large is the spatial error, in millimetres? | Table III, primary metric | Yes | Measured |
+| **TRE (max)** | Is any single landmark badly placed? | Table III; mean/max split is ours | Yes | Measured |
+| **Inverse consistency** | Is the algorithm behaving stably? | §4.C.4 and Table III | Yes | Measured |
 
 Two points the report makes that shape how the first three should be read. TG-132 §4.C.3
 admits SSD, CC and MI for assessment **provided the metric was not the one the registration
@@ -45,6 +45,30 @@ algorithm optimised** — otherwise the assessment is circular — and notes the
 to convert into a measure of spatial accuracy**. A compliant NCC does not establish
 millimetric accuracy; TRE is the metric that does. The plugin raises an advisory saying so on
 every case where those metrics are available.
+
+## Which metrics can fail a registration
+
+Measuring a quantity and being entitled to fail a registration on it are different claims, and
+the tool used to treat them as one.
+
+**TG-132 gives no tolerance for NCC, NMI or SSD.** They appear in Table I, which catalogues the
+metrics that *drive* a registration. As assessment tools they appear once, in §4.C.3, and in
+passing. Table III has five rows and none of them is an intensity metric: TRE, MDA, DSC,
+Jacobian determinant and consistency. The limits this project used to apply to the three
+intensity metrics were its own invention, and they were producing NOT COMPLIANT verdicts on a
+class of metric the report says cannot be converted into spatial accuracy. They are now
+reported as **INFO**: value shown, no colour, no effect on the verdict, still written to the
+CSV — which is where they earn their keep, as a local baseline distribution.
+
+**Maximum displacement is classified only when both series share a DICOM frame of reference.**
+Within one frame the identity is the "no correction" state, so the displacement is the
+correction the registration applies. Across two frames — two scanners, or a CT and an MR — the
+matrix must also span the offset between the two coordinate systems, and a correct registration
+can exceed any limit for that reason alone. When the frames differ, or when either UID cannot
+be read, the value is reported without a classification and an advisory says why.
+
+Each metric declares its position in `Models/MetricCatalog.cs`, in a `GatingBasis` field the
+constructor refuses to leave blank, and the same text is printed in the report appendix.
 
 Where the tool departs from the report, deliberately:
 
@@ -196,7 +220,11 @@ while metrics remain unevaluated:
 | **PARTIALLY COMPLIANT** | What was measured passes, but some metrics could not be measured. Verification is not complete. |
 | **REVIEW REQUIRED** | A metric fell into the attention zone (yellow). |
 | **NOT COMPLIANT** | A metric breaches the profile criterion (red). |
-| **NO EVIDENCE** | No metric could be evaluated. See the diagnostics tab. |
+| **NOT VERIFIED** | Metrics were measured, but none of them carries a tolerance that can establish compliance. Typically a case with intensity metrics only: no landmarks, no matched structures. |
+| **NO EVIDENCE** | No metric could be evaluated at all. See the diagnostics tab. |
+
+A grey **INFO** badge is not a failure and not a missing value: it is a measurement the tool
+declines to grade. **N/A** is the missing value.
 
 ## Known limitations
 

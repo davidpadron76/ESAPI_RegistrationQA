@@ -71,6 +71,11 @@ namespace ESAPI_RegistrationQA.Models
         /// </summary>
         public string DescribeCriteria(string metricKey)
         {
+            // A metric that cannot gate has no criterion to describe, and saying "—" would
+            // read as a gap in the profile rather than as a deliberate position.
+            if (!MetricCatalog.IsGating(metricKey))
+                return "no TG-132 tolerance";
+
             ThresholdLimits limits;
             if (!TryGetLimits(metricKey, out limits)) return "—";
 
@@ -95,13 +100,17 @@ namespace ESAPI_RegistrationQA.Models
             return string.Format(CultureInfo.InvariantCulture, "{0:0.###}{1}", limits.GreenLimit, suffix);
         }
 
+        // None of the four profiles carries limits for NMI, NCC or SSD any more. They used
+        // to, and the values were this project's own invention: TG-132 gives no tolerance for
+        // any of the three, and section 4.C.3 says they are difficult to convert into a
+        // measure of spatial accuracy. Those limits were producing NOT COMPLIANT verdicts. The
+        // metrics are still measured, still shown and still exported — see MetricCatalog for
+        // the position on each.
+
         // 1. Head and neck (ART H&N)
         public static ThresholdProfile CreateDefaultHN()
         {
             var profile = new ThresholdProfile { ProfileName = "ART Head & Neck" };
-            profile.Limits.Add(MetricKeys.Nmi, new ThresholdLimits(1.50, 1.35));
-            profile.Limits.Add(MetricKeys.Ncc, new ThresholdLimits(0.94, 0.88));
-            profile.Limits.Add(MetricKeys.Ssd, new ThresholdLimits(0.025, 0.040));
             profile.Limits.Add(MetricKeys.JacobianNegative, new ThresholdLimits(1.0, 2.5));
             profile.Limits.Add(MetricKeys.MaxDisplacement, new ThresholdLimits(15.0, 22.0));
             profile.Limits.Add(MetricKeys.Smoothness, new ThresholdLimits(0.90, 0.80));
@@ -118,9 +127,6 @@ namespace ESAPI_RegistrationQA.Models
         public static ThresholdProfile CreateBrainSRS()
         {
             var profile = new ThresholdProfile { ProfileName = "Brain / SRS" };
-            profile.Limits.Add(MetricKeys.Nmi, new ThresholdLimits(1.60, 1.45));
-            profile.Limits.Add(MetricKeys.Ncc, new ThresholdLimits(0.96, 0.91));
-            profile.Limits.Add(MetricKeys.Ssd, new ThresholdLimits(0.015, 0.030));
             profile.Limits.Add(MetricKeys.JacobianNegative, new ThresholdLimits(0.2, 1.0));
             profile.Limits.Add(MetricKeys.MaxDisplacement, new ThresholdLimits(5.0, 10.0));
             profile.Limits.Add(MetricKeys.Smoothness, new ThresholdLimits(0.95, 0.88));
@@ -137,9 +143,6 @@ namespace ESAPI_RegistrationQA.Models
         public static ThresholdProfile CreatePelvis()
         {
             var profile = new ThresholdProfile { ProfileName = "Pelvis / Prostate" };
-            profile.Limits.Add(MetricKeys.Nmi, new ThresholdLimits(1.40, 1.25));
-            profile.Limits.Add(MetricKeys.Ncc, new ThresholdLimits(0.91, 0.85));
-            profile.Limits.Add(MetricKeys.Ssd, new ThresholdLimits(0.030, 0.050));
             profile.Limits.Add(MetricKeys.JacobianNegative, new ThresholdLimits(1.5, 3.0));
             profile.Limits.Add(MetricKeys.MaxDisplacement, new ThresholdLimits(20.0, 30.0));
             profile.Limits.Add(MetricKeys.Smoothness, new ThresholdLimits(0.88, 0.78));
@@ -156,9 +159,6 @@ namespace ESAPI_RegistrationQA.Models
         public static ThresholdProfile CreateThorax()
         {
             var profile = new ThresholdProfile { ProfileName = "Thorax / Lung" };
-            profile.Limits.Add(MetricKeys.Nmi, new ThresholdLimits(1.35, 1.20));
-            profile.Limits.Add(MetricKeys.Ncc, new ThresholdLimits(0.89, 0.82));
-            profile.Limits.Add(MetricKeys.Ssd, new ThresholdLimits(0.035, 0.055));
             profile.Limits.Add(MetricKeys.JacobianNegative, new ThresholdLimits(2.0, 4.0));
             profile.Limits.Add(MetricKeys.MaxDisplacement, new ThresholdLimits(25.0, 35.0));
             profile.Limits.Add(MetricKeys.Smoothness, new ThresholdLimits(0.85, 0.75));

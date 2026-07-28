@@ -63,6 +63,21 @@ namespace ESAPI_RegistrationQA.Models
         /// </summary>
         public string StandardBasis { get; private set; }
 
+        /// <summary>
+        /// true when a value outside the profile limits may drive the overall verdict.
+        ///
+        /// Measuring a quantity and being entitled to fail a registration on it are different
+        /// claims, and the tool used to treat them as one. Whether a metric can gate is a
+        /// property of the metric and of the evidence behind its tolerance, not of the
+        /// anatomical profile, which is why it lives here alongside <see cref="HigherIsBetter"/>
+        /// rather than in <c>ThresholdProfile</c>: there it could differ between profiles for
+        /// the same metric.
+        /// </summary>
+        public bool Gating { get; private set; }
+
+        /// <summary>Why the metric does or does not gate. Mandatory, like the other rationale fields.</summary>
+        public string GatingBasis { get; private set; }
+
         public MetricDefinition(
             string key,
             string displayName,
@@ -71,7 +86,9 @@ namespace ESAPI_RegistrationQA.Models
             string description,
             string clinicalQuestion,
             string decisionSupported,
-            string standardBasis)
+            string standardBasis,
+            bool gating,
+            string gatingBasis)
         {
             if (string.IsNullOrWhiteSpace(key)) throw new ArgumentException("Key is required.", "key");
             if (string.IsNullOrWhiteSpace(clinicalQuestion))
@@ -80,6 +97,8 @@ namespace ESAPI_RegistrationQA.Models
                 throw new ArgumentException("A metric must state what decision it supports.", "decisionSupported");
             if (string.IsNullOrWhiteSpace(standardBasis))
                 throw new ArgumentException("A metric must state its position relative to TG-132.", "standardBasis");
+            if (string.IsNullOrWhiteSpace(gatingBasis))
+                throw new ArgumentException("A metric must state why it does or does not drive the verdict.", "gatingBasis");
 
             Key = key;
             DisplayName = displayName;
@@ -89,6 +108,8 @@ namespace ESAPI_RegistrationQA.Models
             ClinicalQuestion = clinicalQuestion;
             DecisionSupported = decisionSupported;
             StandardBasis = standardBasis;
+            Gating = gating;
+            GatingBasis = gatingBasis;
         }
     }
 
@@ -122,7 +143,14 @@ namespace ESAPI_RegistrationQA.Models
                 standardBasis:
                     "Not in TG-132 Table III. Section 4.C.3 admits CC for assessment provided the metric " +
                     "was not the one the registration algorithm optimised, and warns it does not convert " +
-                    "into a measure of spatial accuracy."));
+                    "into a measure of spatial accuracy.",
+                gating: false,
+                gatingBasis:
+                    "TG-132 defines no tolerance for CC anywhere, and states that the metric does not " +
+                    "convert into a measure of spatial accuracy. Any numeric limit here would be one this " +
+                    "project invented, so a red badge would assert a geometric failure the metric cannot " +
+                    "establish. The value is reported and exported; interpret it against your own baseline " +
+                    "distribution (VALIDATION.md section 5)."));
 
             Register(new MetricDefinition(
                 key: MetricKeys.Nmi,
@@ -142,7 +170,11 @@ namespace ESAPI_RegistrationQA.Models
                     "CT-MR fusion.",
                 standardBasis:
                     "Not in TG-132 Table III. Admitted by section 4.C.3 under the same two conditions " +
-                    "as CC and SSD."));
+                    "as CC and SSD.",
+                gating: false,
+                gatingBasis:
+                    "Same as CC: no tolerance in TG-132 and no route from the value to a distance in " +
+                    "millimetres. Reported for information and for the local baseline."));
 
             Register(new MetricDefinition(
                 key: MetricKeys.Ssd,
@@ -161,7 +193,11 @@ namespace ESAPI_RegistrationQA.Models
                     "truncation, metal artefact, a contrast phase mismatch, or a local geometric error " +
                     "confined to part of the volume. Useful as the reason to go and look at the overlay.",
                 standardBasis:
-                    "Not in TG-132 Table III. Admitted by section 4.C.3 under the same conditions."));
+                    "Not in TG-132 Table III. Admitted by section 4.C.3 under the same conditions.",
+                gating: false,
+                gatingBasis:
+                    "Same as CC and MI: no tolerance in TG-132. It is also the most scale-sensitive of " +
+                    "the three, which makes an absolute limit even harder to defend across sites."));
 
             // ---------------------------------------------------------- deformation / topology
 
@@ -181,7 +217,12 @@ namespace ESAPI_RegistrationQA.Models
                     "for direct contour propagation. This is the clearest go/no-go in the whole set.",
                 standardBasis:
                     "TG-132 Table III. Tolerance: no negative values, with deviations from 1 as " +
-                    "clinically expected."));
+                    "clinically expected.",
+                gating: true,
+                gatingBasis:
+                    "Table III sets an explicit tolerance and the report calls a negative determinant an " +
+                    "erroneous physical model of the patient. Note that the profile limits here are more " +
+                    "permissive than Table III, which admits no negative values at all."));
 
             Register(new MetricDefinition(
                 key: MetricKeys.MaxDisplacement,
@@ -203,7 +244,15 @@ namespace ESAPI_RegistrationQA.Models
                 standardBasis:
                     "Not in TG-132 Table III. Included as a magnitude sanity check; the report discusses " +
                     "expected volume change in section 4.C.3 but does not tabulate a displacement " +
-                    "tolerance."));
+                    "tolerance.",
+                gating: true,
+                gatingBasis:
+                    "Gates only when both series share a DICOM Frame of Reference. That condition is what " +
+                    "makes the identity the meaningful \"no correction\" baseline, so that the displacement " +
+                    "is the correction the registration applies. Across two frames of reference — two " +
+                    "scanners, or a CT and an MR — the matrix also carries the offset between the two " +
+                    "coordinate systems, and a correct registration can exceed any profile limit without " +
+                    "anything being wrong. In that case the value is reported without a classification."));
 
             Register(new MetricDefinition(
                 key: MetricKeys.Smoothness,
@@ -222,7 +271,13 @@ namespace ESAPI_RegistrationQA.Models
                     "regions where a propagated contour is least trustworthy.",
                 standardBasis:
                     "Not in TG-132 Table III. Related to the report's observation in section 4.C.3 that " +
-                    "large local changes in the Jacobian determinant can indicate a registration error."));
+                    "large local changes in the Jacobian determinant can indicate a registration error.",
+                gating: true,
+                gatingBasis:
+                    "Gating, but the limits are inherited rather than derived, like the intensity metrics. " +
+                    "It does not misfire today because the only values it can take are 1.0 exactly, for a " +
+                    "rigid transform, or nothing at all for a deformable one. If the deformation field ever " +
+                    "becomes readable, revisit this before trusting the classification."));
 
             // ---------------------------------------------------------- structures
 
@@ -243,7 +298,13 @@ namespace ESAPI_RegistrationQA.Models
                     "image intensities.",
                 standardBasis:
                     "TG-132 Table III. Tolerance: within the contouring uncertainty of the structure, " +
-                    "approximately 0.80-0.90, and volume dependent."));
+                    "approximately 0.80-0.90, and volume dependent.",
+                gating: true,
+                gatingBasis:
+                    "Table III gives a numeric range, which is the strongest tolerance basis in the set " +
+                    "after TRE. The report's own footnote warns that the expected value depends on the " +
+                    "volume of the structure, so read the classification together with which structure " +
+                    "produced it."));
 
             Register(new MetricDefinition(
                 key: MetricKeys.Mda,
@@ -262,7 +323,11 @@ namespace ESAPI_RegistrationQA.Models
                     "a whole lung. MDA is comparable across structures of different sizes.",
                 standardBasis:
                     "TG-132 Table III. Tolerance: within the contouring uncertainty of the structure, " +
-                    "or the maximum voxel dimension, roughly 2-3 mm."));
+                    "or the maximum voxel dimension, roughly 2-3 mm.",
+                gating: true,
+                gatingBasis:
+                    "Table III sets a tolerance in millimetres, and the metric is expressed in the same " +
+                    "units as the quantity being bounded."));
 
             Register(new MetricDefinition(
                 key: MetricKeys.Hd95,
@@ -283,7 +348,13 @@ namespace ESAPI_RegistrationQA.Models
                 standardBasis:
                     "Not in TG-132 Table III, which specifies MDA. Retained alongside it because HD95 " +
                     "is what the segmentation literature reports, so local results stay comparable with " +
-                    "published series."));
+                    "published series.",
+                gating: true,
+                gatingBasis:
+                    "Gating despite not being tabulated, because unlike the intensity metrics it is a " +
+                    "distance in millimetres and can be set against the same contouring uncertainty that " +
+                    "Table III uses for MDA. The published segmentation literature supplies values to " +
+                    "compare against."));
 
             // ---------------------------------------------------------- spatial accuracy
 
@@ -305,7 +376,12 @@ namespace ESAPI_RegistrationQA.Models
                     "wrong.",
                 standardBasis:
                     "TG-132 Table III, the report's primary accuracy metric. Tolerance: the maximum " +
-                    "voxel dimension, roughly 2-3 mm."));
+                    "voxel dimension, roughly 2-3 mm.",
+                gating: true,
+                gatingBasis:
+                    "The strongest basis of any metric here: an explicit tolerance in Table III, tied to " +
+                    "a physical quantity of the image pair rather than to a convention, and expressed in " +
+                    "the units of the error itself. TG-132 also gives 1 mm for stereotactic radiosurgery."));
 
             Register(new MetricDefinition(
                 key: MetricKeys.TreMax,
@@ -323,7 +399,12 @@ namespace ESAPI_RegistrationQA.Models
                     "local failure.",
                 standardBasis:
                     "TG-132 Table III defines TRE without prescribing how to summarise it across " +
-                    "landmarks. Reporting mean and maximum separately is a practical extension."));
+                    "landmarks. Reporting mean and maximum separately is a practical extension.",
+                gating: true,
+                gatingBasis:
+                    "Same tolerance basis as the mean; only the summary statistic is ours. Applying the " +
+                    "Table III limit to the worst landmark is the conservative reading, which is the right " +
+                    "one for a small target."));
 
             Register(new MetricDefinition(
                 key: MetricKeys.InverseConsistency,
@@ -344,7 +425,12 @@ namespace ESAPI_RegistrationQA.Models
                 standardBasis:
                     "TG-132 section 4.C.4 and Table III. Tolerance: the maximum voxel dimension. The " +
                     "report is explicit that consistency provides evidence of a stable system rather " +
-                    "than direct verification."));
+                    "than direct verification.",
+                gating: true,
+                gatingBasis:
+                    "Table III sets a tolerance in millimetres. It gates in one direction only in " +
+                    "substance: a large residual invalidates the other metrics, while a small one proves " +
+                    "nothing on its own, since a registration can be consistently wrong."));
         }
 
         private static void Register(MetricDefinition definition)
@@ -392,6 +478,17 @@ namespace ESAPI_RegistrationQA.Models
         {
             MetricDefinition definition;
             return TryGet(key, out definition) && definition.HigherIsBetter;
+        }
+
+        /// <summary>
+        /// Whether a value outside the profile limits may drive the verdict. An unknown key
+        /// returns false: a metric nobody has justified must not be able to fail a
+        /// registration.
+        /// </summary>
+        public static bool IsGating(string key)
+        {
+            MetricDefinition definition;
+            return TryGet(key, out definition) && definition.Gating;
         }
     }
 }

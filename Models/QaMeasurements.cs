@@ -143,6 +143,32 @@ namespace ESAPI_RegistrationQA.Models
         /// </summary>
         public double? NativeVoxelSizeMm { get; set; }
 
+        /// <summary>DICOM Frame of Reference UID of each series, when the API exposes it.</summary>
+        public string FixedFrameOfReferenceUid { get; set; }
+        public string MovingFrameOfReferenceUid { get; set; }
+
+        /// <summary>
+        /// Whether both series live in the same DICOM frame of reference. Null when either
+        /// UID could not be read.
+        ///
+        /// It decides whether the maximum displacement means anything. Within one frame of
+        /// reference the identity is the "no correction" state, so the displacement is the
+        /// correction the registration applies. Across two frames — two scanners, or a CT and
+        /// an MR — the matrix must also carry the offset between the two coordinate systems,
+        /// and its magnitude stops being a statement about the registration.
+        /// </summary>
+        public bool? SharesFrameOfReference
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(FixedFrameOfReferenceUid)) return null;
+                if (string.IsNullOrWhiteSpace(MovingFrameOfReferenceUid)) return null;
+
+                return string.Equals(
+                    FixedFrameOfReferenceUid, MovingFrameOfReferenceUid, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
         // Rigid transform
         public RigidTransform Transform { get; set; }
         public string TransformSource { get; set; }

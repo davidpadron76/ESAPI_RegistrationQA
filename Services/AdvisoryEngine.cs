@@ -133,6 +133,9 @@ namespace ESAPI_RegistrationQA.Services
                     "separable at this orientation; read the three angles as a set, not individually."));
             }
 
+            // --- Frame of reference ------------------------------------------------------
+            AddFrameOfReferenceAdvisory(set, measurements);
+
             // --- Overall verdict ---------------------------------------------------------
             BuildVerdict(set, metrics, unavailable.Count, profileName, measurements);
 
@@ -313,6 +316,35 @@ namespace ESAPI_RegistrationQA.Services
             set.Advisories.Add(new Advisory(AdvisorySeverity.Info, "TOLERANCE BASIS", detail));
         }
 
+        /// <summary>
+        /// States whether the two series share a DICOM frame of reference, but only when
+        /// there is a maximum displacement on screen for the answer to bear on. It is the one
+        /// metric whose interpretation the answer changes.
+        /// </summary>
+        private static void AddFrameOfReferenceAdvisory(AdvisorySet set, QaMeasurements measurements)
+        {
+            if (measurements == null) return;
+            if (!measurements.MaxDisplacement.IsAvailable) return;
+
+            bool? shares = measurements.SharesFrameOfReference;
+
+            if (shares.HasValue && shares.Value) return;
+
+            string detail = shares.HasValue
+                ? "The two series are in different DICOM Frames of Reference. The registration matrix " +
+                  "therefore spans two coordinate systems, and the maximum displacement includes the " +
+                  "offset between them as well as the correction being applied. A correct registration " +
+                  "between images from two different scanners, or between a CT and an MR, can exceed any " +
+                  "profile limit for that reason alone, so the metric is reported without a " +
+                  "classification."
+                : "At least one series does not expose its Frame of Reference UID, so it cannot be " +
+                  "established whether the two share a coordinate system. Maximum displacement is " +
+                  "reported without a classification: if the frames differ, its magnitude is not a " +
+                  "registration correction.";
+
+            set.Advisories.Add(new Advisory(AdvisorySeverity.Info, "FRAME OF REFERENCE", detail));
+        }
+
         private static void AddSamplingAdvisory(AdvisorySet set, QaMeasurements measurements)
         {
             if (measurements == null || measurements.SampleCount <= 0) return;
@@ -354,13 +386,19 @@ namespace ESAPI_RegistrationQA.Services
             int yellow = metrics.Count(m => m.Status == QASemaphore.Yellow);
             int green = metrics.Count(m => m.Status == QASemaphore.Green);
 
+            // Measured, but with no tolerance behind them, so they cannot count towards
+            // compliance or against it. They are counted separately because the difference
+            // between "nothing was measured" and "things were measured that cannot decide"
+            // is exactly what the reader needs in order to know what to do next.
+            int informational = metrics.Count(m => m.Status == QASemaphore.Informational);
+
             if (red > 0)
             {
                 set.OverallSeverity = AdvisorySeverity.Critical;
                 set.OverallStatus = string.Format(CultureInfo.InvariantCulture,
                     "NOT COMPLIANT — Registration '{0}' breaches {1} criterion(s) of the [{2}] profile. " +
-                    "{3} metric(s) in the attention zone, {4} unevaluated.",
-                    registrationId, red, profileName, yellow, unavailableCount);
+                    "{3} metric(s) in the attention zone, {4} unevaluated, {5} for information only.",
+                    registrationId, red, profileName, yellow, unavailableCount, informational);
                 return;
             }
 
@@ -369,8 +407,21 @@ namespace ESAPI_RegistrationQA.Services
                 set.OverallSeverity = AdvisorySeverity.Warning;
                 set.OverallStatus = string.Format(CultureInfo.InvariantCulture,
                     "REVIEW REQUIRED — Registration '{0}' has {1} metric(s) in the attention zone of the " +
-                    "[{2}] profile. {3} unevaluated.",
-                    registrationId, yellow, profileName, unavailableCount);
+                    "[{2}] profile. {3} unevaluated, {4} for information only.",
+                    registrationId, yellow, profileName, unavailableCount, informational);
+                return;
+            }
+
+            if (green == 0 && informational > 0)
+            {
+                set.OverallSeverity = AdvisorySeverity.Warning;
+                set.OverallStatus = string.Format(CultureInfo.InvariantCulture,
+                    "NOT VERIFIED — {0} metric(s) of registration '{1}' were measured, but none of them " +
+                    "carries a tolerance that can establish compliance, and {2} could not be measured. " +
+                    "The metrics that can verify a registration are TRE, MDA, DSC and consistency: " +
+                    "placing matched landmarks, or contouring the same structure on both series, is what " +
+                    "enables them.",
+                    informational, registrationId, unavailableCount);
                 return;
             }
 
@@ -397,8 +448,12 @@ namespace ESAPI_RegistrationQA.Services
             set.OverallSeverity = AdvisorySeverity.Ok;
             set.OverallStatus = string.Format(CultureInfo.InvariantCulture,
                 "COMPLIANT — All {0} evaluated metrics of registration '{1}' satisfy the tolerances of the " +
-                "[{2}] profile.",
-                green, registrationId, profileName);
+                "[{2}] profile.{3}",
+                green, registrationId, profileName,
+                informational > 0
+                    ? string.Format(CultureInfo.InvariantCulture,
+                        " A further {0} metric(s) were measured for information only.", informational)
+                    : string.Empty);
 
             set.Advisories.Add(new Advisory(
                 AdvisorySeverity.Ok,
