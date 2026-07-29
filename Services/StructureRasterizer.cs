@@ -189,11 +189,32 @@ namespace ESAPI_RegistrationQA.Services
         private static readonly HashSet<string> PointTypes =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "MARKER", "ISOCENTER" };
 
+        /// <summary>
+        /// The DICOM RTROIInterpretedType for a patient surface outline. Read from the API
+        /// rather than guessed from the identifier — Id varies with language and institution
+        /// ("BODY", "CUERPO", "Skin", "External"...), but this field is the normative one.
+        /// </summary>
+        private const string SurfaceOutlineType = "EXTERNAL";
+
         public sealed class NamedStructure
         {
             public string Id { get; set; }
             public string DicomType { get; set; }
             public ContourSet Contours { get; set; }
+
+            /// <summary>
+            /// True for the patient surface outline (DICOM type EXTERNAL). It still gets read
+            /// and rasterised like any other structure, but it is not the kind of thing
+            /// TG-132's DSC and MDA rows are about — the report speaks of "the same organ", not
+            /// of the skin. And where two series cover different lengths of patient, its
+            /// surface cannot agree at the ends no matter how good the registration is, so
+            /// including it in a worst-case comparison buries every organ result behind a
+            /// number that measures field-of-view overlap instead.
+            /// </summary>
+            public bool IsSurfaceOutline
+            {
+                get { return string.Equals(DicomType, SurfaceOutlineType, StringComparison.OrdinalIgnoreCase); }
+            }
         }
 
         /// <summary>

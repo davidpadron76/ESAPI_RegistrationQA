@@ -217,6 +217,21 @@ the matched structures, and the worst case for one need not be the worst case fo
 value now names its own structure in the criterion column, and a warning appears when the three
 come from different ones. The Diagnostics window lists every structure with its three values.
 
+**The patient surface outline is excluded automatically.** If a structure's DICOM type is
+`EXTERNAL` — the normative type for a body outline, whatever it is named locally ("BODY",
+"CUERPO", "Skin"...) — it is still read and rasterised, and its own DSC/MDA/HD95 are logged in
+Diagnostics, but it never enters the worst-case comparison. TG-132's DSC and MDA rows describe
+"the same organ", not the skin, and where two series cover different lengths of patient the
+outline's ends cannot agree no matter how good the registration is: on a real case it reported
+DSC 0.910 and MDA 6.74 mm and buried a PTV that actually measured DSC 0.952 and MDA 0.65 mm.
+There is no checkbox to bring it back — if EXTERNAL genuinely needs comparing for some case,
+its DICOM type has to be changed in Eclipse first.
+
+If the only structure pair that matches by identifier is the surface outline, DSC/MDA/HD95 are
+reported as unavailable with a reason that says so explicitly, distinct from the generic "no
+matching structures" message — it is telling you to contour something that is actually an
+organ or target volume.
+
 **Do not use BODY or EXTERNAL for this.** Where the two scans cover different lengths of
 patient, the outline surfaces cannot agree at the ends, and the disagreement measures the field
 of view rather than the registration. A duplicated PTV sphere reported DSC 0.910 next to HD95

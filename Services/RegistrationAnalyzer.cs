@@ -672,11 +672,23 @@ namespace ESAPI_RegistrationQA.Services
             double worstDsc = double.MaxValue, worstMda = 0.0, worstHd95 = 0.0;
             string worstDscId = null, worstMdaId = null, worstHd95Id = null;
             int evaluated = 0;
+            bool anyNonOutlinePair = false;
 
             var gridByStructure = new Dictionary<string, ImageGeometry>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var pair in pairs)
             {
+                // The patient surface outline (DICOM type EXTERNAL, usually "BODY") is still
+                // rasterised and its own DSC/MDA/HD95 logged below — that is useful evidence,
+                // and hiding it would look like the structure was never read. What it must not
+                // do is enter the worst-case comparison: TG-132's DSC and MDA rows are about
+                // "the same organ", and where two series cover different lengths of patient the
+                // outline cannot agree at the ends no matter how good the registration is. Left
+                // in, it dominated: DSC 0.910 and MDA 6.74 mm from BODY buried a PTV that
+                // actually measured DSC 0.952 and MDA 0.65 mm.
+                bool isOutline = pair.Item1.IsSurfaceOutline || pair.Item2.IsSurfaceOutline;
+                if (!isOutline) anyNonOutlinePair = true;
+
                 // One grid per structure rather than one shared by all. A shared grid spans the
                 // union of everything matched, so a BODY outline 385 mm long forced the sample
                 // cap to coarsen it to 2.41 mm — and a PTV sphere measured on that grid returned
@@ -707,6 +719,19 @@ namespace ESAPI_RegistrationQA.Services
                     continue;
                 }
 
+                // The grid resolution belongs on this line: a surface distance equal to the
+                // grid spacing means "at or below what this grid can resolve", not a measured
+                // disagreement, and the reader cannot tell the difference without both numbers.
+                _log.Info("structures: " + pair.Item1.Id, string.Format(CultureInfo.InvariantCulture,
+                    "DSC {0:F3}, MDA {1:F2} mm, HD95 {2:F2} mm (grid {3:F2} mm){4}",
+                    comparison.Dsc.Value, comparison.MeanDistanceToAgreement.Value,
+                    comparison.Hd95.Value, grid.CoarsestResolution,
+                    isOutline
+                        ? " — excluded from the worst-case comparison: patient surface outline (DICOM type EXTERNAL)"
+                        : string.Empty));
+
+                if (isOutline) continue;
+
                 evaluated++;
 
                 if (comparison.Dsc.Value < worstDsc)
@@ -724,22 +749,26 @@ namespace ESAPI_RegistrationQA.Services
                     worstHd95 = comparison.Hd95.Value;
                     worstHd95Id = pair.Item1.Id;
                 }
-
-                // The grid resolution belongs on this line: a surface distance equal to the
-                // grid spacing means "at or below what this grid can resolve", not a measured
-                // disagreement, and the reader cannot tell the difference without both numbers.
-                _log.Info("structures: " + pair.Item1.Id, string.Format(CultureInfo.InvariantCulture,
-                    "DSC {0:F3}, MDA {1:F2} mm, HD95 {2:F2} mm (grid {3:F2} mm)",
-                    comparison.Dsc.Value, comparison.MeanDistanceToAgreement.Value,
-                    comparison.Hd95.Value, grid.CoarsestResolution));
             }
 
             if (evaluated == 0)
             {
-                const string reason = "no matched structure could be rasterised onto the comparison grid";
+                // Distinguish "nothing usable" from "only the surface outline matched" — the
+                // second tells the physicist exactly what to do about it (contour something
+                // that is actually an organ), which the first cannot.
+                string reason = !anyNonOutlinePair
+                    ? "the only matched structure(s) are the patient surface outline (DICOM type " +
+                      "EXTERNAL), which is excluded automatically: it is not the kind of structure " +
+                      "TG-132's DSC and MDA rows describe, and where the two series cover different " +
+                      "lengths of patient its surfaces cannot agree at the ends regardless of " +
+                      "registration quality. Contour an organ or target volume with the same " +
+                      "identifier on both series to enable these metrics."
+                    : "no matched structure could be rasterised onto the comparison grid";
+
                 measurements.Dsc = MeasuredValue.Unavailable(reason);
                 measurements.Mda = MeasuredValue.Unavailable(reason);
                 measurements.Hd95 = MeasuredValue.Unavailable(reason);
+                _log.Info("structures", reason);
                 return;
             }
 
@@ -760,13 +789,14 @@ namespace ESAPI_RegistrationQA.Services
 
                 if (distinct.Count > 1)
                 {
+                    // The patient surface outline no longer competes for worst case — it is
+                    // excluded above — so a spread across different structures now means real
+                    // organs disagree by different amounts, which is worth a look but is not
+                    // the field-of-view artefact this warning used to be about.
                     _log.Warning("structures", string.Format(CultureInfo.InvariantCulture,
                         "the three worst cases come from different structures ({0}). Read each value " +
                         "against the structure named beside it, and the per-structure lines above for " +
-                        "the rest. An outline of the patient — BODY, EXTERNAL — is a poor choice here: " +
-                        "where the two scans cover different lengths of patient its surfaces cannot " +
-                        "agree, and the disagreement measures the field of view rather than the " +
-                        "registration.",
+                        "the rest.",
                         string.Join(", ", distinct.ToArray())));
                 }
             }
