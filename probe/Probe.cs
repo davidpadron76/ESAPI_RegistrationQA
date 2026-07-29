@@ -69,6 +69,7 @@ namespace VMS.IRS.Scripting
             // — has nothing to do with what happens to be open right now.
             DumpPatientLibrary(context);
             DumpRegistrationCollection(context);
+            DumpDeformableRegistration(context);
 
             dynamic registration = Try(() => context.Registration, "context.Registration");
             if (registration == null)
@@ -235,6 +236,193 @@ namespace VMS.IRS.Scripting
             if (patient != null) SweepForRegistrationMethods((object)patient, "Patient");
 
             if (collection != null) SweepForRegistrationMethods((object)collection, "registration collection");
+        }
+
+        /// <summary>
+        /// Follow-up to the batch-commissioning question above: once a deformable case is
+        /// found, what does the API actually expose on it, and is the point-by-point mapping
+        /// the plugin already uses (<see cref="PointMapperReader"/> in the main project) the
+        /// only thing reachable, or is there a real deformation vector field underneath?
+        ///
+        /// Reuses PointMapperReader's own candidate method names and wrapper properties, in the
+        /// same order, so a match found here is known — not guessed — to be reachable from the
+        /// plugin. The DVF sweep below is the part PointMapperReader does not attempt: it never
+        /// looks for the field itself, only for a method that maps one point at a time.
+        /// </summary>
+        private void DumpDeformableRegistration(dynamic context)
+        {
+            Section("Deformable registration (what can be read from a non-rigid case)");
+
+            dynamic collection = null;
+            if (!TryAssign(() => context.Patient.Registrations, out collection))
+                TryAssign(() => context.Registrations, out collection);
+            if (collection == null) TryAssign(() => context.Patient.MIRSRegistrations, out collection);
+
+            if (collection == null)
+            {
+                Line("no registration collection answered any of the known paths — see the batch " +
+                     "section above.");
+                return;
+            }
+
+            dynamic deformable = null;
+            string deformableId = null, sourceId = null, targetId = null;
+
+            foreach (dynamic reg in collection)
+            {
+                string typeName = ((object)reg).GetType().Name;
+                if (typeName.IndexOf("Identity", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                if (typeName.IndexOf("Rigid", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+
+                deformable = reg;
+                deformableId = TryGetString(() => reg.Id, "?");
+                sourceId = TryGetString(() => reg.SourceImage.Id, "?");
+                targetId = TryGetString(() => reg.RegisteredImage.Id, "?");
+                break;
+            }
+
+            if (deformable == null)
+            {
+                Line("no non-rigid registration found in this workspace — every entry above is " +
+                     "MIRSIdentityRegistration or MIRSRigidRegistration. Re-run on a patient with " +
+                     "an elastic/deformable registration to answer this question.");
+                return;
+            }
+
+            Line("found " + deformableId + "  " + sourceId + " -> " + targetId +
+                 "  type=" + ((object)deformable).GetType().Name);
+            Line("");
+
+            Members((object)deformable);
+            Scalars((object)deformable);
+
+            // Same order PointMapperReader.CandidateHolders / CandidateMethods use, so this is
+            // directly comparable to what the plugin would find on this same registration.
+            string[] holderNames =
+            {
+                "RigidRegistration", "NonRigidRegistration", "DeformableRegistration",
+                "DeformableRegistrationField", "Registration", "SpatialRegistration",
+                "DeformationField", "VectorField"
+            };
+
+            string[] methodNames =
+            {
+                "TransformPointToRegistered", "TransformPointFromSourceToRegistered",
+                "MapPointToRegistered", "TransformPoint", "MapPoint", "DeformPoint",
+                "TransformPointToSource", "MapPointToSource", "InverseTransformPoint"
+            };
+
+            Line("");
+            Line("Point-mapping method search (same names/holders PointMapperReader already tries):");
+            ProbeMappingCandidates((object)deformable, null, methodNames);
+
+            var holders = new List<KeyValuePair<string, object>>();
+            foreach (string holderName in holderNames)
+            {
+                object holder;
+                if (!TryReadObjectProperty((object)deformable, holderName, out holder) || holder == null)
+                    continue;
+
+                holders.Add(new KeyValuePair<string, object>(holderName, holder));
+
+                Line("");
+                Line(holderName + " → " + holder.GetType().FullName);
+                Members(holder, "  ");
+                Scalars(holder, "  ");
+                ProbeMappingCandidates(holder, holderName, methodNames);
+            }
+
+            // The net PointMapperReader does not cast: it only ever looks for a point-mapping
+            // method, never for the field itself. If Eclipse exposes the DVF directly under some
+            // other name, this is what would catch it.
+            Line("");
+            Line("Reflection sweep for anything DVF-shaped (name contains " +
+                 "Deform/Vector/Displacement/Field/DVF/Warp):");
+            SweepForDvfShapedMembers((object)deformable, deformableId ?? "registration");
+            foreach (KeyValuePair<string, object> holder in holders)
+                SweepForDvfShapedMembers(holder.Value, holder.Key);
+        }
+
+        private void ProbeMappingCandidates(object target, string holderName, string[] methodNames)
+        {
+            Type type;
+            try { type = target.GetType(); }
+            catch { return; }
+
+            string prefix = holderName != null ? holderName + "." : string.Empty;
+
+            foreach (string name in methodNames)
+            {
+                MethodInfo method;
+                try
+                {
+                    method = type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                        .FirstOrDefault(m => string.Equals(m.Name, name, StringComparison.Ordinal) &&
+                                              m.GetParameters().Length == 1 &&
+                                              m.ReturnType != typeof(void));
+                }
+                catch
+                {
+                    method = null;
+                }
+
+                if (method == null) continue;
+
+                Line("  " + prefix + name + "(" + method.GetParameters()[0].ParameterType.Name +
+                     ") : " + method.ReturnType.Name + "  <-- candidate found");
+            }
+        }
+
+        private static bool TryReadObjectProperty(object instance, string name, out object value)
+        {
+            value = null;
+            if (instance == null) return false;
+
+            try
+            {
+                PropertyInfo property = instance.GetType().GetProperty(
+                    name, BindingFlags.Public | BindingFlags.Instance);
+                if (property == null || !property.CanRead || property.GetIndexParameters().Length != 0)
+                    return false;
+
+                value = property.GetValue(instance, null);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void SweepForDvfShapedMembers(object instance, string label)
+        {
+            if (instance == null) return;
+
+            Type type;
+            try { type = instance.GetType(); }
+            catch { return; }
+
+            string[] keywords = { "Deform", "Vector", "Displacement", "Field", "DVF", "Warp" };
+
+            try
+            {
+                var props = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(p => keywords.Any(k => p.Name.IndexOf(k, StringComparison.OrdinalIgnoreCase) >= 0))
+                    .ToList();
+
+                if (props.Count == 0)
+                {
+                    Line("  " + label + ": nothing DVF-shaped in its properties");
+                    return;
+                }
+
+                foreach (PropertyInfo p in props)
+                    Line("  " + label + "." + p.Name + " : " + p.PropertyType.Name);
+            }
+            catch (Exception ex)
+            {
+                Line("  " + label + ": sweep failed — " + ex.GetType().Name + ": " + ex.Message);
+            }
         }
 
         private static bool TryAssign(Func<object> accessor, out dynamic value)
