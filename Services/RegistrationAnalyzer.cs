@@ -290,12 +290,15 @@ namespace ESAPI_RegistrationQA.Services
             dynamic registration,
             QaMeasurements measurements,
             EsapiImageReader.LoadResult source,
-            EsapiImageReader.LoadResult target)
+            EsapiImageReader.LoadResult target,
+            DiagnosticLog logOverride = null)
         {
+            DiagnosticLog log = logOverride ?? _log;
+
             string matrixSource;
             // Cast so the call binds statically: with a dynamic argument the whole invocation
             // is deferred to the runtime binder, out parameter included, for no benefit.
-            double[,] raw = MatrixReader.TryRead((object)registration, _log, out matrixSource);
+            double[,] raw = MatrixReader.TryRead((object)registration, log, out matrixSource);
 
             if (raw != null)
             {
@@ -307,18 +310,18 @@ namespace ESAPI_RegistrationQA.Services
                     measurements.TransformSource = "API matrix (" + matrixSource + ") — " + note;
                     measurements.RigidEulerAngles = transform.GetEulerAnglesDegrees();
 
-                    _log.Info("transform: matrix", note);
+                    log.Info("transform: matrix", note);
 
                     if (measurements.RigidEulerAngles.Value.GimbalLock)
                     {
-                        _log.Warning("transform: Euler angles",
+                        log.Warning("transform: Euler angles",
                             "gimbal lock (pitch ≈ ±90°): only the combination of pitch and yaw is " +
                             "observable; yaw is reported as 0");
                     }
                     return;
                 }
 
-                _log.Failure("transform: matrix", note);
+                log.Failure("transform: matrix", note);
             }
 
             // No transform. Everything downstream that needs one is left unavailable.
@@ -344,7 +347,7 @@ namespace ESAPI_RegistrationQA.Services
 
             ReportFrameOffset(source, target);
 
-            _log.Failure("transform",
+            log.Failure("transform",
                 "no registration matrix could be read, so every metric that requires mapping a point " +
                 "through the registration is reported as unavailable rather than estimated. The " +
                 "member list of the registration object is in this tab: sending it with the Eclipse " +
@@ -439,14 +442,17 @@ namespace ESAPI_RegistrationQA.Services
         /// from the linear component and presented as if they described the deformable
         /// registration.
         /// </summary>
-        private IPointMapper BuildPointMapper(dynamic registration, QaMeasurements measurements)
+        private IPointMapper BuildPointMapper(
+            dynamic registration, QaMeasurements measurements, DiagnosticLog logOverride = null)
         {
+            DiagnosticLog log = logOverride ?? _log;
+
             // The API's own method comes first, for every kind of registration. The probe found
             // it on the nested RigidRegistration object as TransformPoint(VVector), and it is
             // strictly better than the matrix: no convention to detect, no orthonormality to
             // verify, and a direction that is right by construction rather than by inference.
             // Restricting this search to deformable registrations is what hid it.
-            DynamicPointMapper apiMapper = PointMapperReader.TryBuild((object)registration, _log);
+            DynamicPointMapper apiMapper = PointMapperReader.TryBuild((object)registration, log);
             if (apiMapper != null) return apiMapper;
 
             // For a deformable registration there is no second option: applying the linear
@@ -1103,9 +1109,16 @@ namespace ESAPI_RegistrationQA.Services
                 return;
             }
 
+            // Scoped, not the plain instance log: ExtractRigidTransform and BuildPointMapper log
+            // under the same operation names ("transform: matrix", "point mapping") regardless
+            // of which registration they were called with, so without a prefix the forward and
+            // reverse entries are indistinguishable in Diagnostics — which is exactly the
+            // evidence needed when this check's residual looks wrong.
+            DiagnosticLog reverseLog = _log.Scoped("reverse: ");
+
             var reverseMeasurements = new QaMeasurements { IsDeformable = measurements.IsDeformable };
-            ExtractRigidTransform(reverse, reverseMeasurements, null, null);
-            IPointMapper reverseMapper = BuildPointMapper(reverse, reverseMeasurements);
+            ExtractRigidTransform(reverse, reverseMeasurements, null, null, reverseLog);
+            IPointMapper reverseMapper = BuildPointMapper(reverse, reverseMeasurements, reverseLog);
 
             if (reverseMapper == null)
             {
@@ -1223,6 +1236,17 @@ namespace ESAPI_RegistrationQA.Services
                     if (isReverse)
                     {
                         found = candidate;
+
+                        // Named explicitly so it can be checked against Eclipse: is this really
+                        // a second, independent registration in the opposite direction, or
+                        // another entry that happens to report the same image pair?
+                        string reverseId = ReadRegistrationId(candidate);
+                        _log.Info("inverse consistency: reverse registration", string.Format(
+                            CultureInfo.InvariantCulture,
+                            "found '{0}' ({1} → {2}); its matrix and point mapping are logged below " +
+                            "with the \"reverse: \" prefix, separately from the active registration's",
+                            reverseId ?? "(no id)", candidateSourceId, candidateTargetId));
+
                         return;
                     }
                 }

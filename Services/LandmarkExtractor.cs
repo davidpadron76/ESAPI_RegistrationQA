@@ -120,9 +120,25 @@ namespace ESAPI_RegistrationQA.Services
         {
             position = Vec3.Zero;
 
+            // CenterPoint is VolumetricStructure's property. A MARKER/ISOCENTER structure can
+            // come back as a different API type — VMS.CA.Scripting.PointsStructure does not
+            // have it — so a couple of plausible names for a "point" type are tried too.
             dynamic centre;
-            if (!Dyn.TryGet("landmarks: CenterPoint of " + id, () => structure.CenterPoint, log, out centre))
+            string usedAlt;
+            bool found = Dyn.TryGetFirst("landmarks: centre of " + id, log, out centre, out usedAlt,
+                Dyn.Alt("CenterPoint", () => structure.CenterPoint),
+                Dyn.Alt("Position", () => structure.Position),
+                Dyn.Alt("Point", () => structure.Point));
+
+            if (!found)
+            {
+                // None of the guesses answered. The member surface says what this structure
+                // type actually exposes, the same evidence trail that found StructureType.
+                log.Warning("landmarks: centre of " + id,
+                    "no known position property answered on this structure's type. " +
+                    MatrixReader.DescribeMemberSurface((object)structure));
                 return false;
+            }
 
             double x = 0.0, y = 0.0, z = 0.0;
             bool lower =

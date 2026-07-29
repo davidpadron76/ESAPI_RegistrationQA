@@ -179,6 +179,12 @@ the report states for you in the provenance section.
 Combine this with test 2: apply a known 5 mm shift and the mean TRE should come out at 5 mm.
 That validates the landmark path and the axis convention at the same time.
 
+A marker's position is read from `CenterPoint` first, then `Position` and `Point` as
+alternatives — a real case (v2.13.0) had markers come back as a structure type
+(`VMS.CA.Scripting.PointsStructure`) that has none of `CenterPoint`, the property volumetric
+structures expose. If none of the three answer, Diagnostics logs the object's member surface so
+the real property name can be added the same way `StructureType` was found for the DICOM type.
+
 **Inverse consistency.** Create the reverse registration (B→A) alongside the forward one and
 re-run. The residual should be small; TG-132 sets the tolerance at the maximum voxel dimension.
 A rotational inconsistency vanishes at the centre of the volume and grows towards the
@@ -188,6 +194,15 @@ the centre alone.
 If the reverse registration exists but the plugin reports the metric as unavailable, that
 means it could not enumerate the registrations in your Eclipse version. Please send the
 Diagnostics tab: that is exactly the kind of API difference this testing is meant to surface.
+
+If the residual comes out large instead — a real case (v2.13.0) read 266 mm, almost exactly
+twice the registration's own maximum displacement — that number is the signature of the round
+trip applying the same direction twice instead of forward-then-back. Diagnostics now separates
+the two registrations involved: entries for the active one are unprefixed, entries for the one
+found as its reverse carry a `"reverse: "` prefix on the same operation names (`transform:
+matrix`, `point mapping`), plus a line naming which registration was picked and which images
+matched it. Compare the two before assuming the check itself is broken — it may instead be that
+the "reverse" registration found in the workspace is not a genuine inverse of the active one.
 
 ## 3c. Structures and hidden metrics
 
