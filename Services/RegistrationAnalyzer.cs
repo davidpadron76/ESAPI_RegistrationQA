@@ -653,8 +653,15 @@ namespace ESAPI_RegistrationQA.Services
                 return;
             }
 
+            // One structure identifier per metric, not one for all three. The worst DSC, the
+            // worst MDA and the worst HD95 need not come from the same structure, and on a real
+            // case they did not: a duplicated PTV sphere reported DSC 0.910 alongside HD95
+            // 38.5 mm, which is impossible for one surface and obvious once the BODY contour is
+            // in the set — two scans covering different lengths of patient disagree wildly where
+            // one field of view ends. Naming the worst-DSC structure next to all three values
+            // told the reader those numbers described it.
             double worstDsc = double.MaxValue, worstMda = 0.0, worstHd95 = 0.0;
-            string worstId = null;
+            string worstDscId = null, worstMdaId = null, worstHd95Id = null;
             int evaluated = 0;
 
             foreach (var pair in pairs)
@@ -678,12 +685,18 @@ namespace ESAPI_RegistrationQA.Services
                 if (comparison.Dsc.Value < worstDsc)
                 {
                     worstDsc = comparison.Dsc.Value;
-                    worstId = pair.Item1.Id;
+                    worstDscId = pair.Item1.Id;
                 }
                 if (comparison.MeanDistanceToAgreement.Value > worstMda)
+                {
                     worstMda = comparison.MeanDistanceToAgreement.Value;
+                    worstMdaId = pair.Item1.Id;
+                }
                 if (comparison.Hd95.Value > worstHd95)
+                {
                     worstHd95 = comparison.Hd95.Value;
+                    worstHd95Id = pair.Item1.Id;
+                }
 
                 _log.Info("structures: " + pair.Item1.Id, string.Format(CultureInfo.InvariantCulture,
                     "DSC {0:F3}, MDA {1:F2} mm, HD95 {2:F2} mm",
@@ -699,17 +712,45 @@ namespace ESAPI_RegistrationQA.Services
                 return;
             }
 
-            measurements.WorstStructureId = worstId;
+            measurements.WorstStructureId = worstDscId;
 
-            string note = string.Format(CultureInfo.InvariantCulture,
-                "worst of {0} matched structure(s){1}; comparison grid {2:F1} mm",
+            measurements.Dsc = MeasuredValue.Measured(worstDsc, StructureNote(worstDscId, evaluated, grid));
+            measurements.Mda = MeasuredValue.Measured(worstMda, StructureNote(worstMdaId, evaluated, grid));
+            measurements.Hd95 = MeasuredValue.Measured(worstHd95, StructureNote(worstHd95Id, evaluated, grid));
+
+            if (evaluated > 1)
+            {
+                var distinct = new List<string>();
+                foreach (string id in new[] { worstDscId, worstMdaId, worstHd95Id })
+                    if (id != null && !distinct.Contains(id)) distinct.Add(id);
+
+                if (distinct.Count > 1)
+                {
+                    _log.Warning("structures", string.Format(CultureInfo.InvariantCulture,
+                        "the three worst cases come from different structures ({0}). Read each value " +
+                        "against the structure named beside it, and the per-structure lines above for " +
+                        "the rest. An outline of the patient — BODY, EXTERNAL — is a poor choice here: " +
+                        "where the two scans cover different lengths of patient its surfaces cannot " +
+                        "agree, and the disagreement measures the field of view rather than the " +
+                        "registration.",
+                        string.Join(", ", distinct.ToArray())));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Provenance for one surface metric: which structure produced this particular worst
+        /// case, out of how many, on what grid.
+        /// </summary>
+        private static string StructureNote(string structureId, int evaluated, ImageGeometry grid)
+        {
+            // Leads with the structure, because that is the part the reader needs first and
+            // the note is appended to a criterion in a column that ellipsises.
+            return string.Format(CultureInfo.InvariantCulture,
+                "{0}worst of {1} matched structure(s); comparison grid {2:F1} mm",
+                structureId != null ? structureId + ", " : string.Empty,
                 evaluated,
-                worstId != null ? " (" + worstId + ")" : string.Empty,
                 grid.CoarsestResolution);
-
-            measurements.Dsc = MeasuredValue.Measured(worstDsc, note);
-            measurements.Mda = MeasuredValue.Measured(worstMda, note);
-            measurements.Hd95 = MeasuredValue.Measured(worstHd95, note);
         }
 
         /// <summary>

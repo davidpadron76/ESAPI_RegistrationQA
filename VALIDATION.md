@@ -213,6 +213,17 @@ looking at:
 | **N/A** (grey) | Not measured. This one is a fault, and the reason is beside it. |
 | *(absent)* | Does not apply to this case. Accounted for in the diagnostics tab. |
 
+**Which structure the number belongs to.** DSC, MDA and HD95 each report the worst case across
+the matched structures, and the worst case for one need not be the worst case for another. Each
+value now names its own structure in the criterion column, and a warning appears when the three
+come from different ones. The Diagnostics window lists every structure with its three values.
+
+**Do not use BODY or EXTERNAL for this.** Where the two scans cover different lengths of
+patient, the outline surfaces cannot agree at the ends, and the disagreement measures the field
+of view rather than the registration. A duplicated PTV sphere reported DSC 0.910 next to HD95
+38.5 mm on a real case for exactly that reason: the Dice came from the sphere and the Hausdorff
+from BODY.
+
 **Hidden metrics.** A metric that cannot apply is no longer shown as N/A; it is omitted and
 accounted for in the diagnostics tab instead. So:
 

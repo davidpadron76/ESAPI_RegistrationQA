@@ -129,7 +129,13 @@ namespace ESAPI_RegistrationQA.Models
                 if (string.IsNullOrEmpty(ThresholdCriteria) || ThresholdCriteria == "—")
                     return MeasurementNote ?? string.Empty;
 
-                return ThresholdCriteria;
+                // Both, when both exist. The criterion says what the value was judged against;
+                // the note says what it was measured on, and for the surface metrics that is
+                // the structure name — which must not be buried in a tooltip when the three
+                // worst cases can come from three different structures.
+                return string.IsNullOrEmpty(MeasurementNote)
+                    ? ThresholdCriteria
+                    : ThresholdCriteria + "   ·   " + MeasurementNote;
             }
         }
 
