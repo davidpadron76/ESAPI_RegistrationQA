@@ -126,6 +126,11 @@ namespace VMS.IRS.Scripting
             DumpImageCollection(() => patient.Courses, "Patient.Courses");
             DumpImageCollection(() => patient.Images, "Patient.Images");
             DumpImageCollection(() => patient.ImageSets, "Patient.ImageSets");
+            // Seen on ScriptContext.Patient's own member list (VMS.IRS.Scripting.Patient) but
+            // never queried: the Ids in the registration collection (CT_1, COORDENADAS,
+            // kVCBCT_01a01...) match MIRSImage.Id, so this is likely the flat list that answers
+            // "can every image be found by name" without walking Studies -> Series.
+            DumpImageCollection(() => patient.MIRSImages, "Patient.MIRSImages");
         }
 
         private void DumpImageCollection(Func<object> accessor, string name)
@@ -476,7 +481,12 @@ namespace VMS.IRS.Scripting
                     new[] { typeof(double), typeof(double), typeof(double) });
                 if (constructor == null) return false;
 
-                object voxel = constructor.Invoke(new object[] { (double)i, (double)j, (double)k });
+                // Must be dynamic, not object: frame.VoxelToDicom(...) is a dynamically bound
+                // call (frame is dynamic), and the DLR resolves overloads from the argument's
+                // *static* type unless that type is dynamic. A statically-typed object here
+                // makes the binder look for VoxelToDicom(object) and fail to find it, even
+                // though the runtime value is a real VVector built by the same reflection.
+                dynamic voxel = constructor.Invoke(new object[] { (double)i, (double)j, (double)k });
                 patientPoint = frame.VoxelToDicom(voxel);
                 return patientPoint != null;
             }
