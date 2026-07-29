@@ -312,7 +312,10 @@ namespace ESAPI_RegistrationQA.Models
                     "Table III gives a numeric range, which is the strongest tolerance basis in the set " +
                     "after TRE. The report's own footnote warns that the expected value depends on the " +
                     "volume of the structure, so read the classification together with which structure " +
-                    "produced it."));
+                    "produced it. One exception: measured on the patient surface outline alone — no " +
+                    "organ or target matched — it stops gating. The outline is not the kind of " +
+                    "structure this row describes, and its ends cannot agree between two scans of " +
+                    "different length regardless of registration quality."));
 
             Register(new MetricDefinition(
                 key: MetricKeys.Mda,
@@ -335,7 +338,10 @@ namespace ESAPI_RegistrationQA.Models
                 gating: true,
                 gatingBasis:
                     "Table III sets a tolerance in millimetres, and the metric is expressed in the same " +
-                    "units as the quantity being bounded."));
+                    "units as the quantity being bounded. One exception, shared with DSC: measured on " +
+                    "the patient surface outline alone it stops gating, because a scan-length mismatch " +
+                    "at the outline's edges reads as a distance error that has nothing to do with the " +
+                    "registration."));
 
             Register(new MetricDefinition(
                 key: MetricKeys.Hd95,

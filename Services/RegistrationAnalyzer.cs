@@ -672,7 +672,12 @@ namespace ESAPI_RegistrationQA.Services
             double worstDsc = double.MaxValue, worstMda = 0.0, worstHd95 = 0.0;
             string worstDscId = null, worstMdaId = null, worstHd95Id = null;
             int evaluated = 0;
-            bool anyNonOutlinePair = false;
+
+            // A parallel accumulator for the surface outline, kept only as a fallback for when
+            // it is literally the only thing that matched — see below.
+            double worstOutlineDsc = double.MaxValue, worstOutlineMda = 0.0, worstOutlineHd95 = 0.0;
+            string worstOutlineDscId = null, worstOutlineMdaId = null, worstOutlineHd95Id = null;
+            int evaluatedOutline = 0;
 
             var gridByStructure = new Dictionary<string, ImageGeometry>(StringComparer.OrdinalIgnoreCase);
 
@@ -681,13 +686,12 @@ namespace ESAPI_RegistrationQA.Services
                 // The patient surface outline (DICOM type EXTERNAL, usually "BODY") is still
                 // rasterised and its own DSC/MDA/HD95 logged below — that is useful evidence,
                 // and hiding it would look like the structure was never read. What it must not
-                // do is enter the worst-case comparison: TG-132's DSC and MDA rows are about
-                // "the same organ", and where two series cover different lengths of patient the
-                // outline cannot agree at the ends no matter how good the registration is. Left
-                // in, it dominated: DSC 0.910 and MDA 6.74 mm from BODY buried a PTV that
-                // actually measured DSC 0.952 and MDA 0.65 mm.
+                // do is enter the organ-level worst-case comparison: TG-132's DSC and MDA rows
+                // are about "the same organ", and where two series cover different lengths of
+                // patient the outline cannot agree at the ends no matter how good the
+                // registration is. Left in, it dominated: DSC 0.910 and MDA 6.74 mm from BODY
+                // buried a PTV that actually measured DSC 0.952 and MDA 0.65 mm.
                 bool isOutline = pair.Item1.IsSurfaceOutline || pair.Item2.IsSurfaceOutline;
-                if (!isOutline) anyNonOutlinePair = true;
 
                 // One grid per structure rather than one shared by all. A shared grid spans the
                 // union of everything matched, so a BODY outline 385 mm long forced the sample
@@ -727,10 +731,31 @@ namespace ESAPI_RegistrationQA.Services
                     comparison.Dsc.Value, comparison.MeanDistanceToAgreement.Value,
                     comparison.Hd95.Value, grid.CoarsestResolution,
                     isOutline
-                        ? " — excluded from the worst-case comparison: patient surface outline (DICOM type EXTERNAL)"
+                        ? " — patient surface outline (DICOM type EXTERNAL): kept out of the organ-level " +
+                          "worst case, reported separately below"
                         : string.Empty));
 
-                if (isOutline) continue;
+                if (isOutline)
+                {
+                    evaluatedOutline++;
+
+                    if (comparison.Dsc.Value < worstOutlineDsc)
+                    {
+                        worstOutlineDsc = comparison.Dsc.Value;
+                        worstOutlineDscId = pair.Item1.Id;
+                    }
+                    if (comparison.MeanDistanceToAgreement.Value > worstOutlineMda)
+                    {
+                        worstOutlineMda = comparison.MeanDistanceToAgreement.Value;
+                        worstOutlineMdaId = pair.Item1.Id;
+                    }
+                    if (comparison.Hd95.Value > worstOutlineHd95)
+                    {
+                        worstOutlineHd95 = comparison.Hd95.Value;
+                        worstOutlineHd95Id = pair.Item1.Id;
+                    }
+                    continue;
+                }
 
                 evaluated++;
 
@@ -753,18 +778,35 @@ namespace ESAPI_RegistrationQA.Services
 
             if (evaluated == 0)
             {
-                // Distinguish "nothing usable" from "only the surface outline matched" — the
-                // second tells the physicist exactly what to do about it (contour something
-                // that is actually an organ), which the first cannot.
-                string reason = !anyNonOutlinePair
-                    ? "the only matched structure(s) are the patient surface outline (DICOM type " +
-                      "EXTERNAL), which is excluded automatically: it is not the kind of structure " +
-                      "TG-132's DSC and MDA rows describe, and where the two series cover different " +
-                      "lengths of patient its surfaces cannot agree at the ends regardless of " +
-                      "registration quality. Contour an organ or target volume with the same " +
-                      "identifier on both series to enable these metrics."
-                    : "no matched structure could be rasterised onto the comparison grid";
+                if (evaluatedOutline > 0)
+                {
+                    // No organ or target matched, but the surface outline did, and rasterised
+                    // cleanly. That is still a real measurement — useful as a coarse
+                    // pre-propagation check, the kind done before any structure exists on
+                    // either series — so it is reported rather than withheld. What it must not
+                    // do is masquerade as the TG-132 comparison: MetricEvaluator reads this
+                    // flag and reports DSC/MDA/HD95 as ungated INFO instead of a graded value,
+                    // because a bad number here is as likely to be a mismatch in scan length as
+                    // in registration.
+                    measurements.StructureMetricsAreSurfaceOutlineOnly = true;
+                    measurements.WorstStructureId = worstOutlineDscId;
 
+                    measurements.Dsc = MeasuredValue.Measured(
+                        worstOutlineDsc, StructureNote(worstOutlineDscId, evaluatedOutline, gridByStructure));
+                    measurements.Mda = MeasuredValue.Measured(
+                        worstOutlineMda, StructureNote(worstOutlineMdaId, evaluatedOutline, gridByStructure));
+                    measurements.Hd95 = MeasuredValue.Measured(
+                        worstOutlineHd95, StructureNote(worstOutlineHd95Id, evaluatedOutline, gridByStructure));
+
+                    _log.Info("structures",
+                        "DSC, MDA and HD95 come from the patient surface outline only — no organ or " +
+                        "target contour matched by identifier on both series. Reported as a gross " +
+                        "overlap check, not a TG-132 accuracy metric: shown as INFO and excluded from " +
+                        "the verdict.");
+                    return;
+                }
+
+                const string reason = "no matched structure could be rasterised onto the comparison grid";
                 measurements.Dsc = MeasuredValue.Unavailable(reason);
                 measurements.Mda = MeasuredValue.Unavailable(reason);
                 measurements.Hd95 = MeasuredValue.Unavailable(reason);

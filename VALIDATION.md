@@ -208,7 +208,7 @@ looking at:
 | Badge | Meaning |
 |---|---|
 | Green / Yellow / Red | Measured and classified against the profile. |
-| **INFO** (grey) | Measured, but the tool declines to grade it — no defensible tolerance. NCC, NMI and SSD always; maximum displacement when the two series are in different frames of reference. Never affects the verdict. |
+| **INFO** (grey) | Measured, but the tool declines to grade it — no defensible tolerance. NCC, NMI and SSD always; maximum displacement when the two series are in different frames of reference; DSC/MDA/HD95 when the only matched structure is the patient surface outline. Never affects the verdict. |
 | **N/A** (grey) | Not measured. This one is a fault, and the reason is beside it. |
 | *(absent)* | Does not apply to this case. Accounted for in the diagnostics tab. |
 
@@ -217,20 +217,26 @@ the matched structures, and the worst case for one need not be the worst case fo
 value now names its own structure in the criterion column, and a warning appears when the three
 come from different ones. The Diagnostics window lists every structure with its three values.
 
-**The patient surface outline is excluded automatically.** If a structure's DICOM type is
-`EXTERNAL` — the normative type for a body outline, whatever it is named locally ("BODY",
-"CUERPO", "Skin"...) — it is still read and rasterised, and its own DSC/MDA/HD95 are logged in
-Diagnostics, but it never enters the worst-case comparison. TG-132's DSC and MDA rows describe
-"the same organ", not the skin, and where two series cover different lengths of patient the
-outline's ends cannot agree no matter how good the registration is: on a real case it reported
-DSC 0.910 and MDA 6.74 mm and buried a PTV that actually measured DSC 0.952 and MDA 0.65 mm.
-There is no checkbox to bring it back — if EXTERNAL genuinely needs comparing for some case,
-its DICOM type has to be changed in Eclipse first.
+**The patient surface outline is excluded from the organ-level comparison automatically.** If a
+structure's DICOM type is `EXTERNAL` — the normative type for a body outline, whatever it is
+named locally ("BODY", "CUERPO", "Skin"...) — it is still read and rasterised, and its own
+DSC/MDA/HD95 are logged in Diagnostics, but it never enters the worst case reported against an
+organ or target. TG-132's DSC and MDA rows describe "the same organ", not the skin, and where
+two series cover different lengths of patient the outline's ends cannot agree no matter how
+good the registration is: on a real case it reported DSC 0.910 and MDA 6.74 mm and buried a PTV
+that actually measured DSC 0.952 and MDA 0.65 mm. There is no checkbox to bring it back — if
+EXTERNAL genuinely needs comparing as an organ for some case, its DICOM type has to be changed
+in Eclipse first.
 
-If the only structure pair that matches by identifier is the surface outline, DSC/MDA/HD95 are
-reported as unavailable with a reason that says so explicitly, distinct from the generic "no
-matching structures" message — it is telling you to contour something that is actually an
-organ or target volume.
+**If the only structure pair that matches by identifier is the surface outline**, DSC, MDA and
+HD95 are still measured from it — useful as a coarse pre-propagation check, the kind done
+before any organ or target has been contoured on either series — but reported as **INFO**, not
+graded: grey badge, no colour, excluded from the verdict, with the criterion column saying
+`not graded — measured on the patient surface outline only, not an organ`. A registration can be
+flawless and still show a large "disagreement" here if the two scans differ in length, so a bad
+number in this state means nothing about registration quality by itself. Once a real organ or
+target is contoured under a shared identifier, the three revert to measuring — and grading —
+that structure instead.
 
 **Do not use BODY or EXTERNAL for this.** Where the two scans cover different lengths of
 patient, the outline surfaces cannot agree at the ends, and the disagreement measures the field

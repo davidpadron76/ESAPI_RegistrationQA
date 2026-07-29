@@ -157,13 +157,16 @@ namespace ESAPI_RegistrationQA.Services
         /// <summary>
         /// Why a measured metric is not classified, or null when it is.
         ///
-        /// Two reasons, and they are different in kind. The first is permanent and belongs to
-        /// the metric: NCC, NMI and SSD have no tolerance in TG-132 and no route from their
+        /// Three reasons, and they are different in kind. The first is permanent and belongs
+        /// to the metric: NCC, NMI and SSD have no tolerance in TG-132 and no route from their
         /// value to a distance, so any limit would be invented. The second is a property of
         /// this particular image pair: the maximum displacement is only the correction the
         /// registration applies when both series share a frame of reference. Across two frames
         /// the transform must also span the offset between the coordinate systems, and a
-        /// correct registration can exceed any profile limit with nothing wrong.
+        /// correct registration can exceed any profile limit with nothing wrong. The third is a
+        /// property of which structure produced the value: DSC/MDA/HD95 measured on the patient
+        /// surface outline are a gross overlap check, not the organ-level comparison Table III
+        /// describes.
         /// </summary>
         private static string WhyNotGated(string key, QaMeasurements measurements)
         {
@@ -189,6 +192,17 @@ namespace ESAPI_RegistrationQA.Services
                 (measurements == null || !measurements.NativeVoxelSizeMm.HasValue))
             {
                 return "not graded — voxel size unknown";
+            }
+
+            // The value is real, but it came from the patient surface outline rather than an
+            // organ or target — TG-132's DSC and MDA rows are not about the skin, and a
+            // registration can be flawless while the outline still disagrees wherever the two
+            // scans differ in length. Listed explicitly even though HD95 never gates on its
+            // own, so the reason is consistent regardless of which of the three is asked about.
+            if ((key == MetricKeys.Dsc || key == MetricKeys.Mda || key == MetricKeys.Hd95) &&
+                measurements != null && measurements.StructureMetricsAreSurfaceOutlineOnly)
+            {
+                return "not graded — measured on the patient surface outline only, not an organ";
             }
 
             return null;

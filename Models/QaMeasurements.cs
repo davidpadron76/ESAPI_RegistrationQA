@@ -154,6 +154,17 @@ namespace ESAPI_RegistrationQA.Models
         /// <summary>Identifier of the structure that produced the worst surface agreement.</summary>
         public string WorstStructureId { get; set; }
 
+        /// <summary>
+        /// True when DSC, MDA and HD95 were computed from the patient surface outline (DICOM
+        /// type EXTERNAL) only — no organ or target structure matched by identifier between
+        /// the two series. The values are still real measurements, useful as a gross
+        /// pre-propagation overlap check, but they are not what TG-132's Table III rows
+        /// describe: where two series cover different lengths of patient the outline's ends
+        /// cannot agree no matter how good the registration is. MetricEvaluator reads this to
+        /// report the three as ungated INFO instead of a graded value.
+        /// </summary>
+        public bool StructureMetricsAreSurfaceOutlineOnly { get; set; }
+
         // TG-132 Table III primary metrics
         public MeasuredValue TreMean { get; set; }
         public MeasuredValue TreMax { get; set; }
