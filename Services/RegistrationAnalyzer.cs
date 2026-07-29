@@ -683,15 +683,17 @@ namespace ESAPI_RegistrationQA.Services
 
             foreach (var pair in pairs)
             {
-                // The patient surface outline (DICOM type EXTERNAL, usually "BODY") is still
-                // rasterised and its own DSC/MDA/HD95 logged below — that is useful evidence,
-                // and hiding it would look like the structure was never read. What it must not
-                // do is enter the organ-level worst-case comparison: TG-132's DSC and MDA rows
-                // are about "the same organ", and where two series cover different lengths of
-                // patient the outline cannot agree at the ends no matter how good the
-                // registration is. Left in, it dominated: DSC 0.910 and MDA 6.74 mm from BODY
-                // buried a PTV that actually measured DSC 0.952 and MDA 0.65 mm.
-                bool isOutline = pair.Item1.IsSurfaceOutline || pair.Item2.IsSurfaceOutline;
+                // The patient surface outline (DICOM type EXTERNAL, or a near-universal name
+                // like "BODY" when that field is not populated) is still rasterised and its own
+                // DSC/MDA/HD95 logged below — that is useful evidence, and hiding it would look
+                // like the structure was never read. What it must not do is enter the
+                // organ-level worst-case comparison: TG-132's DSC and MDA rows are about "the
+                // same organ", and where two series cover different lengths of patient the
+                // outline cannot agree at the ends no matter how good the registration is. Left
+                // in, it dominated: DSC 0.910 and MDA 6.74 mm from BODY buried a PTV that
+                // actually measured DSC 0.952 and MDA 0.65 mm.
+                string outlineReason = pair.Item1.SurfaceOutlineReason ?? pair.Item2.SurfaceOutlineReason;
+                bool isOutline = outlineReason != null;
 
                 // One grid per structure rather than one shared by all. A shared grid spans the
                 // union of everything matched, so a BODY outline 385 mm long forced the sample
@@ -731,7 +733,7 @@ namespace ESAPI_RegistrationQA.Services
                     comparison.Dsc.Value, comparison.MeanDistanceToAgreement.Value,
                     comparison.Hd95.Value, grid.CoarsestResolution,
                     isOutline
-                        ? " — patient surface outline (DICOM type EXTERNAL): kept out of the organ-level " +
+                        ? " — patient surface outline (" + outlineReason + "): kept out of the organ-level " +
                           "worst case, reported separately below"
                         : string.Empty));
 

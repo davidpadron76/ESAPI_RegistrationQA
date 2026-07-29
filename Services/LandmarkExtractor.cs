@@ -61,7 +61,7 @@ namespace ESAPI_RegistrationQA.Services
                             continue;
 
                         string dicomType;
-                        if (!Dyn.TryGetString("landmarks: DicomType of " + id, () => structure.DicomType, null, out dicomType))
+                        if (!Dyn.TryGetString("landmarks: DicomType of " + id, () => structure.DicomType, log, out dicomType))
                             dicomType = string.Empty;
 
                         if (!PointTypes.Contains(dicomType))

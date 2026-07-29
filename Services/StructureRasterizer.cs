@@ -190,11 +190,24 @@ namespace ESAPI_RegistrationQA.Services
             new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "MARKER", "ISOCENTER" };
 
         /// <summary>
-        /// The DICOM RTROIInterpretedType for a patient surface outline. Read from the API
-        /// rather than guessed from the identifier — Id varies with language and institution
-        /// ("BODY", "CUERPO", "Skin", "External"...), but this field is the normative one.
+        /// The DICOM RTROIInterpretedType for a patient surface outline. This is the normative
+        /// field, but it is only the primary criterion — see <see cref="SurfaceOutlineNames"/>
+        /// for why it cannot be the only one.
         /// </summary>
         private const string SurfaceOutlineType = "EXTERNAL";
+
+        /// <summary>
+        /// Fallback identifiers for the patient surface outline, used when DicomType does not
+        /// say EXTERNAL. Field evidence (v2.11.0) showed a real Eclipse instance carrying a
+        /// structure literally named "BODY" whose DicomType was not "EXTERNAL" — the field is
+        /// often left at whatever the contouring tool defaulted to rather than corrected by
+        /// hand, so trusting it alone let the outline back into the organ-level worst case.
+        /// Matched on the trimmed, case-insensitive identifier exactly, not as a substring, so
+        /// something like "PTV_BODY_boost" is not caught by mistake.
+        /// </summary>
+        private static readonly HashSet<string> SurfaceOutlineNames =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            { "BODY", "EXTERNAL", "SKIN", "EXTERIOR", "CUERPO", "PIEL" };
 
         public sealed class NamedStructure
         {
@@ -203,17 +216,36 @@ namespace ESAPI_RegistrationQA.Services
             public ContourSet Contours { get; set; }
 
             /// <summary>
-            /// True for the patient surface outline (DICOM type EXTERNAL). It still gets read
-            /// and rasterised like any other structure, but it is not the kind of thing
-            /// TG-132's DSC and MDA rows are about — the report speaks of "the same organ", not
-            /// of the skin. And where two series cover different lengths of patient, its
-            /// surface cannot agree at the ends no matter how good the registration is, so
-            /// including it in a worst-case comparison buries every organ result behind a
-            /// number that measures field-of-view overlap instead.
+            /// True for the patient surface outline. It still gets read and rasterised like
+            /// any other structure, but it is not the kind of thing TG-132's DSC and MDA rows
+            /// are about — the report speaks of "the same organ", not of the skin. And where
+            /// two series cover different lengths of patient, its surface cannot agree at the
+            /// ends no matter how good the registration is, so including it in a worst-case
+            /// comparison buries every organ result behind a number that measures
+            /// field-of-view overlap instead.
             /// </summary>
             public bool IsSurfaceOutline
             {
-                get { return string.Equals(DicomType, SurfaceOutlineType, StringComparison.OrdinalIgnoreCase); }
+                get { return SurfaceOutlineReason != null; }
+            }
+
+            /// <summary>
+            /// Which criterion classified this structure as the patient surface outline, or
+            /// null when neither did. Exposed so the exclusion is traceable in diagnostics
+            /// rather than a silent boolean.
+            /// </summary>
+            public string SurfaceOutlineReason
+            {
+                get
+                {
+                    if (string.Equals(DicomType, SurfaceOutlineType, StringComparison.OrdinalIgnoreCase))
+                        return "DICOM type EXTERNAL";
+
+                    if (!string.IsNullOrEmpty(Id) && SurfaceOutlineNames.Contains(Id.Trim()))
+                        return "name match (\"" + Id.Trim() + "\")";
+
+                    return null;
+                }
             }
         }
 
@@ -254,8 +286,16 @@ namespace ESAPI_RegistrationQA.Services
                         if (!Dyn.TryGetString("structures: id", () => structure.Id, null, out id)) continue;
 
                         string dicomType;
-                        if (!Dyn.TryGetString("structures: DicomType of " + id, () => structure.DicomType, null, out dicomType))
+                        if (!Dyn.TryGetString("structures: DicomType of " + id, () => structure.DicomType, log, out dicomType))
                             dicomType = string.Empty;
+
+                        // Read with the real log, not null: this value decides whether a
+                        // structure gets excluded as the patient surface outline, and the
+                        // v2.11.0 field failure — BODY not excluded — was undiagnosable until
+                        // this line existed, because nobody could see what the API actually
+                        // returned.
+                        log.Info("structures: DicomType of " + id,
+                            string.IsNullOrEmpty(dicomType) ? "(empty)" : dicomType);
 
                         if (PointTypes.Contains(dicomType))
                         {
@@ -270,12 +310,20 @@ namespace ESAPI_RegistrationQA.Services
                             continue;
                         }
 
-                        structures.Add(new NamedStructure
+                        var namedStructure = new NamedStructure
                         {
                             Id = id.Trim(),
                             DicomType = dicomType,
                             Contours = contours
-                        });
+                        };
+
+                        if (namedStructure.IsSurfaceOutline)
+                        {
+                            log.Info("structures: " + id,
+                                "classified as patient surface outline — " + namedStructure.SurfaceOutlineReason);
+                        }
+
+                        structures.Add(namedStructure);
                     }
                 }
             }, log);
