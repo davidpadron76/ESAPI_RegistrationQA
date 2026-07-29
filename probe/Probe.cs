@@ -270,9 +270,16 @@ namespace VMS.IRS.Scripting
 
             foreach (dynamic reg in collection)
             {
+                // Exact-name match, not Contains: "MIRSNonRigidRegistration" contains the
+                // substring "Rigid" (Non-Rigid-Registration), so excluding anything whose name
+                // contains "Rigid" excluded the deformable case too — confirmed against a real
+                // workspace that had both MIRSRigidRegistration and MIRSNonRigidRegistration
+                // entries and reported "no non-rigid registration found".
                 string typeName = ((object)reg).GetType().Name;
-                if (typeName.IndexOf("Identity", StringComparison.OrdinalIgnoreCase) >= 0) continue;
-                if (typeName.IndexOf("Rigid", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                if (string.Equals(typeName, "MIRSIdentityRegistration", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (string.Equals(typeName, "MIRSRigidRegistration", StringComparison.OrdinalIgnoreCase))
+                    continue;
 
                 deformable = reg;
                 deformableId = TryGetString(() => reg.Id, "?");
