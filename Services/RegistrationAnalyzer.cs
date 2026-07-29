@@ -640,9 +640,18 @@ namespace ESAPI_RegistrationQA.Services
             // The comparison grid is built from the contours themselves, at roughly 2 mm: a
             // surface does not need sub-millimetre sampling to be characterised, and the
             // distance transform runs over the whole grid once per structure pair.
-            ImageGeometry grid = BuildContourGrid(pairs);
-            _structureGeometry = grid;
-            if (grid == null)
+            var allContours = new List<ContourSet>();
+            foreach (var pair in pairs)
+            {
+                allContours.Add(pair.Item1.Contours);
+                allContours.Add(pair.Item2.Contours);
+            }
+
+            // The union of every matched contour, kept only as the region that maximum
+            // displacement and inverse consistency fall back on when no volume loaded.
+            _structureGeometry = BuildContourGrid(allContours, null);
+
+            if (_structureGeometry == null)
             {
                 const string reason = "the matched structures carry no contour points, so there is no " +
                                       "region over which to compare them";
@@ -664,8 +673,26 @@ namespace ESAPI_RegistrationQA.Services
             string worstDscId = null, worstMdaId = null, worstHd95Id = null;
             int evaluated = 0;
 
+            var gridByStructure = new Dictionary<string, ImageGeometry>(StringComparer.OrdinalIgnoreCase);
+
             foreach (var pair in pairs)
             {
+                // One grid per structure rather than one shared by all. A shared grid spans the
+                // union of everything matched, so a BODY outline 385 mm long forced the sample
+                // cap to coarsen it to 2.41 mm — and a PTV sphere measured on that grid returned
+                // an HD95 of exactly 2.41 mm, its resolution floor rather than its real
+                // disagreement. Each structure now gets the finest grid its own extent allows.
+                ImageGeometry grid = BuildContourGrid(
+                    new[] { pair.Item1.Contours, pair.Item2.Contours }, pair.Item1.Id);
+
+                if (grid == null)
+                {
+                    _log.Warning("structures: " + pair.Item1.Id, "no contour points to compare");
+                    continue;
+                }
+
+                gridByStructure[pair.Item1.Id] = grid;
+
                 bool[] maskSource = StructureRasterizer.Rasterise(pair.Item1.Contours, grid, null);
                 bool[] maskTarget = StructureRasterizer.Rasterise(pair.Item2.Contours, grid, _mapper);
 
@@ -698,9 +725,13 @@ namespace ESAPI_RegistrationQA.Services
                     worstHd95Id = pair.Item1.Id;
                 }
 
+                // The grid resolution belongs on this line: a surface distance equal to the
+                // grid spacing means "at or below what this grid can resolve", not a measured
+                // disagreement, and the reader cannot tell the difference without both numbers.
                 _log.Info("structures: " + pair.Item1.Id, string.Format(CultureInfo.InvariantCulture,
-                    "DSC {0:F3}, MDA {1:F2} mm, HD95 {2:F2} mm",
-                    comparison.Dsc.Value, comparison.MeanDistanceToAgreement.Value, comparison.Hd95.Value));
+                    "DSC {0:F3}, MDA {1:F2} mm, HD95 {2:F2} mm (grid {3:F2} mm)",
+                    comparison.Dsc.Value, comparison.MeanDistanceToAgreement.Value,
+                    comparison.Hd95.Value, grid.CoarsestResolution));
             }
 
             if (evaluated == 0)
@@ -714,9 +745,12 @@ namespace ESAPI_RegistrationQA.Services
 
             measurements.WorstStructureId = worstDscId;
 
-            measurements.Dsc = MeasuredValue.Measured(worstDsc, StructureNote(worstDscId, evaluated, grid));
-            measurements.Mda = MeasuredValue.Measured(worstMda, StructureNote(worstMdaId, evaluated, grid));
-            measurements.Hd95 = MeasuredValue.Measured(worstHd95, StructureNote(worstHd95Id, evaluated, grid));
+            measurements.Dsc = MeasuredValue.Measured(
+                worstDsc, StructureNote(worstDscId, evaluated, gridByStructure));
+            measurements.Mda = MeasuredValue.Measured(
+                worstMda, StructureNote(worstMdaId, evaluated, gridByStructure));
+            measurements.Hd95 = MeasuredValue.Measured(
+                worstHd95, StructureNote(worstHd95Id, evaluated, gridByStructure));
 
             if (evaluated > 1)
             {
@@ -742,15 +776,22 @@ namespace ESAPI_RegistrationQA.Services
         /// Provenance for one surface metric: which structure produced this particular worst
         /// case, out of how many, on what grid.
         /// </summary>
-        private static string StructureNote(string structureId, int evaluated, ImageGeometry grid)
+        private static string StructureNote(
+            string structureId, int evaluated, Dictionary<string, ImageGeometry> gridByStructure)
         {
+            ImageGeometry grid;
+            string resolution =
+                structureId != null && gridByStructure.TryGetValue(structureId, out grid)
+                    ? string.Format(CultureInfo.InvariantCulture, "; grid {0:F1} mm", grid.CoarsestResolution)
+                    : string.Empty;
+
             // Leads with the structure, because that is the part the reader needs first and
             // the note is appended to a criterion in a column that ellipsises.
             return string.Format(CultureInfo.InvariantCulture,
-                "{0}worst of {1} matched structure(s); comparison grid {2:F1} mm",
+                "{0}worst of {1} matched structure(s){2}",
                 structureId != null ? structureId + ", " : string.Empty,
                 evaluated,
-                grid.CoarsestResolution);
+                resolution);
         }
 
         /// <summary>
@@ -766,8 +807,7 @@ namespace ESAPI_RegistrationQA.Services
         /// with the voxels. Nothing here needs a voxel: contours are points in patient
         /// coordinates and always were.
         /// </summary>
-        private ImageGeometry BuildContourGrid(
-            List<Tuple<StructureRasterizer.NamedStructure, StructureRasterizer.NamedStructure>> pairs)
+        private ImageGeometry BuildContourGrid(IEnumerable<ContourSet> contourSets, string label)
         {
             const double targetSpacingMm = 2.0;
             const int maxSamplesPerAxis = 160;
@@ -780,19 +820,16 @@ namespace ESAPI_RegistrationQA.Services
             var maximum = new Vec3(double.MinValue, double.MinValue, double.MinValue);
             bool any = false;
 
-            foreach (var pair in pairs)
+            foreach (ContourSet contours in contourSets)
             {
-                foreach (ContourSet contours in new[] { pair.Item1.Contours, pair.Item2.Contours })
-                {
-                    Vec3 low, high;
-                    if (contours == null || !contours.TryGetBounds(out low, out high)) continue;
+                Vec3 low, high;
+                if (contours == null || !contours.TryGetBounds(out low, out high)) continue;
 
-                    minimum = new Vec3(
-                        Math.Min(minimum.X, low.X), Math.Min(minimum.Y, low.Y), Math.Min(minimum.Z, low.Z));
-                    maximum = new Vec3(
-                        Math.Max(maximum.X, high.X), Math.Max(maximum.Y, high.Y), Math.Max(maximum.Z, high.Z));
-                    any = true;
-                }
+                minimum = new Vec3(
+                    Math.Min(minimum.X, low.X), Math.Min(minimum.Y, low.Y), Math.Min(minimum.Z, low.Z));
+                maximum = new Vec3(
+                    Math.Max(maximum.X, high.X), Math.Max(maximum.Y, high.Y), Math.Max(maximum.Z, high.Z));
+                any = true;
             }
 
             if (!any) return null;
@@ -811,9 +848,12 @@ namespace ESAPI_RegistrationQA.Services
             int ySize = (int)Math.Ceiling(extent.Y / spacing) + 1;
             int zSize = (int)Math.Ceiling(extent.Z / spacing) + 1;
 
-            _log.Info("structures: comparison grid", string.Format(CultureInfo.InvariantCulture,
-                "{0}x{1}x{2} at {3:F2} mm, spanning {4:F0}x{5:F0}x{6:F0} mm around the matched contours",
-                xSize, ySize, zSize, spacing, extent.X, extent.Y, extent.Z));
+            if (label != null)
+            {
+                _log.Info("structures: grid for " + label, string.Format(CultureInfo.InvariantCulture,
+                    "{0}x{1}x{2} at {3:F2} mm, spanning {4:F0}x{5:F0}x{6:F0} mm",
+                    xSize, ySize, zSize, spacing, extent.X, extent.Y, extent.Z));
+            }
 
             // Canonical axes: the grid is ours, not the scanner's, so there is no orientation to
             // inherit. The rasteriser assumes contours lie on constant-z planes, which is the
