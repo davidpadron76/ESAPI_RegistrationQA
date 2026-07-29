@@ -3,10 +3,11 @@
 ## Why this document exists
 
 The tool has never been checked against a known answer. What has been verified is the pure
-mathematics — 64 analytic checks in `tools/verify_math.py`, covering Euler extraction, matrix
+mathematics — 76 analytic checks in `tools/verify_math.py`, covering Euler extraction, matrix
 convention detection, voxel↔patient round-trips, the similarity metrics against their
-theoretical values, transform composition, and TRE against known landmark displacements —
-plus the fact that it builds and runs.
+theoretical values, transform composition, TRE against known landmark displacements, and the
+deformation-field Jacobian and gradient against fields whose answer is known exactly (a pure
+translation, a uniform expansion, a deliberate fold) — plus the fact that it builds and runs.
 
 Everything that touches the Varian API has been exercised on exactly one Eclipse installation.
 
@@ -16,9 +17,10 @@ maximum voxel dimension of the images — the report's own rule, applied to the 
 it rather than to a table of invented numbers. Everything else is reported without a colour.
 
 That is what this protocol is for. Tests 1 to 4 take an afternoon and close the open
-questions that cannot be answered without an Eclipse in front of you. Test 3b covers the two
-TG-132 Table III metrics, which are the newest code and have never run against real data.
-Section 5 is the part that turns a group of testers into a dataset.
+questions that cannot be answered without an Eclipse in front of you. Tests 3b and 3d cover the
+newest code — the TG-132 Table III spatial metrics, and the deformation-field metrics that
+became possible once the vector field turned out to be readable. Neither has run against a case
+with a known answer. Section 5 is the part that turns a group of testers into a dataset.
 
 ---
 
@@ -300,6 +302,40 @@ accounted for in the diagnostics tab instead. So:
   a fault stays visible, a context mismatch disappears. If a real failure gets hidden, report
   it.
 
+## 3d. Deformation field metrics — new and unvalidated against known deformation
+
+**Setup.** Open a deformable registration. The Diagnostics tab should carry a line beginning
+`deformation field: read from ...DeformationField`, naming the grid size and its spacing.
+
+**Expected.** Three rows appear that a rigid case does not have: `Jacobian < 0`,
+`DVF Gradient (max)` and a `Max Displacement` measured over every field point rather than the
+eight FOV corners.
+
+**What to check, in order of value.**
+
+- **Jacobian on a registration you trust should be 0 %.** Any folding at all is a breach of
+  Table III, and on a clinically acceptable deformation there should be none. A non-zero
+  percentage on a registration that looks correct on screen is the single most important thing
+  to report from this test.
+- **Max displacement should be plausible for the anatomy.** It is now the true maximum over the
+  field, so it will generally read *higher* than the old rigid-style corner bound on the same
+  case. That is expected, not a regression.
+- **The grid is not the image's.** The Diagnostics line names both; on the case this was built
+  against the field was 190×206×39 at ~0.98×0.98×5 mm against a 512×512×458 image at
+  ~0.45×0.45×0.4 mm. Every derivative uses the field's own spacing. If the reported spacing
+  matches the *image* instead, the wrong geometry is being read and every gradient is scaled by
+  the ratio between the two.
+
+**The mathematics is checked analytically** — `tools/verify_math.py` covers a pure translation
+(det J exactly 1, gradient exactly 0), a uniform expansion (det J = (1+k)³), a deliberate fold
+(det J = −1, flagged 100 % negative), and that the gradient scales with the axis spacing
+actually used. **None of it has run against a real deformation with a known answer.** If you can
+produce a phantom with a known applied deformation, that is the test worth doing.
+
+**Nothing here is graded.** TG-132 gives a tolerance for the Jacobian only — no negative values
+— and that one is applied. The DVF gradient has no tolerance in the report, so it is shown as
+INFO; section 5 is how it becomes actionable.
+
 ## 4. Multimodal pair
 
 **Setup.** A CT–MR registration of the same patient.
@@ -376,7 +412,8 @@ Open an issue at
 | DSC / MDA / HD95 | Measured, but only when contour structures share an identifier across both series. Otherwise hidden, with the reason in the diagnostics tab. |
 | TRE | Measured, but only when point landmarks (DICOM type MARKER or ISOCENTER) exist on both series under the same identifier. Otherwise N/A with the counts found on each side. |
 | Inverse consistency | Measured, but only when the reverse registration exists in the workspace. Otherwise N/A saying so — it is a check you can enable, not a permanent limitation. |
-| Jacobian, DVF smoothness, max displacement for DIR | Not obtainable. They need the deformation vector field, which the scripting API does not expose. Reported as N/A rather than approximated from the linear component. |
+| Jacobian, DVF gradient, max displacement for DIR | **Measured.** The scripting API does expose the field: `NonRigidRegistration.DeformationField` is a `VectorField` carrying its own grid and `GetVectors(VectorFloat[,,])`, which a probe called on a real deformable case and read non-uniform displacements from (0.02–9.53 mm in the sampled plane). All three are computed from it by central differences over the field's own spacing. Never run against a case with known deformation — see test 3d. |
+| Smoothness on a deformable case | Hidden. Its 1.0 is a statement about rigid transforms; the measured equivalent is the DVF gradient, on the opposite scale (0 there means what 1.0 means here). |
 | Deformable registrations | Everything depends on finding a point-by-point mapping method on the registration object. Without it every metric is N/A and the verdict is NO EVIDENCE. See test 0b. |
 | HD95 and max displacement tolerances | None exist either. Both carried numbers with no source — HD95 from this project's first version, max displacement invented — and both are now **INFO**. |
 | NCC / NMI / SSD tolerances | None exist. TG-132 gives no limit for any of the three and §4.C.3 says they do not convert into spatial accuracy. Shown as **INFO** — value, no colour, no effect on the verdict. Section 5 is how you make them actionable. |
@@ -412,6 +449,10 @@ Open an issue at
 | 3b | TRE — landmarks matched | ≥ 2 | | | |
 | 3b | TRE mean under known shift | applied value | | | |
 | 3b | Inverse consistency residual | ≤ max voxel dim | | | |
+| 3d | **Deformation field read** | grid + spacing in Diagnostics | | | must be the field's, not the image's |
+| 3d | **Jacobian on a trusted DIR** | 0 % | | | any folding is a Table III breach |
+| 3d | DVF gradient (max) | plausible, INFO | | | no TG-132 tolerance |
+| 3d | Max displacement over the field | ≥ the old corner bound | | | true maximum now |
 | 3c | DSC on a matched structure | plausible | | | |
 | 3c | MDA < HD95 on the same structure | always | | | |
 | 3c | Rigid case: deformation metrics absent | absent | | | |

@@ -16,6 +16,14 @@ namespace ESAPI_RegistrationQA.Models
         public const string JacobianNegative = "Jacobian_Neg_%";
         public const string MaxDisplacement = "Max_Displacement";
         public const string Smoothness = "Smoothness";
+
+        /// <summary>
+        /// Deliberately not folded into <see cref="Smoothness"/>. That metric is on a
+        /// higher-is-better scale where 1.0 means a perfectly regular field; this one is a
+        /// gradient magnitude where 0 means the same thing. Putting both in one column would
+        /// print two incompatible scales under one heading.
+        /// </summary>
+        public const string DvfGradientMax = "DVF_Gradient_Max";
         public const string Dsc = "DSC";
         public const string Mda = "MDA";
         public const string Hd95 = "HD95";
@@ -283,9 +291,38 @@ namespace ESAPI_RegistrationQA.Models
                     "those of the intensity metrics. It is kept because for a rigid transform the value " +
                     "1.0 is a true statement worth recording in a signed report — the field gradient is " +
                     "constant, so no local irregularity is possible — but a statement that is true by " +
-                    "definition cannot fail anything, and for a deformable registration the metric is not " +
-                    "obtainable at all. If the deformation field ever becomes readable, derive real limits " +
-                    "before letting it gate."));
+                    "definition cannot fail anything. For a deformable registration the real quantity is " +
+                    "reported separately as the DVF gradient, which is measured rather than asserted."));
+
+            Register(new MetricDefinition(
+                key: MetricKeys.DvfGradientMax,
+                displayName: "DVF Gradient (max)",
+                unit: "",
+                higherIsBetter: false,
+                description:
+                    "Largest displacement-gradient magnitude in the deformation vector field: the " +
+                    "Frobenius norm of grad u, evaluated by central differences over the field's own " +
+                    "grid. Dimensionless — millimetres of displacement change per millimetre travelled. " +
+                    "Zero would mean a pure translation; a large value means the field changes abruptly " +
+                    "from one grid point to the next.",
+                clinicalQuestion:
+                    "Does the deformation vary abruptly between neighbouring points?",
+                decisionSupported:
+                    "An irregular field points to the algorithm overfitting in low-contrast regions, " +
+                    "where there is no anatomical information to drive the registration. Those are " +
+                    "exactly the regions where a propagated contour is least trustworthy, so a high " +
+                    "value tells the physicist which part of the deformation to inspect rather than " +
+                    "trust.",
+                standardBasis:
+                    "Not tabulated in TG-132. Related to the report's observation in section 4.C.3 that " +
+                    "large local changes in the Jacobian determinant can indicate a registration error.",
+                gating: false,
+                gatingBasis:
+                    "Measured, but not graded: TG-132 sets no limit for field regularity, and any number " +
+                    "chosen here would be invented — the same reason NCC, NMI and SSD are ungraded. What " +
+                    "makes it worth reporting anyway is that it is now a real measurement of this " +
+                    "registration rather than a statement true of every rigid transform. A local baseline " +
+                    "over cases the department already accepts is how it becomes actionable."));
 
             // ---------------------------------------------------------- structures
 

@@ -109,7 +109,7 @@ namespace ESAPI_RegistrationQA.Services
             ComputeStructureMetrics(sourceImage, registeredImage, measurements);
 
             // --- Deformation / topology -------------------------------------------------
-            ComputeDeformationMetrics(measurements);
+            ComputeDeformationMetrics(measurements, registration);
             ComputeTargetRegistrationError(registration, sourceImage, registeredImage, measurements);
             ComputeInverseConsistency(scriptContext, registration, sourceImage, registeredImage, measurements);
 
@@ -475,29 +475,18 @@ namespace ESAPI_RegistrationQA.Services
         /// these are not estimates but consequences of the definition, and are labelled as
         /// such. Maximum displacement is computed exactly over the volume corners.
         ///
-        /// For a deformable registration these three quantities require traversing the
-        /// vector field, which the scripting API does not expose. They are returned as
-        /// unavailable.
+        /// For a deformable registration all three come from the vector field itself, read by
+        /// <see cref="DeformationFieldReader"/>. They used to be reported as permanently
+        /// unobtainable on the belief that the scripting API exposed no field; it does, and a
+        /// probe against a real case read non-uniform displacements out of it. When the field
+        /// cannot be read on a given Eclipse version they fall back to unavailable with the
+        /// specific reason, which is a fault to report rather than a limitation to accept.
         /// </summary>
-        private void ComputeDeformationMetrics(QaMeasurements measurements)
+        private void ComputeDeformationMetrics(QaMeasurements measurements, dynamic registration)
         {
             if (measurements.IsDeformable)
             {
-                // Worth being precise about why, because the answer changed once point-by-point
-                // mapping started working: these three are not computed because the API
-                // exposes no vector field, and reconstructing one by finite differences of the
-                // point mapping is a different piece of work with its own error budget — not
-                // because they are unobtainable in principle. What they cannot be derived from
-                // is the linear component, which describes a different transform.
-                const string reason =
-                    "requires the deformation vector field, which the Varian scripting API does not " +
-                    "expose. It is not derived from the linear component, which would describe a " +
-                    "different transform from the one under audit.";
-
-                measurements.JacobianNegativePercent = MeasuredValue.NotApplicable(reason);
-                measurements.Smoothness = MeasuredValue.NotApplicable(reason);
-                measurements.MaxDisplacement = MeasuredValue.NotApplicable(reason);
-                _log.Info("deformation metrics", reason);
+                ComputeDeformationMetricsFromField(measurements, registration);
                 return;
             }
 
@@ -512,6 +501,12 @@ namespace ESAPI_RegistrationQA.Services
 
             measurements.Smoothness = MeasuredValue.Analytic(1.0,
                 "the gradient of the displacement field is constant. " + analyticNote);
+
+            // The measured counterpart only exists for a deformable field. On a rigid transform
+            // it would be |R - I|, a restatement of the rotation already in the transform table.
+            measurements.DvfGradientMax = MeasuredValue.NotApplicable(
+                "this is a rigid registration: the displacement gradient is constant, so there is no " +
+                "local irregularity to measure. Smoothness carries that statement instead.");
 
             if (measurements.Transform == null)
             {
@@ -539,6 +534,97 @@ namespace ESAPI_RegistrationQA.Services
             measurements.MaxDisplacement = MeasuredValue.Measured(maxDisplacement,
                 "maximum over the eight FOV corners; exact because the displacement of an affine map " +
                 "is convex and attains its maximum at a vertex");
+        }
+
+        /// <summary>
+        /// Why Smoothness is hidden on a deformable case: its 1.0 is a statement about rigid
+        /// transforms, and the measured quantity lives in DvfGradientMax on the opposite scale.
+        /// </summary>
+        private const string SmoothnessIsRigidOnly =
+            "this metric states that a rigid transform has a constant field gradient, which says " +
+            "nothing about a deformable one. The measured equivalent is reported as the DVF gradient, " +
+            "on the opposite scale: 0 there means what 1.0 means here.";
+
+        /// <summary>
+        /// The deformable case: Jacobian, DVF gradient and maximum displacement from the vector
+        /// field, or all three unavailable with the same single reason when it cannot be read.
+        ///
+        /// One read failure is one fault, not three — the three share the field, so splitting
+        /// the reason across them would make one API difference look like three separate
+        /// problems.
+        /// </summary>
+        private void ComputeDeformationMetricsFromField(QaMeasurements measurements, dynamic registration)
+        {
+            // Hidden regardless of whether the field reads: it is a rigid-transform statement,
+            // so on a deformable case it is inapplicable rather than merely missing.
+            measurements.Smoothness = MeasuredValue.NotApplicable(SmoothnessIsRigidOnly);
+
+            DeformationFieldReader.Result field =
+                DeformationFieldReader.TryRead((object)registration, _log);
+
+            if (field == null)
+            {
+                const string reason =
+                    "the deformation vector field could not be read from this registration. The " +
+                    "diagnostics tab lists what the registration object exposes in this Eclipse " +
+                    "version — the field is read via DeformationField.GetVectors, confirmed present on " +
+                    "VMS.IRS. The linear component is not used as a substitute: it describes a " +
+                    "different transform from the one under audit.";
+
+                measurements.JacobianNegativePercent = MeasuredValue.Unavailable(reason);
+                measurements.DvfGradientMax = MeasuredValue.Unavailable(reason);
+                measurements.MaxDisplacement = MeasuredValue.Unavailable(reason);
+                return;
+            }
+
+            string problem;
+            DeformationFieldMetrics.Result metrics = DeformationFieldMetrics.Compute(field, out problem);
+
+            string gridNote = string.Format(CultureInfo.InvariantCulture,
+                "from the deformation field's own {0}x{1}x{2} grid at {3:F2}/{4:F2}/{5:F2} mm spacing — " +
+                "coarser than the image grid, and the spacing the derivatives use",
+                field.XSize, field.YSize, field.ZSize, field.XResMm, field.YResMm, field.ZResMm);
+
+            if (metrics == null)
+            {
+                string reason = "the deformation field was read, but " +
+                                (problem ?? "no metric could be computed from it") + ".";
+
+                measurements.JacobianNegativePercent = MeasuredValue.Unavailable(reason);
+                measurements.DvfGradientMax = MeasuredValue.Unavailable(reason);
+
+                // Maximum displacement needs no derivative, so a grid too thin for a central
+                // difference does not stop it. Recomputed here rather than reaching into the
+                // failed Result.
+                double maxDisplacement = 0.0;
+                for (int z = 0; z < field.ZSize; z++)
+                    for (int y = 0; y < field.YSize; y++)
+                        for (int x = 0; x < field.XSize; x++)
+                        {
+                            double length = field.Vectors[x, y, z].Length;
+                            if (length > maxDisplacement) maxDisplacement = length;
+                        }
+
+                measurements.MaxDisplacement = MeasuredValue.Measured(maxDisplacement,
+                    "maximum |displacement| over every field point, " + gridNote);
+                _log.Warning("deformation metrics", reason);
+                return;
+            }
+
+            measurements.JacobianNegativePercent = MeasuredValue.Measured(
+                metrics.NegativeJacobianPercent,
+                string.Format(CultureInfo.InvariantCulture,
+                    "det(I + grad u) over {0:N0} interior grid points, minimum {1:F4}; {2}",
+                    metrics.JacobianSampleCount, metrics.MinJacobian, gridNote));
+
+            measurements.DvfGradientMax = MeasuredValue.Measured(
+                metrics.MaxGradientMagnitude,
+                "largest Frobenius norm of grad u over the interior grid points, " + gridNote);
+
+            measurements.MaxDisplacement = MeasuredValue.Measured(
+                metrics.MaxDisplacementMm,
+                "maximum |displacement| over every field point — the real maximum, not the eight-corner " +
+                "bound a rigid transform allows, " + gridNote);
         }
 
         // ---------------------------------------------------------------- structures
@@ -1296,6 +1382,7 @@ namespace ESAPI_RegistrationQA.Services
             measurements.JacobianNegativePercent = MeasuredValue.Unavailable(reason);
             measurements.MaxDisplacement = MeasuredValue.Unavailable(reason);
             measurements.Smoothness = MeasuredValue.Unavailable(reason);
+            measurements.DvfGradientMax = MeasuredValue.Unavailable(reason);
             measurements.Dsc = MeasuredValue.Unavailable(reason);
             measurements.Hd95 = MeasuredValue.Unavailable(reason);
             measurements.TreMean = MeasuredValue.Unavailable(reason);

@@ -22,7 +22,8 @@ namespace ESAPI_RegistrationQA.Services
 
         public static readonly string[] DeformationKeys =
         {
-            MetricKeys.JacobianNegative, MetricKeys.MaxDisplacement, MetricKeys.Smoothness
+            MetricKeys.JacobianNegative, MetricKeys.MaxDisplacement, MetricKeys.Smoothness,
+            MetricKeys.DvfGradientMax
         };
 
         /// <summary>

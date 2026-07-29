@@ -634,6 +634,114 @@ check("point in the ring is inside", total(3.0,10.0) % 2 == 1)
 check("point in the hole is outside", total(10.0,10.0) % 2 == 0)
 check("point outside everything is outside", total(25.0,10.0) % 2 == 0)
 
+# --- Deformation vector field: Jacobian and gradient ------------------------------------
+# Replica of DeformationFieldMetrics.Compute. The field is a displacement u sampled on its
+# own grid, and the transform is x + u(x), so the Jacobian is det(I + grad u) -- not
+# det(grad u), which would sit near 0 for a near-rigid field instead of near 1.
+
+def dvf_metrics(u, nx, ny, nz, sx, sy, sz):
+    """u[(x,y,z)] -> (ux,uy,uz) in mm. Central differences over the interior only."""
+    negative = 0
+    samples = 0
+    min_j = float("inf")
+    max_grad = 0.0
+    max_disp = 0.0
+
+    for z in range(nz):
+        for y in range(ny):
+            for x in range(nx):
+                v = u[(x, y, z)]
+                max_disp = max(max_disp, math.sqrt(v[0]**2 + v[1]**2 + v[2]**2))
+
+    for z in range(1, nz-1):
+        for y in range(1, ny-1):
+            for x in range(1, nx-1):
+                a, b = u[(x+1,y,z)], u[(x-1,y,z)]
+                dudx = [(a[i]-b[i])/(2.0*sx) for i in range(3)]
+                a, b = u[(x,y+1,z)], u[(x,y-1,z)]
+                dudy = [(a[i]-b[i])/(2.0*sy) for i in range(3)]
+                a, b = u[(x,y,z+1)], u[(x,y,z-1)]
+                dudz = [(a[i]-b[i])/(2.0*sz) for i in range(3)]
+
+                m = [[1.0+dudx[0], dudy[0],      dudz[0]],
+                     [dudx[1],     1.0+dudy[1],  dudz[1]],
+                     [dudx[2],     dudy[2],      1.0+dudz[2]]]
+
+                j = (m[0][0]*(m[1][1]*m[2][2] - m[1][2]*m[2][1])
+                     - m[0][1]*(m[1][0]*m[2][2] - m[1][2]*m[2][0])
+                     + m[0][2]*(m[1][0]*m[2][1] - m[1][1]*m[2][0]))
+
+                samples += 1
+                if j <= 0.0: negative += 1
+                min_j = min(min_j, j)
+
+                grad = math.sqrt(sum(c*c for c in dudx) + sum(c*c for c in dudy)
+                                 + sum(c*c for c in dudz))
+                max_grad = max(max_grad, grad)
+
+    return dict(neg_pct=100.0*negative/samples, min_j=min_j, samples=samples,
+                max_grad=max_grad, max_disp=max_disp)
+
+N, SP = 7, 2.0
+
+# A pure translation: every vector identical, so the field has no gradient at all and the
+# Jacobian is exactly 1 everywhere. This is the case that would break if the code took
+# det(grad u) rather than det(I + grad u).
+shift = {(x,y,z): (3.0, -1.0, 2.0) for x in range(N) for y in range(N) for z in range(N)}
+r = dvf_metrics(shift, N, N, N, SP, SP, SP)
+check("uniform translation field: Jacobian is 1 everywhere",
+      abs(r["min_j"] - 1.0) < 1e-12, f"min|J|={r['min_j']:.15f}")
+check("uniform translation field: no folding", r["neg_pct"] == 0.0)
+check("uniform translation field: gradient is 0", r["max_grad"] < 1e-12,
+      f"max|grad u|={r['max_grad']:.3e}")
+check("uniform translation field: max displacement is the shift magnitude",
+      abs(r["max_disp"] - math.sqrt(9.0+1.0+4.0)) < 1e-12,
+      f"{r['max_disp']:.6f} vs {math.sqrt(14.0):.6f}")
+
+# Interior-only sampling: a 7x7x7 grid has 5x5x5 interior points.
+check("Jacobian is evaluated on the interior only",
+      r["samples"] == (N-2)**3, f"{r['samples']} vs {(N-2)**3}")
+
+# Uniform expansion u = k*x. The transform is (1+k)x, so det J = (1+k)^3 exactly.
+K = 0.10
+expand = {(x,y,z): (K*x*SP, K*y*SP, K*z*SP)
+          for x in range(N) for y in range(N) for z in range(N)}
+r = dvf_metrics(expand, N, N, N, SP, SP, SP)
+check("uniform expansion: det J = (1+k)^3",
+      abs(r["min_j"] - (1.0+K)**3) < 1e-12,
+      f"min|J|={r['min_j']:.12f} vs {(1.0+K)**3:.12f}")
+check("uniform expansion: no folding", r["neg_pct"] == 0.0)
+check("uniform expansion: gradient is k*sqrt(3)",
+      abs(r["max_grad"] - K*math.sqrt(3.0)) < 1e-12,
+      f"{r['max_grad']:.12f} vs {K*math.sqrt(3.0):.12f}")
+
+# A fold: compressing x faster than the grid itself advances inverts the mapping. With
+# u_x = -2*x, the transform is x - 2x = -x, so det J = -1 everywhere.
+fold = {(x,y,z): (-2.0*x*SP, 0.0, 0.0)
+        for x in range(N) for y in range(N) for z in range(N)}
+r = dvf_metrics(fold, N, N, N, SP, SP, SP)
+check("folding field is detected as negative Jacobian",
+      r["neg_pct"] == 100.0, f"{r['neg_pct']:.1f}% negative")
+check("folding field: det J = -1", abs(r["min_j"] + 1.0) < 1e-12,
+      f"min|J|={r['min_j']:.12f}")
+
+# Anisotropic spacing must be honoured per axis. The same displacement pattern read with
+# the wrong spacing scales the gradient by the ratio between the two, which is the bug
+# that would appear if the image resolution were substituted for the field's own.
+aniso = {(x,y,z): (0.0, 0.0, 0.5*z) for x in range(N) for y in range(N) for z in range(N)}
+r_fine = dvf_metrics(aniso, N, N, N, 1.0, 1.0, 1.0)
+r_coarse = dvf_metrics(aniso, N, N, N, 1.0, 1.0, 5.0)
+check("gradient scales with the axis spacing actually used",
+      abs(r_fine["max_grad"] - 5.0*r_coarse["max_grad"]) < 1e-12,
+      f"fine={r_fine['max_grad']:.6f}, coarse={r_coarse['max_grad']:.6f}")
+
+# Max displacement needs no derivative, so it must be reported even where the grid is too
+# thin for a central difference. Verified against a 2-deep axis.
+thin = {(x,y,z): (0.0, 0.0, 4.0) for x in range(N) for y in range(N) for z in range(2)}
+max_disp_thin = max(math.sqrt(sum(c*c for c in thin[k])) for k in thin)
+check("max displacement is well defined on a grid too thin for a Jacobian",
+      abs(max_disp_thin - 4.0) < 1e-12)
+
 print()
 if FAILS:
     print(f"{len(FAILS)} check(s) FAILED:")

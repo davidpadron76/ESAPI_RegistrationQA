@@ -36,7 +36,9 @@ namespace ESAPI_RegistrationQA.Services
         /// Bumped whenever columns are added, removed or redefined. Pooled files with
         /// different schema versions must not be concatenated blindly.
         /// </summary>
-        public const string SchemaVersion = "4";
+        // 5 adds DVFGradientMax. Bumped rather than appended silently: a pooled dataset mixing
+        // rows with and without the column cannot be read by column position.
+        public const string SchemaVersion = "5";
 
         private static readonly string[] Columns =
         {
@@ -59,6 +61,7 @@ namespace ESAPI_RegistrationQA.Services
             // it also spans the offset between the coordinate systems.
             "SameFrameOfReference",
             "Smoothness",
+            "DVFGradientMax",
             "DSC",
             "MDA_mm",
             "HD95_mm",
@@ -156,6 +159,7 @@ namespace ESAPI_RegistrationQA.Services
                 ? (m.SharesFrameOfReference.Value ? "TRUE" : "FALSE")
                 : string.Empty);
             row.Add(Metric(m, MetricKeys.Smoothness));
+            row.Add(Metric(m, MetricKeys.DvfGradientMax));
             row.Add(Metric(m, MetricKeys.Dsc));
             row.Add(Metric(m, MetricKeys.Mda));
             row.Add(Metric(m, MetricKeys.Hd95));

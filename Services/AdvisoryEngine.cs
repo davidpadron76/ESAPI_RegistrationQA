@@ -191,10 +191,10 @@ namespace ESAPI_RegistrationQA.Services
                            "only appears when both series share a frame of reference; otherwise the " +
                            "metric is not classified at all.";
 
-                // NCC, NMI, SSD and Smoothness are deliberately absent from this switch. They
-                // no longer gate, so they cannot reach a red or yellow state and no breach
-                // advisory can be raised for them. Arms that can never execute would suggest
-                // otherwise.
+                // NCC, NMI, SSD, Smoothness and the DVF gradient are deliberately absent from
+                // this switch. They do not gate, so they cannot reach a red or yellow state and
+                // no breach advisory can be raised for them. Arms that can never execute would
+                // suggest otherwise.
 
                 case MetricKeys.Dsc:
                 case MetricKeys.Mda:

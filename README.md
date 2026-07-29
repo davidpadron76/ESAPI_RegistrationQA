@@ -29,9 +29,10 @@ number.
 | **NCC** | Does the anatomy line up, same modality? | §4.C.3, admitted for assessment | **No** — no tolerance exists | Measured |
 | **NMI** | Does it line up when intensities are not linearly comparable (CT-MR, CT-PET)? | §4.C.3, admitted for assessment | **No** — no tolerance exists | Measured |
 | **SSD** | Are there local intensity differences beyond the overall alignment? | §4.C.3, admitted for assessment | **No** — no tolerance exists | Measured |
-| **Jacobian < 0** | Has the deformation folded tissue onto itself? | Table III, no negative values | Yes, at 0 % | Exact for rigid · N/A for DIR |
-| **Max Displacement** | How far has the registration moved the anatomy? | Not tabulated; plausibility check | **No** — limits were invented | Exact for rigid · N/A for DIR |
-| **Smoothness** | Is the deformation physically plausible? | Not tabulated; related to §4.C.3 | **No** — limits were invented | Exact for rigid · N/A for DIR |
+| **Jacobian < 0** | Has the deformation folded tissue onto itself? | Table III, no negative values | Yes, at 0 % | Exact for rigid · measured from the field for DIR |
+| **Max Displacement** | How far has the registration moved the anatomy? | Not tabulated; plausibility check | **No** — limits were invented | Exact for rigid · measured over the field for DIR |
+| **Smoothness** | Is the deformation physically plausible? | Not tabulated; related to §4.C.3 | **No** — limits were invented | Exact for rigid · hidden for DIR, see DVF gradient |
+| **DVF Gradient (max)** | Does the deformation vary abruptly between neighbouring points? | Not tabulated; related to §4.C.3 | **No** — no tolerance exists | Measured for DIR only |
 | **DSC** | Do the same organs end up in the same place? | Table III, ~0.80–0.90 | Yes, from that range | Measured |
 | **MDA** | On average, how far apart are the two organ surfaces? | Table III, ~2–3 mm | Yes, at the voxel dimension | Measured |
 | **HD95** | How far apart are the surfaces where they disagree most? | Not tabulated; report specifies MDA | **No** — limits were inherited | Measured |
@@ -102,9 +103,13 @@ limit for that reason alone. The value is shown as a plausibility check, with an
 which of the two situations this case is in.
 
 **Smoothness follows the intensity metrics, for the same reason.** TG-132 does not name it and
-its limits were invented too. It stays on screen because 1.0 for a rigid transform is a true
+its limits were invented too. It stays on screen for a rigid transform because 1.0 is a true
 statement worth recording — the field gradient is constant, so no local irregularity is
-possible — but a statement true by definition cannot fail anything.
+possible — but a statement true by definition cannot fail anything. On a deformable case it is
+hidden and the **DVF gradient** carries the real measurement, on the opposite scale: 0 there
+means what 1.0 means here. It is ungraded for the same reason — the report sets no limit for
+field regularity, so any number chosen would be invented. Section 5 of `VALIDATION.md` is how a
+local baseline makes it actionable.
 
 **The Jacobian limit is 0 %.** Table III admits no negative values; the profiles used to admit
 between 1 % and 4 %, so the tool was more permissive than the standard it cites, on its own
@@ -161,7 +166,7 @@ There are two ways a metric can have no number, and they are treated differently
 | **Max displacement** | ✅ Measured (rigid) | Exact maximum over the eight FOV corners. |
 | **Jacobian < 0** | ✅ Exact by definition (rigid) | 0% — a rigid transform has \|J\| = 1 everywhere. |
 | **Smoothness** | ✅ Exact by definition (rigid) | 1.0 — the field gradient is constant. |
-| **Jacobian, displacement and smoothness** | ❌ **N/A for deformable** | Require traversing the deformation vector field, which the Varian scripting API does not expose. |
+| **Jacobian, max displacement and DVF gradient (deformable)** | ✅ Measured | From the deformation vector field itself: `NonRigidRegistration.DeformationField` exposes its own grid and `GetVectors`, so the Jacobian is `det(I + grad u)` by central differences, the gradient is the largest `‖grad u‖_F`, and the displacement maximum is taken over every field point rather than the eight corners. Derivatives use the field's own spacing, which is coarser than the image's. Never run against a case with a known deformation. |
 | **DSC, MDA and HD95** | ✅ Measured | Both structures rasterised onto one grid — the registered one carried through the registration first — then compared through a single distance transform. Needs contours with the same identifier on both series. |
 
 For **deformable** registrations everything depends on finding a point-by-point mapping method
