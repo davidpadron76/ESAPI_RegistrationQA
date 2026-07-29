@@ -513,6 +513,197 @@ namespace VMS.IRS.Scripting
             {
                 Line("  method probe failed — " + ex.GetType().Name + ": " + ex.Message);
             }
+
+            // GetVectors(VectorFloat[,,] preallocatedBuffer) doesn't fit the "1-3 simple
+            // numeric parameters" shape above — it takes one 3D array of a struct type unknown
+            // at compile time. Now that a real case has shown the exact method name and buffer
+            // shape, probe it directly rather than waiting for the generic sweep to stumble on
+            // it (it never would: an array parameter is not IsProbeableType).
+            ProbeBulkVectorMethod(field, type);
+        }
+
+        /// <summary>
+        /// Mirrors the GetVoxels probe that found the original intensity-reading bug: build the
+        /// buffer via reflection from XSize/YSize/ZSize, call the method, then check whether the
+        /// middle plane — never plane 0, which can look identical to an unwritten buffer — came
+        /// back uniform or carries real per-voxel vectors.
+        /// </summary>
+        private void ProbeBulkVectorMethod(object field, Type fieldType)
+        {
+            List<MethodInfo> candidates;
+            try
+            {
+                candidates = fieldType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(m => m.ReturnType == typeof(void) &&
+                                m.GetParameters().Length == 1 &&
+                                m.GetParameters()[0].ParameterType.IsArray &&
+                                m.GetParameters()[0].ParameterType.GetArrayRank() == 3)
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                Line("  bulk-array method search failed — " + ex.GetType().Name + ": " + ex.Message);
+                return;
+            }
+
+            if (candidates.Count == 0)
+            {
+                Line("  no method taking a single 3D-array buffer found on " + fieldType.Name);
+                return;
+            }
+
+            int xSize = ReadIntProperty(field, "XSize");
+            int ySize = ReadIntProperty(field, "YSize");
+            int zSize = ReadIntProperty(field, "ZSize");
+
+            if (xSize <= 0 || ySize <= 0 || zSize <= 0)
+            {
+                Line("  cannot size the buffer — XSize/YSize/ZSize did not answer with positive values");
+                return;
+            }
+
+            foreach (MethodInfo m in candidates)
+            {
+                Type elementType = m.GetParameters()[0].ParameterType.GetElementType();
+                Line("  trying " + m.Name + "(" + elementType.Name + "[" + xSize + "," + ySize + "," +
+                     zSize + "])");
+
+                Array buffer;
+                try
+                {
+                    buffer = Array.CreateInstance(elementType, xSize, ySize, zSize);
+                }
+                catch (Exception ex)
+                {
+                    Line("    could not allocate buffer — " + ex.GetType().Name + ": " + ex.Message);
+                    continue;
+                }
+
+                try
+                {
+                    m.Invoke(field, new object[] { buffer });
+                }
+                catch (Exception ex)
+                {
+                    Exception real = ex.InnerException ?? ex;
+                    Line("    " + m.Name + " → " + real.GetType().Name + ": " + Shorten(real.Message));
+                    continue;
+                }
+
+                int midZ = zSize > 1 ? zSize / 2 : 0;
+                DescribeVectorPlane(buffer, elementType, xSize, ySize, midZ, m.Name);
+            }
+        }
+
+        private static int ReadIntProperty(object instance, string name)
+        {
+            try
+            {
+                PropertyInfo p = instance.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
+                if (p == null) return -1;
+                return Convert.ToInt32(p.GetValue(instance, null), CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                return -1;
+            }
+        }
+
+        /// <summary>
+        /// Reports whether the middle plane of the returned buffer carries real, non-uniform
+        /// per-voxel vectors or came back untouched. Reads each element's x/y/z generically
+        /// (property or field, either casing — the same lesson PointMapperReader already
+        /// learned reading the point-mapping return value) rather than assuming a fixed layout
+        /// for a struct type that isn't known until this line runs.
+        /// </summary>
+        private void DescribeVectorPlane(Array buffer, Type elementType, int xSize, int ySize, int z,
+            string methodName)
+        {
+            object probe;
+            try { probe = Activator.CreateInstance(elementType); }
+            catch { probe = null; }
+
+            if (probe != null && ReadXyz(probe) == null)
+            {
+                Line("    " + methodName + " ran without throwing, but " + elementType.Name +
+                     " exposes no recognisable X/Y/Z members — its own surface:");
+                Members(probe, "      ");
+                return;
+            }
+
+            int sampled = 0;
+            double minLen = double.MaxValue, maxLen = double.MinValue;
+            var firstValues = new List<string>();
+
+            for (int y = 0; y < ySize && sampled < 4096; y++)
+            {
+                for (int x = 0; x < xSize && sampled < 4096; x++)
+                {
+                    object element = buffer.GetValue(x, y, z);
+                    double[] xyz = ReadXyz(element);
+                    if (xyz == null) continue;
+
+                    double len = Math.Sqrt(xyz[0] * xyz[0] + xyz[1] * xyz[1] + xyz[2] * xyz[2]);
+                    if (len < minLen) minLen = len;
+                    if (len > maxLen) maxLen = len;
+                    sampled++;
+
+                    if (firstValues.Count < 8)
+                        firstValues.Add(string.Format(CultureInfo.InvariantCulture, "({0:F3},{1:F3},{2:F3})",
+                            xyz[0], xyz[1], xyz[2]));
+                }
+            }
+
+            if (sampled == 0)
+            {
+                Line("    " + methodName + " → could not read any element back as X/Y/Z");
+                return;
+            }
+
+            string verdict = minLen == maxLen
+                ? "*** ALL VECTORS EQUAL (length " + minLen.ToString("F6", CultureInfo.InvariantCulture) +
+                  ") — looks like the call wrote nothing ***"
+                : "REAL DATA";
+
+            Line(string.Format(CultureInfo.InvariantCulture,
+                "    {0} → plane z={1}, {2} samples, |v| min {3:F4} max {4:F4} → {5}",
+                methodName, z, sampled, minLen, maxLen, verdict));
+            Line("    first values: " + string.Join(", ", firstValues.ToArray()));
+        }
+
+        private static double[] ReadXyz(object element)
+        {
+            if (element == null) return null;
+            Type t = element.GetType();
+
+            double? x = ReadNumericMember(t, element, "X", "x");
+            double? y = ReadNumericMember(t, element, "Y", "y");
+            double? z = ReadNumericMember(t, element, "Z", "z");
+
+            if (!x.HasValue || !y.HasValue || !z.HasValue) return null;
+            return new[] { x.Value, y.Value, z.Value };
+        }
+
+        private static double? ReadNumericMember(Type t, object instance, params string[] names)
+        {
+            foreach (string name in names)
+            {
+                try
+                {
+                    PropertyInfo p = t.GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
+                    if (p != null && p.CanRead)
+                        return Convert.ToDouble(p.GetValue(instance, null), CultureInfo.InvariantCulture);
+
+                    FieldInfo f = t.GetField(name, BindingFlags.Public | BindingFlags.Instance);
+                    if (f != null)
+                        return Convert.ToDouble(f.GetValue(instance), CultureInfo.InvariantCulture);
+                }
+                catch
+                {
+                    // try the next candidate name
+                }
+            }
+            return null;
         }
 
         private void InvokeAndReport(Func<object[], object> invoke, ParameterInfo[] parameters, string label)
