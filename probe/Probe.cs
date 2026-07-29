@@ -375,7 +375,10 @@ namespace VMS.IRS.Scripting
             Line("");
             Line("  --- GetImageProfile, the untried route ---");
 
-            dynamic start, stop;
+            // Seeded for definite assignment: the calls are dynamically bound (frame is
+            // dynamic), so the compiler cannot verify the out parameters through the ||
+            // short-circuit the way it would for a statically-bound call.
+            dynamic start = null, stop = null;
             if (!TryVoxelToDicom(frame, 0, ySize / 2, plane, out start) ||
                 !TryVoxelToDicom(frame, xSize - 1, ySize / 2, plane, out stop))
             {
