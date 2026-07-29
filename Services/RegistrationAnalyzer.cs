@@ -601,12 +601,34 @@ namespace ESAPI_RegistrationQA.Services
 
             if (pairs.Count == 0)
             {
+                // Two different situations, and conflating them cost a session. Structures on
+                // both sides with no shared identifier is a property of the case: the row is
+                // hidden, because it would say the same thing for ever. Zero structures read at
+                // all, on a series the user has just drawn on, is a read fault: the row stays
+                // visible as N/A, because hiding it leaves no trace of anything having gone
+                // wrong.
+                bool readNothing = sourceStructures.Count == 0 || targetStructures.Count == 0;
+
                 string reason = string.Format(CultureInfo.InvariantCulture,
                     "no contour structure carries the same identifier on both series (source: {0}, " +
-                    "registered: {1}). These metrics compare a reference contour with the same contour " +
-                    "after propagation, so a matching pair is required. Copying the structure to the " +
-                    "second series under the same name enables them.",
-                    sourceStructures.Count, targetStructures.Count);
+                    "registered: {1}). {2}",
+                    sourceStructures.Count, targetStructures.Count,
+                    readNothing
+                        ? "One of the series yielded no contour structure at all. If you have drawn one " +
+                          "there, this is a reading failure rather than a missing contour — the " +
+                          "diagnostics tab names the call that did not answer."
+                        : "These metrics compare a reference contour with the same contour after " +
+                          "propagation, so a matching pair is required. Copying the structure to the " +
+                          "second series under the same name enables them.");
+
+                if (readNothing)
+                {
+                    measurements.Dsc = MeasuredValue.Unavailable(reason);
+                    measurements.Mda = MeasuredValue.Unavailable(reason);
+                    measurements.Hd95 = MeasuredValue.Unavailable(reason);
+                    _log.Failure("structures", reason);
+                    return;
+                }
 
                 measurements.Dsc = MeasuredValue.NotApplicable(reason);
                 measurements.Mda = MeasuredValue.NotApplicable(reason);

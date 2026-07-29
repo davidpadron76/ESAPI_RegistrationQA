@@ -263,17 +263,112 @@ namespace ESAPI_RegistrationQA.Services
                 "{0} contour structure(s) read via {1}; {2} point structure(s) skipped, {3} empty",
                 structures.Count, source, skippedPoints, skippedEmpty));
 
+            if (structures.Count == 0 && skippedEmpty > 0)
+            {
+                // Structures exist and every one came back without a single polygon. That is a
+                // read fault, not an empty series, and the member surface is what identifies
+                // which call is the wrong one.
+                log.Failure("structures: " + label, string.Format(CultureInfo.InvariantCulture,
+                    "{0} structure(s) were found and none yielded a contour. " +
+                    "GetContoursOnImagePlane is the call being used; if this API names it " +
+                    "differently, this is what says so. {1}",
+                    skippedEmpty, DescribeFirstStructure(structureSets)));
+            }
+
             return structures;
+        }
+
+        /// <summary>
+        /// How many image planes to ask each structure for.
+        ///
+        /// This asked <c>structureSet.Image.ZSize</c> and nothing else, and on VMS.CA that
+        /// property does not exist: <c>VolumeImage</c> exposes UserOrigin, StructureSets,
+        /// ImageModality, FOR, UID, ImagingOrientation, ImageStatus, IsProcessed, Frames,
+        /// Series and identifiers — the sizes live on <c>Frame</c>. The count came back as
+        /// zero, every structure was then read as having no contours, no pair could be formed,
+        /// and DSC, MDA and HD95 went to NotApplicable, which is the one state that hides the
+        /// row entirely. A structure drawn on both series produced no metrics and no visible
+        /// reason.
+        ///
+        /// Same shape of mistake as the matrix and the voxels before it: asking one object for
+        /// something its neighbour exposes. So every plausible path is tried and the one that
+        /// answered is recorded.
+        /// </summary>
+        /// <summary>
+        /// Member surface of the first structure found, for the diagnostics. Reading contours
+        /// is the one step of this class that has never been confirmed against a real API.
+        /// </summary>
+        private static string DescribeFirstStructure(dynamic structureSets)
+        {
+            string description = "(no structure could be inspected)";
+
+            Dyn.TryInvoke("structures: inspect first structure", () =>
+            {
+                foreach (dynamic structureSet in structureSets)
+                {
+                    description = "StructureSet — " + MatrixReader.DescribeMemberSurface((object)structureSet);
+
+                    foreach (dynamic structure in structureSet.Structures)
+                    {
+                        if (structure == null) continue;
+                        description += " | Structure — " + MatrixReader.DescribeMemberSurface((object)structure);
+                        return;
+                    }
+                }
+            }, null);
+
+            return description;
         }
 
         private static int ReadPlaneCount(dynamic structureSet, DiagnosticLog log)
         {
             int planes;
-            if (Dyn.TryGetInt("structures: plane count", () => structureSet.Image.ZSize, log, out planes))
-                return planes;
 
-            // Without a plane count there is nothing to iterate; the caller will report the
-            // structure as having no contours, which is accurate.
+            // Classic ESAPI: the image carries its own dimensions.
+            if (Dyn.TryGetInt("structures: plane count (Image.ZSize)",
+                    () => structureSet.Image.ZSize, null, out planes) && planes > 0)
+            {
+                log.Info("structures: plane count", planes + " via Image.ZSize");
+                return planes;
+            }
+
+            // VMS.CA: the dimensions live on the frame.
+            if (Dyn.TryGetInt("structures: plane count (Image.Frame.ZSize)",
+                    () => structureSet.Image.Frame.ZSize, null, out planes) && planes > 0)
+            {
+                log.Info("structures: plane count", planes + " via Image.Frame.ZSize");
+                return planes;
+            }
+
+            // VMS.CA again: Frames is a collection, and the first frame holds the geometry.
+            dynamic frames;
+            if (Dyn.TryGet("structures: Image.Frames", () => structureSet.Image.Frames, null, out frames))
+            {
+                int found = 0;
+                Dyn.TryInvoke("structures: first frame of Image.Frames", () =>
+                {
+                    foreach (dynamic frame in frames)
+                    {
+                        int size;
+                        if (Dyn.TryGetInt("structures: frame ZSize", () => frame.ZSize, null, out size) && size > 0)
+                        {
+                            found = size;
+                            return;
+                        }
+                    }
+                }, null);
+
+                if (found > 0)
+                {
+                    log.Info("structures: plane count", found + " via Image.Frames[0].ZSize");
+                    return found;
+                }
+            }
+
+            log.Failure("structures: plane count",
+                "no plane count could be obtained, so no structure can be read. " +
+                MatrixReader.DescribeMemberSurface((object)structureSet));
+
             return 0;
         }
 
