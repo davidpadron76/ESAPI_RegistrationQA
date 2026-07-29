@@ -41,6 +41,13 @@ namespace ESAPI_RegistrationQA.Models
         /// <summary>Canonical key (see <see cref="MetricKeys"/>). Stable across UI changes.</summary>
         public string MetricKey { get; set; }
 
+        /// <summary>
+        /// Section this metric belongs to, used to group the single table the window now
+        /// shows. The metrics used to live in four separate tabs, which meant four clicks to
+        /// see what had been measured and no way to take it in at a glance.
+        /// </summary>
+        public string Group { get; set; }
+
         /// <summary>Name shown on screen. Purely cosmetic.</summary>
         public string MetricName { get; set; }
 
@@ -100,6 +107,29 @@ namespace ESAPI_RegistrationQA.Models
                     case QASemaphore.Informational: return "INFO";
                     default: return Status.ToString();
                 }
+            }
+        }
+
+        /// <summary>
+        /// One line explaining the number: the tolerance it was held to, why it was held to
+        /// none, or why there is no number at all.
+        ///
+        /// This replaces two separate columns. Showing criterion and reason side by side left
+        /// neither with enough width — the screenshot that prompted this had both clipped
+        /// mid-word. Whichever of the two applies is the one the reader needs, and the full
+        /// text is still a hover away in <see cref="Tooltip"/>.
+        /// </summary>
+        public string Summary
+        {
+            get
+            {
+                if (!IsAvailable)
+                    return UnavailableReason ?? "not measured";
+
+                if (string.IsNullOrEmpty(ThresholdCriteria) || ThresholdCriteria == "—")
+                    return MeasurementNote ?? string.Empty;
+
+                return ThresholdCriteria;
             }
         }
 

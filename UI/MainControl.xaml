@@ -8,8 +8,6 @@
 
     <UserControl.Resources>
 
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
-
         <!-- Semaphore palette. A single point of definition for all three tables. -->
         <SolidColorBrush x:Key="StatusGreenBg"  Color="#C8E6C9"/>
         <SolidColorBrush x:Key="StatusGreenFg"  Color="#2E7D32"/>
@@ -122,10 +120,26 @@
             <Setter Property="CanUserAddRows" Value="False"/>
         </Style>
 
-        <Style TargetType="GroupBox">
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Foreground" Value="{StaticResource Accent}"/>
-        </Style>
+        <!--
+            One line of context per metric: the tolerance it was held to, why it was held to
+            none, or why there is no number. It replaces the criterion and reason columns,
+            which between them never had the width to show either.
+        -->
+        <DataTemplate x:Key="MetricSummaryTemplate">
+            <TextBlock Text="{Binding Summary}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                       Foreground="#546E7A" FontSize="11.5" ToolTip="{Binding Tooltip}"/>
+        </DataTemplate>
+
+        <!--
+            The four metric sections rendered as one table with group headers. Four tabs meant
+            four clicks to learn what had been measured, on a screen whose whole purpose is to
+            be taken in at a glance.
+        -->
+        <CollectionViewSource x:Key="GroupedMetrics" Source="{Binding AllMetrics}">
+            <CollectionViewSource.GroupDescriptions>
+                <PropertyGroupDescription PropertyName="Group"/>
+            </CollectionViewSource.GroupDescriptions>
+        </CollectionViewSource>
 
     </UserControl.Resources>
 
@@ -134,6 +148,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
@@ -194,222 +209,55 @@
                     </Style.Triggers>
                 </Style>
             </Border.Style>
-            <StackPanel>
-                <TextBlock Text="{Binding GlobalStatusMessage}" FontSize="12.5" FontWeight="SemiBold"
-                           TextWrapping="Wrap" Foreground="#37474F"/>
-                <TextBlock Text="{Binding MeasurementSummary}" FontSize="10.5" Foreground="#607D8B"
-                           TextWrapping="Wrap" Margin="0,5,0,0"/>
-            </StackPanel>
+            <TextBlock Text="{Binding GlobalStatusMessage}" FontSize="12.5" FontWeight="SemiBold"
+                       TextWrapping="Wrap" Foreground="#37474F"
+                       ToolTip="{Binding MeasurementSummary}"/>
         </Border>
 
-        <TabControl Grid.Row="2" Background="Transparent" BorderThickness="0">
-            <TabControl.Resources>
-                <Style TargetType="TabItem">
-                    <Setter Property="Padding" Value="12,6"/>
-                    <Setter Property="Margin" Value="0,0,5,0"/>
-                    <Setter Property="FontWeight" Value="SemiBold"/>
-                </Style>
-            </TabControl.Resources>
+        <!--
+            Everything that was measured, in one table.
 
-            <!-- Similarity and topology -->
-            <TabItem Header="QA Metrics">
-                <Grid Margin="0,10,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="15"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
+            Advisories, diagnostics and the rigid transform used to be tabs. All three are
+            reference material: needed when a number has to be explained, in the way and not
+            read the rest of the time. They are a line of text and two buttons now.
+        -->
+        <DataGrid Grid.Row="2" ItemsSource="{Binding Source={StaticResource GroupedMetrics}}"
+                  Style="{StaticResource MetricGridStyle}" Margin="0"
+                  ScrollViewer.VerticalScrollBarVisibility="Auto">
+            <DataGrid.GroupStyle>
+                <GroupStyle>
+                    <GroupStyle.HeaderTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="12"
+                                       Foreground="{StaticResource Accent}" Margin="4,10,0,4"/>
+                        </DataTemplate>
+                    </GroupStyle.HeaderTemplate>
+                </GroupStyle>
+            </DataGrid.GroupStyle>
+            <DataGrid.Columns>
+                <DataGridTemplateColumn Header="Metric" Width="220"
+                                        CellTemplate="{StaticResource MetricNameTemplate}"/>
+                <DataGridTemplateColumn Header="Value" Width="110"
+                                        CellTemplate="{StaticResource MetricValueTemplate}"/>
+                <DataGridTemplateColumn Header="Status" Width="80"
+                                        CellTemplate="{StaticResource StatusBadgeTemplate}"/>
+                <DataGridTemplateColumn Header="Criterion / reason" Width="*"
+                                        CellTemplate="{StaticResource MetricSummaryTemplate}"/>
+            </DataGrid.Columns>
+        </DataGrid>
 
-                    <GroupBox Grid.Column="0" Header="Intensity similarity"
-                              Visibility="{Binding HasIntensityMetrics, Converter={StaticResource BoolToVisibility}}">
-                        <DataGrid ItemsSource="{Binding IntensityMetrics}" Style="{StaticResource MetricGridStyle}">
-                            <DataGrid.Columns>
-                                <DataGridTemplateColumn Header="Metric" Width="*"
-                                                        CellTemplate="{StaticResource MetricNameTemplate}"/>
-                                <DataGridTemplateColumn Header="Value" Width="80"
-                                                        CellTemplate="{StaticResource MetricValueTemplate}"/>
-                                <DataGridTextColumn Header="Criterion" Binding="{Binding ThresholdCriteria}" Width="170"/>
-                                <DataGridTemplateColumn Header="Status" Width="80"
-                                                        CellTemplate="{StaticResource StatusBadgeTemplate}"/>
-                            </DataGrid.Columns>
-                        </DataGrid>
-                    </GroupBox>
+        <TextBlock Grid.Row="3" Text="{Binding TransformSummary}" FontSize="11" Foreground="#546E7A"
+                   Margin="2,10,0,0" TextWrapping="Wrap"
+                   ToolTip="DICOM patient coordinates: X = left-right, Y = anterior-posterior, Z = cranio-caudal. Euler angles in the intrinsic Rz-Ry-Rx convention."/>
 
-                    <GroupBox Grid.Column="2" Header="Deformation and topology"
-                              Visibility="{Binding HasDeformationMetrics, Converter={StaticResource BoolToVisibility}}">
-                        <DataGrid ItemsSource="{Binding DeformationMetrics}" Style="{StaticResource MetricGridStyle}">
-                            <DataGrid.Columns>
-                                <DataGridTemplateColumn Header="Metric" Width="*"
-                                                        CellTemplate="{StaticResource MetricNameTemplate}"/>
-                                <DataGridTemplateColumn Header="Value" Width="80"
-                                                        CellTemplate="{StaticResource MetricValueTemplate}"/>
-                                <DataGridTextColumn Header="Criterion" Binding="{Binding ThresholdCriteria}" Width="170"/>
-                                <DataGridTemplateColumn Header="Status" Width="80"
-                                                        CellTemplate="{StaticResource StatusBadgeTemplate}"/>
-                            </DataGrid.Columns>
-                        </DataGrid>
-                    </GroupBox>
-                </Grid>
-            </TabItem>
-
-            <!-- TG-132 Table III primary metrics -->
-            <TabItem Header="Spatial Accuracy"
-                     Visibility="{Binding HasSpatialAccuracyMetrics, Converter={StaticResource BoolToVisibility}}">
-                <GroupBox Header="TG-132 Table III — metrics expressed in millimetres of spatial error" Margin="0,10,0,0">
-                    <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Margin="10,6,10,0" TextWrapping="Wrap"
-                                   FontWeight="Normal" FontSize="10.5" Foreground="#607D8B"
-                                   Text="TG-132 sets the tolerance for these at the maximum voxel dimension (~2-3 mm), not at a fixed value. TRE needs point landmarks (DICOM type MARKER or ISOCENTER) present on both series under the same identifier. Inverse consistency needs the reverse registration to exist in the workspace."/>
-                        <DataGrid ItemsSource="{Binding SpatialAccuracyMetrics}" Style="{StaticResource MetricGridStyle}"
-                                  RowHeight="NaN">
-                            <DataGrid.Columns>
-                                <DataGridTemplateColumn Header="Metric" Width="2*"
-                                                        CellTemplate="{StaticResource MetricNameTemplate}"/>
-                                <DataGridTemplateColumn Header="Value" Width="100"
-                                                        CellTemplate="{StaticResource MetricValueTemplate}"/>
-                                <DataGridTextColumn Header="Criterion" Binding="{Binding ThresholdCriteria}" Width="160"/>
-                                <DataGridTemplateColumn Header="Status" Width="80"
-                                                        CellTemplate="{StaticResource StatusBadgeTemplate}"/>
-                                <DataGridTextColumn Header="Reason" Binding="{Binding UnavailableReason}" Width="3*">
-                                    <DataGridTextColumn.ElementStyle>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="TextWrapping" Value="Wrap"/>
-                                            <Setter Property="Foreground" Value="#777777"/>
-                                            <Setter Property="FontSize" Value="10.5"/>
-                                            <Setter Property="Margin" Value="0,4"/>
-                                        </Style>
-                                    </DataGridTextColumn.ElementStyle>
-                                </DataGridTextColumn>
-                            </DataGrid.Columns>
-                        </DataGrid>
-                    </DockPanel>
-                </GroupBox>
-            </TabItem>
-
-            <!-- Structures -->
-            <TabItem Header="Structures &amp; Surface"
-                     Visibility="{Binding HasStructureMetrics, Converter={StaticResource BoolToVisibility}}">
-                <GroupBox Header="Anatomical alignment (DSC / HD95)" Margin="0,10,0,0">
-                    <DataGrid ItemsSource="{Binding StructureQAMetrics}" Style="{StaticResource MetricGridStyle}">
-                        <DataGrid.Columns>
-                            <DataGridTemplateColumn Header="Anatomical index" Width="2*"
-                                                    CellTemplate="{StaticResource MetricNameTemplate}"/>
-                            <DataGridTemplateColumn Header="Value" Width="100"
-                                                    CellTemplate="{StaticResource MetricValueTemplate}"/>
-                            <DataGridTextColumn Header="Criterion" Binding="{Binding ThresholdCriteria}" Width="160"/>
-                            <DataGridTemplateColumn Header="Status" Width="80"
-                                                    CellTemplate="{StaticResource StatusBadgeTemplate}"/>
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </GroupBox>
-            </TabItem>
-
-            <!-- Rigid transform -->
-            <TabItem Header="Rigid Transform">
-                <GroupBox Header="Spatial parameters (DICOM patient coordinates)" Margin="0,10,0,0">
-                    <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Margin="10,6,10,0" TextWrapping="Wrap"
-                                   FontWeight="Normal" FontSize="10.5" Foreground="#607D8B"
-                                   Text="X = left-right (LR) · Y = anterior-posterior (AP) · Z = cranio-caudal (CC). Euler angles in the intrinsic Rz·Ry·Rx convention."/>
-                        <DataGrid ItemsSource="{Binding RigidTransformData}" Style="{StaticResource MetricGridStyle}">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Parameter" Binding="{Binding Parameter}" Width="2*"/>
-                                <DataGridTextColumn Header="Value" Binding="{Binding DisplayValue}" Width="1*"/>
-                                <DataGridTextColumn Header="Unit" Binding="{Binding Unit}" Width="80"/>
-                                <DataGridTextColumn Header="Provenance" Binding="{Binding Note}" Width="3*">
-                                    <DataGridTextColumn.ElementStyle>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="TextWrapping" Value="Wrap"/>
-                                            <Setter Property="Foreground" Value="#777777"/>
-                                            <Setter Property="FontSize" Value="10.5"/>
-                                            <Setter Property="Margin" Value="0,4"/>
-                                        </Style>
-                                    </DataGridTextColumn.ElementStyle>
-                                </DataGridTextColumn>
-                            </DataGrid.Columns>
-                        </DataGrid>
-                    </DockPanel>
-                </GroupBox>
-            </TabItem>
-
-            <!-- Clinical advisories -->
-            <TabItem Header="Advisories">
-                <GroupBox Header="Clinical advisories for the active profile" Margin="0,10,0,0">
-                    <DataGrid ItemsSource="{Binding Advisories}" Style="{StaticResource MetricGridStyle}"
-                              RowHeight="NaN">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Level" Binding="{Binding SeverityText}" Width="90"/>
-                            <DataGridTextColumn Header="Scope" Binding="{Binding Category}" Width="180"/>
-                            <DataGridTextColumn Header="Observation" Binding="{Binding Message}" Width="*">
-                                <DataGridTextColumn.ElementStyle>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="TextWrapping" Value="Wrap"/>
-                                        <Setter Property="Margin" Value="0,4"/>
-                                    </Style>
-                                </DataGridTextColumn.ElementStyle>
-                            </DataGridTextColumn>
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </GroupBox>
-            </TabItem>
-
-            <!--
-                Diagnostics.
-
-                A new tab: it surfaces everything the previous version swallowed in empty
-                catch blocks. This is what lets the user find out why a metric came out
-                unavailable.
-            -->
-            <TabItem Header="Diagnostics">
-                <GroupBox Header="Varian API access" Margin="0,10,0,0">
-                    <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Text="{Binding DiagnosticsSummary}"
-                                   Margin="10,6,10,0" FontWeight="SemiBold" FontSize="11"
-                                   Foreground="#607D8B" TextWrapping="Wrap"/>
-                        <GroupBox DockPanel.Dock="Top" Header="Metrics not applicable to this case"
-                                  Margin="0,8,0,4" FontSize="11"
-                                  Visibility="{Binding HasNotApplicableMetrics, Converter={StaticResource BoolToVisibility}}">
-                            <DataGrid ItemsSource="{Binding NotApplicableMetrics}"
-                                      Style="{StaticResource MetricGridStyle}" RowHeight="NaN"
-                                      MaxHeight="180">
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Metric" Binding="{Binding MetricName}" Width="2*"/>
-                                    <DataGridTextColumn Header="Why it does not apply"
-                                                        Binding="{Binding UnavailableReason}" Width="5*">
-                                        <DataGridTextColumn.ElementStyle>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="TextWrapping" Value="Wrap"/>
-                                                <Setter Property="Foreground" Value="#777777"/>
-                                                <Setter Property="FontSize" Value="10.5"/>
-                                                <Setter Property="Margin" Value="0,4"/>
-                                            </Style>
-                                        </DataGridTextColumn.ElementStyle>
-                                    </DataGridTextColumn>
-                                </DataGrid.Columns>
-                            </DataGrid>
-                        </GroupBox>
-                        <DataGrid ItemsSource="{Binding Diagnostics}" Style="{StaticResource MetricGridStyle}"
-                                  RowHeight="NaN">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Level" Binding="{Binding LevelText}" Width="80"/>
-                                <DataGridTextColumn Header="Operation" Binding="{Binding Operation}" Width="2*"/>
-                                <DataGridTextColumn Header="Detail" Binding="{Binding Detail}" Width="3*">
-                                    <DataGridTextColumn.ElementStyle>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="TextWrapping" Value="Wrap"/>
-                                            <Setter Property="Margin" Value="0,4"/>
-                                        </Style>
-                                    </DataGridTextColumn.ElementStyle>
-                                </DataGridTextColumn>
-                            </DataGrid.Columns>
-                        </DataGrid>
-                    </DockPanel>
-                </GroupBox>
-            </TabItem>
-
-        </TabControl>
-
-        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="{Binding AdvisoriesButtonText}" Command="{Binding ShowAdvisoriesCommand}"
+                    MinWidth="150" Height="35" Background="White" Foreground="#546E7A"
+                    BorderBrush="#B0BEC5" BorderThickness="1" Margin="0,0,10,0" Padding="12,0"/>
+            <Button Content="{Binding DiagnosticsButtonText}" Command="{Binding ShowDiagnosticsCommand}"
+                    MinWidth="150" Height="35" Background="White" Foreground="#546E7A"
+                    BorderBrush="#B0BEC5" BorderThickness="1" Margin="0,0,25,0" Padding="12,0"
+                    ToolTip="Every property the plugin could not read from the API, with the operation and the exception."/>
             <Button Content="Add to dataset (CSV)" Command="{Binding ExportCsvCommand}"
                     Width="180" Height="35" Background="White" Foreground="{StaticResource Accent}"
                     FontWeight="Bold" BorderBrush="{StaticResource Accent}" BorderThickness="1.5"

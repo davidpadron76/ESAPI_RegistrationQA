@@ -52,7 +52,8 @@ namespace ESAPI_RegistrationQA.Services
         /// fix, and hiding it would bury the fault.
         /// </summary>
         public static List<MetricResult> Evaluate(
-            QaMeasurements measurements, ThresholdProfile profile, IEnumerable<string> keys)
+            QaMeasurements measurements, ThresholdProfile profile, IEnumerable<string> keys,
+            string group = null)
         {
             var results = new List<MetricResult>();
             if (keys == null) return results;
@@ -60,7 +61,10 @@ namespace ESAPI_RegistrationQA.Services
             foreach (string key in keys)
             {
                 if (measurements != null && measurements.ForKey(key).IsNotApplicable) continue;
-                results.Add(EvaluateOne(measurements, profile, key));
+
+                MetricResult result = EvaluateOne(measurements, profile, key);
+                result.Group = group;
+                results.Add(result);
             }
 
             return results;

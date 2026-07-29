@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows;
@@ -56,6 +57,10 @@ namespace ESAPI_RegistrationQA.ViewModels
             Diagnostics = new ObservableCollection<DiagnosticEntry>();
             NotApplicableMetrics = new ObservableCollection<MetricResult>();
 
+            // One flat, grouped collection is what the window shows now. The four above are
+            // kept because the HTML report and the CSV consume them section by section.
+            AllMetrics = new ObservableCollection<MetricResult>();
+
             AvailableProfiles = ThresholdProfile.GetAllProfiles().AsReadOnly();
 
             // Assigned directly to the field: during construction there are no measurements
@@ -66,6 +71,8 @@ namespace ESAPI_RegistrationQA.ViewModels
 
             ExportReportCommand = new RelayCommand(ExecuteExportReport, _ => _measurements != null);
             ExportCsvCommand = new RelayCommand(ExecuteExportCsv, _ => _measurements != null);
+            ShowAdvisoriesCommand = new RelayCommand(_ => ShowAdvisories());
+            ShowDiagnosticsCommand = new RelayCommand(_ => ShowDiagnostics());
 
             RunMeasurement();
         }
@@ -121,6 +128,13 @@ namespace ESAPI_RegistrationQA.ViewModels
         public ObservableCollection<DiagnosticEntry> Diagnostics { get; }
 
         /// <summary>
+        /// Every evaluated metric in one collection, grouped in the view by
+        /// <see cref="MetricResult.Group"/>. Four tabs meant four clicks to find out what had
+        /// been measured; the point of a QA screen is to be read in one glance.
+        /// </summary>
+        public ObservableCollection<MetricResult> AllMetrics { get; }
+
+        /// <summary>
         /// Metrics that did not apply to this case. They are kept out of the metric tables —
         /// a row that would say the same thing on every case is noise — and accounted for
         /// here instead, so the omission stays visible and traceable.
@@ -129,6 +143,57 @@ namespace ESAPI_RegistrationQA.ViewModels
 
         public RelayCommand ExportReportCommand { get; }
         public RelayCommand ExportCsvCommand { get; }
+        public RelayCommand ShowAdvisoriesCommand { get; }
+        public RelayCommand ShowDiagnosticsCommand { get; }
+
+        /// <summary>
+        /// Button labels carry their counts. A tab called "Diagnostics" says nothing about
+        /// whether it is worth opening; "Diagnostics (3 failures)" does.
+        /// </summary>
+        public string AdvisoriesButtonText
+        {
+            get { return $"Advisories ({Advisories.Count})"; }
+        }
+
+        public string DiagnosticsButtonText
+        {
+            get
+            {
+                int failures = Diagnostics.Count(d => d.Level == DiagnosticLevel.Failure);
+                return failures > 0
+                    ? $"Diagnostics ({failures} failure{(failures == 1 ? string.Empty : "s")})"
+                    : $"Diagnostics ({Diagnostics.Count})";
+            }
+        }
+
+        /// <summary>
+        /// Translations and rotations on one line. They belonged to a tab of their own, which
+        /// is more ceremony than six numbers deserve; the full table is still in the report.
+        /// </summary>
+        public string TransformSummary
+        {
+            get
+            {
+                if (_measurements == null || _measurements.Transform == null)
+                    return "Transform: not available.";
+
+                Vec3 t = _measurements.Transform.Translation;
+                string text = string.Format(CultureInfo.InvariantCulture,
+                    "Translation {0:F2} / {1:F2} / {2:F2} mm (LR / AP / CC)", t.X, t.Y, t.Z);
+
+                if (_measurements.RigidEulerAngles.HasValue)
+                {
+                    EulerAngles a = _measurements.RigidEulerAngles.Value;
+                    text += string.Format(CultureInfo.InvariantCulture,
+                        "   ·   Rotation {0:F2} / {1:F2} / {2:F2}° (pitch / roll / yaw)",
+                        a.PitchX, a.RollY, a.YawZ);
+
+                    if (a.GimbalLock) text += "   ·   gimbal lock: read the angles as a set";
+                }
+
+                return text;
+            }
+        }
 
         public bool HasIntensityMetrics { get { return IntensityMetrics.Count > 0; } }
         public bool HasDeformationMetrics { get { return DeformationMetrics.Count > 0; } }
@@ -227,12 +292,21 @@ namespace ESAPI_RegistrationQA.ViewModels
         /// </summary>
         private void ReevaluateThresholds()
         {
-            Replace(IntensityMetrics, MetricEvaluator.Evaluate(_measurements, ActiveProfile, MetricEvaluator.IntensityKeys));
-            Replace(DeformationMetrics, MetricEvaluator.Evaluate(_measurements, ActiveProfile, MetricEvaluator.DeformationKeys));
-            Replace(SpatialAccuracyMetrics, MetricEvaluator.Evaluate(_measurements, ActiveProfile, MetricEvaluator.SpatialAccuracyKeys));
-            Replace(StructureQAMetrics, MetricEvaluator.Evaluate(_measurements, ActiveProfile, MetricEvaluator.StructureKeys));
+            Replace(IntensityMetrics, MetricEvaluator.Evaluate(
+                _measurements, ActiveProfile, MetricEvaluator.IntensityKeys, "Intensity similarity"));
+            Replace(DeformationMetrics, MetricEvaluator.Evaluate(
+                _measurements, ActiveProfile, MetricEvaluator.DeformationKeys, "Deformation and topology"));
+            Replace(SpatialAccuracyMetrics, MetricEvaluator.Evaluate(
+                _measurements, ActiveProfile, MetricEvaluator.SpatialAccuracyKeys, "Spatial accuracy (TG-132 Table III)"));
+            Replace(StructureQAMetrics, MetricEvaluator.Evaluate(
+                _measurements, ActiveProfile, MetricEvaluator.StructureKeys, "Structures and surface"));
             Replace(RigidTransformData, MetricEvaluator.BuildRigidTransformRows(_measurements));
             Replace(NotApplicableMetrics, MetricEvaluator.NotApplicable(_measurements));
+
+            Replace(AllMetrics, IntensityMetrics
+                .Concat(DeformationMetrics)
+                .Concat(SpatialAccuracyMetrics)
+                .Concat(StructureQAMetrics));
 
             AdvisorySet advisorySet = AdvisoryEngine.Build(
                 IntensityMetrics.Concat(DeformationMetrics)
@@ -250,6 +324,44 @@ namespace ESAPI_RegistrationQA.ViewModels
             OnPropertyChanged(nameof(HasSpatialAccuracyMetrics));
             OnPropertyChanged(nameof(HasStructureMetrics));
             OnPropertyChanged(nameof(HasNotApplicableMetrics));
+            OnPropertyChanged(nameof(TransformSummary));
+            OnPropertyChanged(nameof(AdvisoriesButtonText));
+            OnPropertyChanged(nameof(DiagnosticsButtonText));
+        }
+
+        // ------------------------------------------------------------------ detail windows
+
+        /// <summary>
+        /// Advisories and diagnostics moved out of the main window into these two. They are
+        /// long-form text: valuable when something needs explaining, noise on a screen whose
+        /// job is to show four numbers and a colour.
+        /// </summary>
+        private void ShowAdvisories()
+        {
+            UI.DetailWindow.Show("Clinical advisories", Advisories,
+                new[]
+                {
+                    Tuple.Create("Severity", "SeverityText", 90.0),
+                    Tuple.Create("Category", "Category", 190.0),
+                    Tuple.Create("Advice", "Message", 0.0)
+                });
+        }
+
+        private void ShowDiagnostics()
+        {
+            UI.DetailWindow.Show("Varian API access — " + DiagnosticsSummary, Diagnostics,
+                new[]
+                {
+                    Tuple.Create("Level", "Level", 90.0),
+                    Tuple.Create("Operation", "Operation", 260.0),
+                    Tuple.Create("Detail", "Detail", 0.0)
+                },
+                NotApplicableMetrics,
+                new[]
+                {
+                    Tuple.Create("Metric not applicable", "MetricName", 220.0),
+                    Tuple.Create("Why", "UnavailableReason", 0.0)
+                });
         }
 
         private static QASemaphore ToSemaphore(AdvisorySeverity severity)

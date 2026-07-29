@@ -158,6 +158,7 @@
     <Compile Include="Services\VoxelPairSampler.cs" />
     <Compile Include="Services\VoxelPlaneReader.cs" />
 
+    <Compile Include="UI\DetailWindow.cs" />
     <Compile Include="UI\MainControl.xaml.cs">
       <DependentUpon>MainControl.xaml</DependentUpon>
     </Compile>

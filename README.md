@@ -235,6 +235,20 @@ The project builds as **x64**, which is what Eclipse 15.6 and later require.
 If the script does not appear in the list, check the destination printed by the build against
 the folder shown in the Eclipse script dialog.
 
+## The window
+
+One table. Every metric that was measured, grouped by section, with four columns: **metric,
+value, status, and one line saying either the tolerance it was held to or why there is none**.
+
+Advisories, diagnostics and the rigid transform used to be tabs of their own. All three are
+reference material — needed when a number has to be explained, in the way the rest of the time.
+The transform is now a line under the table; the other two are buttons that carry their own
+counts, because a tab labelled "Diagnostics" says nothing about whether it is worth opening
+while "Diagnostics (3 failures)" does.
+
+The long-form reasoning did not disappear: it is in the tooltip of every row and, in full, in
+the exported HTML report, which is the document that gets read once and signed.
+
 ## Reading the verdict
 
 The overall status distinguishes five situations, and never declares a registration verified
