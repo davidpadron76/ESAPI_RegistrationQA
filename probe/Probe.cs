@@ -64,6 +64,12 @@ namespace VMS.IRS.Scripting
             Section("ScriptContext");
             Members((object)context);
 
+            // These two run regardless of whether a registration is active, because the
+            // question behind them — can images be found by name and registrations be batched
+            // — has nothing to do with what happens to be open right now.
+            DumpPatientLibrary(context);
+            DumpRegistrationCollection(context);
+
             dynamic registration = Try(() => context.Registration, "context.Registration");
             if (registration == null)
             {
@@ -94,6 +100,199 @@ namespace VMS.IRS.Scripting
             // --- the images ------------------------------------------------------------
             DumpImage(Try(() => registration.SourceImage, "registration.SourceImage"), "SourceImage");
             DumpImage(Try(() => registration.RegisteredImage, "registration.RegisteredImage"), "RegisteredImage");
+        }
+
+        /// <summary>
+        /// Can every image in the chart be found by name without a registration already
+        /// existing? A commissioning workflow needs to locate "basic phantom 1", "basic
+        /// phantom 2"... before pairing and registering them, so this has to work from the
+        /// patient object alone, not from an active registration's SourceImage/RegisteredImage.
+        ///
+        /// The nesting is unknown in advance — classic ESAPI goes Patient.Studies ->
+        /// Study.Series -> Series.Images, VMS.IRS may not — so several candidate collections
+        /// are tried and each item is walked one level down.
+        /// </summary>
+        private void DumpPatientLibrary(dynamic context)
+        {
+            Section("Patient image library (can images be found by name before any registration exists?)");
+
+            dynamic patient = Try(() => context.Patient, "context.Patient");
+            if (patient == null) return;
+
+            Members((object)patient);
+            Scalars((object)patient);
+
+            DumpImageCollection(() => patient.Studies, "Patient.Studies");
+            DumpImageCollection(() => patient.Courses, "Patient.Courses");
+            DumpImageCollection(() => patient.Images, "Patient.Images");
+            DumpImageCollection(() => patient.ImageSets, "Patient.ImageSets");
+        }
+
+        private void DumpImageCollection(Func<object> accessor, string name)
+        {
+            object collection;
+            try { collection = accessor(); }
+            catch (Exception ex) { Line(name + " → " + ex.GetType().Name + ": " + Shorten(ex.Message)); return; }
+
+            if (collection == null) { Line(name + " → null"); return; }
+
+            var items = collection as IEnumerable;
+            if (items == null) { Line(name + " → not enumerable (" + collection.GetType().Name + ")"); return; }
+
+            Line(name + " → type " + collection.GetType().Name);
+            int count = 0;
+            foreach (dynamic item in items)
+            {
+                count++;
+                if (count > 30) { Line("  ... (truncated after 30)"); break; }
+
+                string id = TryGetString(() => item.Id, "(no Id)");
+                Line("  [" + count + "] " + id + "  (" + ((object)item).GetType().Name + ")");
+
+                // One level down: a Study holds Series, a Series holds Images. Harmless to try
+                // both on anything — a property that does not exist is simply skipped.
+                DumpNested(item, "Series", "      ");
+                DumpNested(item, "Images", "      ");
+            }
+            if (count == 0) Line("  (empty)");
+        }
+
+        private void DumpNested(dynamic parent, string propertyName, string indent)
+        {
+            object nested;
+            try
+            {
+                PropertyInfo p = ((object)parent).GetType()
+                    .GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+                if (p == null) return;
+                nested = p.GetValue(parent, null);
+            }
+            catch { return; }
+
+            var items = nested as IEnumerable;
+            if (items == null) return;
+
+            int count = 0;
+            foreach (dynamic item in items)
+            {
+                count++;
+                if (count > 15) { Line(indent + "... (truncated after 15)"); break; }
+                string id = TryGetString(() => item.Id, "(no Id)");
+                Line(indent + propertyName + "[" + count + "] " + id);
+            }
+        }
+
+        /// <summary>
+        /// Every registration already sitting in the workspace — the raw material for auditing
+        /// all of them in one pass instead of one at a time — plus a reflection sweep for any
+        /// method that might create or run one. Nothing found by this sweep is not proof that
+        /// no such method exists anywhere in the API, only that it is not on the three objects
+        /// most likely to carry it.
+        /// </summary>
+        private void DumpRegistrationCollection(dynamic context)
+        {
+            Section("Registration collection (batch auditing needs this) and a search for a create/run method");
+
+            dynamic collection = null;
+            string source = null;
+
+            if (TryAssign(() => context.Patient.Registrations, out collection)) source = "Patient.Registrations";
+            else if (TryAssign(() => context.Registrations, out collection)) source = "Registrations";
+            else if (TryAssign(() => context.Patient.MIRSRegistrations, out collection)) source = "Patient.MIRSRegistrations";
+
+            if (collection == null)
+            {
+                Line("no registration collection answered any of the known paths.");
+            }
+            else
+            {
+                Line("resolved via " + source);
+
+                int count = 0;
+                foreach (dynamic reg in collection)
+                {
+                    count++;
+                    string id = TryGetString(() => reg.Id, "(no Id)");
+                    string sourceId = TryGetString(() => reg.SourceImage.Id, "?");
+                    string targetId = TryGetString(() => reg.RegisteredImage.Id, "?");
+                    Line(string.Format(CultureInfo.InvariantCulture,
+                        "  [{0}] Id={1}  {2} -> {3}  type={4}",
+                        count, id, sourceId, targetId, ((object)reg).GetType().Name));
+                }
+                if (count == 0) Line("  (empty — no registrations exist yet in this workspace)");
+            }
+
+            Line("");
+            Line("Method sweep for anything with \"Regist\" in its name (create/perform a registration):");
+            SweepForRegistrationMethods((object)context, "ScriptContext");
+
+            dynamic patient = Try(() => context.Patient, "context.Patient (for method sweep)");
+            if (patient != null) SweepForRegistrationMethods((object)patient, "Patient");
+
+            if (collection != null) SweepForRegistrationMethods((object)collection, "registration collection");
+        }
+
+        private static bool TryAssign(Func<object> accessor, out dynamic value)
+        {
+            try
+            {
+                object v = accessor();
+                value = v;
+                return v != null;
+            }
+            catch
+            {
+                value = null;
+                return false;
+            }
+        }
+
+        private void SweepForRegistrationMethods(object instance, string label)
+        {
+            if (instance == null) return;
+
+            Type type;
+            try { type = instance.GetType(); }
+            catch { return; }
+
+            try
+            {
+                var matches = type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(m => !m.IsSpecialName &&
+                                m.Name.IndexOf("Regist", StringComparison.OrdinalIgnoreCase) >= 0)
+                    .ToList();
+
+                if (matches.Count == 0)
+                {
+                    Line("  " + label + ": no method with \"Regist\" in its name");
+                    return;
+                }
+
+                foreach (MethodInfo m in matches)
+                {
+                    Line("  " + label + ": " + m.Name + "(" +
+                         string.Join(", ", m.GetParameters()
+                             .Select(p => p.ParameterType.Name + " " + p.Name).ToArray()) +
+                         ") : " + m.ReturnType.Name);
+                }
+            }
+            catch (Exception ex)
+            {
+                Line("  " + label + ": method sweep failed — " + ex.GetType().Name + ": " + ex.Message);
+            }
+        }
+
+        private static string TryGetString(Func<object> accessor, string fallback)
+        {
+            try
+            {
+                object v = accessor();
+                return v == null ? fallback : Convert.ToString(v, CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                return fallback;
+            }
         }
 
         /// <summary>
