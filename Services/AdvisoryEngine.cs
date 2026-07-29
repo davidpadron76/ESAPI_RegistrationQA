@@ -56,11 +56,12 @@ namespace ESAPI_RegistrationQA.Services
     /// <summary>
     /// Turns evaluated metrics into clinical recommendations.
     ///
-    /// Every threshold comes from the active profile. The previous version compared against
-    /// constants (1.0% Jacobian, 15 mm displacement) while the tables used the profile
-    /// limits, so under the Brain/SRS profile a 0.5% Jacobian was painted red but raised no
-    /// advisory, and under Thorax a 1.5% Jacobian raised a critical advisory even though the
-    /// profile accepted it.
+    /// Every threshold comes from the profile it is handed, which by then has been resolved
+    /// against the case: four of the five Table III tolerances are the maximum voxel dimension
+    /// of the images rather than a constant. Nothing here compares against a literal, which is
+    /// the mistake an earlier version made — it checked 1.0 % Jacobian and 15 mm displacement
+    /// while the tables used the profile limits, so the same value could be painted red in the
+    /// table and raise no advisory, or the reverse.
     /// </summary>
     public static class AdvisoryEngine
     {
@@ -109,7 +110,7 @@ namespace ESAPI_RegistrationQA.Services
             AddSimilarityScopeAdvisory(set, metrics);
 
             // --- TG-132 ties its spatial tolerances to the voxel size --------------------
-            AddVoxelToleranceAdvisory(set, metrics, measurements);
+            AddVoxelToleranceAdvisory(set, metrics, profile, measurements);
 
             // --- Transform provenance ----------------------------------------------------
             if (measurements != null && measurements.Transform == null)
@@ -288,37 +289,60 @@ namespace ESAPI_RegistrationQA.Services
         }
 
         /// <summary>
-        /// TG-132 does not express the tolerance for TRE and consistency as a fixed number:
-        /// Table III says "maximum voxel dimension (~2–3 mm)". The profiles in this tool use
-        /// fixed values, so where the two disagree the reader needs to know the actual voxel
-        /// size in order to apply the report's rule rather than the profile's approximation.
+        /// States the spatial tolerance actually applied, and where it came from.
+        ///
+        /// TG-132 does not give these as fixed numbers. Table III sets TRE and consistency at
+        /// "maximum voxel dimension (~2-3 mm)" and MDA at the contouring uncertainty of the
+        /// structure or the same voxel dimension, with one exception in the whole report:
+        /// "stereotactic radiosurgery tolerances are 1 mm". So the limit belongs to the images,
+        /// not to a table, and the reader needs to see which number was used on this case.
+        ///
+        /// This advisory used to say the opposite — that the profile carried fixed values and
+        /// the reader should apply the report's rule instead. The profiles carried anatomical
+        /// limits with no basis in TG-132; they are gone.
         /// </summary>
         private static void AddVoxelToleranceAdvisory(
-            AdvisorySet set, List<MetricResult> metrics, QaMeasurements measurements)
+            AdvisorySet set, List<MetricResult> metrics, ThresholdProfile profile,
+            QaMeasurements measurements)
         {
-            if (measurements == null || !measurements.NativeVoxelSizeMm.HasValue) return;
+            bool anySpatialPresent = metrics.Any(m =>
+                m.MetricKey == MetricKeys.TreMean ||
+                m.MetricKey == MetricKeys.TreMax ||
+                m.MetricKey == MetricKeys.Mda ||
+                m.MetricKey == MetricKeys.InverseConsistency);
 
-            bool anySpatialMeasured = metrics.Any(m =>
-                m.IsAvailable &&
-                (m.MetricKey == MetricKeys.TreMean ||
-                 m.MetricKey == MetricKeys.TreMax ||
-                 m.MetricKey == MetricKeys.InverseConsistency));
+            if (!anySpatialPresent) return;
 
-            if (!anySpatialMeasured) return;
+            double? tolerance = profile != null ? profile.SpatialToleranceMm(measurements) : null;
 
-            double voxel = measurements.NativeVoxelSizeMm.Value;
+            if (!tolerance.HasValue)
+            {
+                set.Advisories.Add(new Advisory(
+                    AdvisorySeverity.Warning,
+                    "TOLERANCE BASIS",
+                    "TRE, MDA and consistency are not classified on this case: TG-132 ties their " +
+                    "tolerance to the maximum voxel dimension of the images, and that could not be " +
+                    "read. The values are still measured and exported."));
+                return;
+            }
 
             string detail = string.Format(CultureInfo.InvariantCulture,
-                "TG-132 Table III sets the tolerance for TRE and consistency at the maximum voxel " +
-                "dimension, which for this image pair is {0:F2} mm. The profile thresholds shown in the " +
-                "tables are fixed values; where they differ from {0:F2} mm, the report's rule is the one " +
-                "to apply.", voxel);
+                "TRE, MDA and consistency are held to {0:F2} mm on this case. {1}",
+                tolerance.Value,
+                profile.IsStereotactic
+                    ? "TG-132 sets 1 mm for stereotactic treatment."
+                    : "TG-132 Table III sets the tolerance at the maximum voxel dimension of the " +
+                      "images being registered, which is what this figure is.");
 
-            if (measurements.TreLandmarkCount > 0)
+            if (measurements != null && measurements.TreLandmarkCount > 0)
             {
                 detail += string.Format(CultureInfo.InvariantCulture,
                     " TRE was computed over {0} matched landmark(s).", measurements.TreLandmarkCount);
             }
+
+            detail += " The DSC band comes from Table III's 0.80-0.90 range, and the report notes it " +
+                      "depends on the volume of the structure: 0.85 does not mean the same thing on a " +
+                      "parotid as on a whole lung.";
 
             set.Advisories.Add(new Advisory(AdvisorySeverity.Info, "TOLERANCE BASIS", detail));
         }

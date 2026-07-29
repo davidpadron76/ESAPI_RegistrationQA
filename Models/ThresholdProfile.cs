@@ -83,6 +83,18 @@ namespace ESAPI_RegistrationQA.Models
             string unit = MetricCatalog.Unit(metricKey);
             string suffix = string.IsNullOrEmpty(unit) ? string.Empty : " " + unit;
 
+            // One tolerance, one band. Printing "≤ 5 mm (yellow ≤ 5 mm)" for the metrics whose
+            // green and yellow limits are deliberately equal reads as a mistake.
+            if (Math.Abs(limits.GreenLimit - limits.YellowLimit) < 1e-9)
+            {
+                string basis = IsVoxelDerived(metricKey)
+                    ? (IsStereotactic ? " — TG-132, stereotactic" : " — TG-132, max voxel dimension")
+                    : string.Empty;
+
+                return string.Format(CultureInfo.InvariantCulture,
+                    "{0} {1:0.###}{2}{3}", op, limits.GreenLimit, suffix, basis);
+            }
+
             return string.Format(
                 CultureInfo.InvariantCulture,
                 "{0} {1:0.###}{2} (yellow {0} {3:0.###}{2})",
@@ -100,79 +112,109 @@ namespace ESAPI_RegistrationQA.Models
             return string.Format(CultureInfo.InvariantCulture, "{0:0.###}{1}", limits.GreenLimit, suffix);
         }
 
-        // What the four profiles no longer carry, and why.
-        //
-        // NMI, NCC, SSD and Smoothness have no limits here at all. The values they used to
-        // have were this project's own invention. TG-132 gives no tolerance for the first
-        // three and section 4.C.3 says they are difficult to convert into a measure of spatial
-        // accuracy; Smoothness it does not mention. All four were able to produce a
-        // NOT COMPLIANT verdict on that basis. They are still measured, shown and exported —
-        // MetricCatalog states the position on each.
-        //
-        // The Jacobian limits are 0/0 in every profile, and identical on purpose. Table III
-        // gives one tolerance, "no negative values", and ties it to the physics rather than to
-        // the anatomical site: the report calls a negative determinant an erroneous physical
-        // model of the patient, which is as true in a lung as in a brain. The previous values
-        // admitted between 1 % and 4 % of folded voxels, so the tool was more permissive than
-        // the standard it cites — on its own authority, and silently.
+        /// <summary>
+        /// True when this profile is for stereotactic treatment, the only distinction TG-132
+        /// draws between one kind of case and another.
+        /// </summary>
+        public bool IsStereotactic { get; set; }
 
-        // 1. Head and neck (ART H&N)
-        public static ThresholdProfile CreateDefaultHN()
+        /// <summary>
+        /// The metrics whose tolerance TG-132 ties to the images rather than to a fixed number.
+        /// Table III gives "maximum voxel dimension (~2-3 mm)" for TRE and consistency, and
+        /// "within the contouring uncertainty of the structure or maximum voxel dimension" for
+        /// MDA.
+        /// </summary>
+        private static readonly string[] VoxelDerivedKeys =
         {
-            var profile = new ThresholdProfile { ProfileName = "ART Head & Neck" };
+            MetricKeys.TreMean, MetricKeys.TreMax, MetricKeys.Mda, MetricKeys.InverseConsistency
+        };
+
+        public static bool IsVoxelDerived(string metricKey)
+        {
+            return Array.IndexOf(VoxelDerivedKeys, metricKey) >= 0;
+        }
+
+        /// <summary>
+        /// Turns this profile into one with concrete numbers for a particular case.
+        ///
+        /// Four of the five Table III tolerances are not constants. The report states them as
+        /// the maximum voxel dimension of the images being registered, which the plugin already
+        /// measures, and it names one exception: "stereotactic radiosurgery tolerances are
+        /// 1 mm, corresponding to the smaller voxel dimension".
+        ///
+        /// This replaces four anatomical profiles whose spatial limits were a fiction. TG-132
+        /// has no tolerance that varies by anatomical site — where it does allow variation, in
+        /// the MDA and DSC rows, it attributes it to the contouring uncertainty and the volume
+        /// of the individual structure. And the two interobserver studies the report actually
+        /// cites in section 4.C.2 run the other way from the profiles this project had:
+        /// 2.6 mm for peripheral lung (Persson) against 3.9 mm for glottic larynx (Brouwer),
+        /// while the profiles allowed head and neck 2.0 mm and thorax 3.0 mm.
+        /// </summary>
+        public ThresholdProfile Resolve(QaMeasurements measurements)
+        {
+            var resolved = new ThresholdProfile
+            {
+                ProfileName = ProfileName,
+                IsStereotactic = IsStereotactic
+            };
+
+            foreach (var entry in Limits)
+                resolved.Limits[entry.Key] = entry.Value;
+
+            double? tolerance = SpatialToleranceMm(measurements);
+            if (!tolerance.HasValue) return resolved;
+
+            // Green equals yellow on purpose. Table III gives one tolerance, not two bands, so
+            // an attention zone would have to be invented — the same reasoning that put the
+            // Jacobian limit at 0 %.
+            foreach (string key in VoxelDerivedKeys)
+                resolved.Limits[key] = new ThresholdLimits(tolerance.Value, tolerance.Value);
+
+            return resolved;
+        }
+
+        /// <summary>
+        /// The spatial tolerance for this case in mm, or null when the voxel size could not be
+        /// read — in which case the metrics that depend on it must not be classified at all,
+        /// since the report ties the limit to the image.
+        /// </summary>
+        public double? SpatialToleranceMm(QaMeasurements measurements)
+        {
+            if (IsStereotactic) return 1.0;
+
+            if (measurements == null || !measurements.NativeVoxelSizeMm.HasValue) return null;
+            return measurements.NativeVoxelSizeMm.Value;
+        }
+
+        // Two profiles, because two is what TG-132 distinguishes. The anatomical ones are gone:
+        // their spatial limits had no basis in the report, and every other metric they used to
+        // carry a limit for — NMI, NCC, SSD, smoothness, HD95, maximum displacement — no longer
+        // decides anything, so there was nothing left for a site to vary.
+
+        /// <summary>
+        /// Standard fractionated treatment. The spatial tolerances resolve to the maximum voxel
+        /// dimension of the two series.
+        /// </summary>
+        public static ThresholdProfile CreateStandard()
+        {
+            var profile = new ThresholdProfile { ProfileName = "Standard treatment" };
             profile.Limits.Add(MetricKeys.JacobianNegative, new ThresholdLimits(0.0, 0.0));
-            profile.Limits.Add(MetricKeys.MaxDisplacement, new ThresholdLimits(15.0, 22.0));
-            profile.Limits.Add(MetricKeys.Dsc, new ThresholdLimits(0.85, 0.75));
-            profile.Limits.Add(MetricKeys.Mda, new ThresholdLimits(2.0, 3.0));
-            profile.Limits.Add(MetricKeys.Hd95, new ThresholdLimits(3.0, 5.0));
-            profile.Limits.Add(MetricKeys.TreMean, new ThresholdLimits(2.0, 3.0));
-            profile.Limits.Add(MetricKeys.TreMax, new ThresholdLimits(3.0, 5.0));
-            profile.Limits.Add(MetricKeys.InverseConsistency, new ThresholdLimits(2.0, 3.0));
+            profile.Limits.Add(MetricKeys.Dsc, new ThresholdLimits(0.90, 0.80));
             return profile;
         }
 
-        // 2. Brain / radiosurgery (Brain / SRS) - tight tolerances
-        public static ThresholdProfile CreateBrainSRS()
+        /// <summary>
+        /// Stereotactic treatment. TG-132: "stereotactic radiosurgery tolerances are 1 mm."
+        /// </summary>
+        public static ThresholdProfile CreateStereotactic()
         {
-            var profile = new ThresholdProfile { ProfileName = "Brain / SRS" };
+            var profile = new ThresholdProfile
+            {
+                ProfileName = "Stereotactic (SRS / SBRT)",
+                IsStereotactic = true
+            };
             profile.Limits.Add(MetricKeys.JacobianNegative, new ThresholdLimits(0.0, 0.0));
-            profile.Limits.Add(MetricKeys.MaxDisplacement, new ThresholdLimits(5.0, 10.0));
-            profile.Limits.Add(MetricKeys.Dsc, new ThresholdLimits(0.90, 0.82));
-            profile.Limits.Add(MetricKeys.Mda, new ThresholdLimits(1.0, 2.0));
-            profile.Limits.Add(MetricKeys.Hd95, new ThresholdLimits(2.0, 3.5));
-            profile.Limits.Add(MetricKeys.TreMean, new ThresholdLimits(1.0, 2.0));
-            profile.Limits.Add(MetricKeys.TreMax, new ThresholdLimits(1.5, 2.5));
-            profile.Limits.Add(MetricKeys.InverseConsistency, new ThresholdLimits(1.0, 2.0));
-            return profile;
-        }
-
-        // 3. Pelvis / prostate
-        public static ThresholdProfile CreatePelvis()
-        {
-            var profile = new ThresholdProfile { ProfileName = "Pelvis / Prostate" };
-            profile.Limits.Add(MetricKeys.JacobianNegative, new ThresholdLimits(0.0, 0.0));
-            profile.Limits.Add(MetricKeys.MaxDisplacement, new ThresholdLimits(20.0, 30.0));
-            profile.Limits.Add(MetricKeys.Dsc, new ThresholdLimits(0.80, 0.70));
-            profile.Limits.Add(MetricKeys.Mda, new ThresholdLimits(2.5, 3.5));
-            profile.Limits.Add(MetricKeys.Hd95, new ThresholdLimits(4.0, 6.0));
-            profile.Limits.Add(MetricKeys.TreMean, new ThresholdLimits(2.5, 3.5));
-            profile.Limits.Add(MetricKeys.TreMax, new ThresholdLimits(4.0, 6.0));
-            profile.Limits.Add(MetricKeys.InverseConsistency, new ThresholdLimits(2.5, 3.5));
-            return profile;
-        }
-
-        // 4. Thorax / lung
-        public static ThresholdProfile CreateThorax()
-        {
-            var profile = new ThresholdProfile { ProfileName = "Thorax / Lung" };
-            profile.Limits.Add(MetricKeys.JacobianNegative, new ThresholdLimits(0.0, 0.0));
-            profile.Limits.Add(MetricKeys.MaxDisplacement, new ThresholdLimits(25.0, 35.0));
-            profile.Limits.Add(MetricKeys.Dsc, new ThresholdLimits(0.80, 0.70));
-            profile.Limits.Add(MetricKeys.Mda, new ThresholdLimits(3.0, 4.5));
-            profile.Limits.Add(MetricKeys.Hd95, new ThresholdLimits(4.5, 6.5));
-            profile.Limits.Add(MetricKeys.TreMean, new ThresholdLimits(3.0, 5.0));
-            profile.Limits.Add(MetricKeys.TreMax, new ThresholdLimits(5.0, 8.0));
-            profile.Limits.Add(MetricKeys.InverseConsistency, new ThresholdLimits(3.0, 5.0));
+            profile.Limits.Add(MetricKeys.Dsc, new ThresholdLimits(0.90, 0.80));
             return profile;
         }
 
@@ -180,10 +222,8 @@ namespace ESAPI_RegistrationQA.Models
         {
             return new List<ThresholdProfile>
             {
-                CreateDefaultHN(),
-                CreateBrainSRS(),
-                CreatePelvis(),
-                CreateThorax()
+                CreateStandard(),
+                CreateStereotactic()
             };
         }
     }

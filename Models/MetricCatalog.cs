@@ -249,14 +249,15 @@ namespace ESAPI_RegistrationQA.Models
                     "Not in TG-132 Table III. Included as a magnitude sanity check; the report discusses " +
                     "expected volume change in section 4.C.3 but does not tabulate a displacement " +
                     "tolerance.",
-                gating: true,
+                gating: false,
                 gatingBasis:
-                    "Gates only when both series share a DICOM Frame of Reference. That condition is what " +
-                    "makes the identity the meaningful \"no correction\" baseline, so that the displacement " +
-                    "is the correction the registration applies. Across two frames of reference — two " +
-                    "scanners, or a CT and an MR — the matrix also carries the offset between the two " +
-                    "coordinate systems, and a correct registration can exceed any profile limit without " +
-                    "anything being wrong. In that case the value is reported without a classification."));
+                    "Not in TG-132, and the per-site limits it used to carry were invented here. Two " +
+                    "things made them indefensible. They had no source; and across two frames of " +
+                    "reference — two scanners, or a CT and an MR — the matrix also carries the offset " +
+                    "between the coordinate systems, so a correct registration can exceed any limit for " +
+                    "that reason alone. It stays on screen as a plausibility check, since a displacement " +
+                    "far larger than the case can justify usually means the wrong image pair was " +
+                    "registered, but that judgement is the reader\u0027s and not a threshold\u0027s."));
 
             Register(new MetricDefinition(
                 key: MetricKeys.Smoothness,
@@ -356,12 +357,14 @@ namespace ESAPI_RegistrationQA.Models
                     "Not in TG-132 Table III, which specifies MDA. Retained alongside it because HD95 " +
                     "is what the segmentation literature reports, so local results stay comparable with " +
                     "published series.",
-                gating: true,
+                gating: false,
                 gatingBasis:
-                    "Gating despite not being tabulated, because unlike the intensity metrics it is a " +
-                    "distance in millimetres and can be set against the same contouring uncertainty that " +
-                    "Table III uses for MDA. The published segmentation literature supplies values to " +
-                    "compare against."));
+                    "TG-132 does not name this metric, and the limits it used to carry came from this " +
+                    "project's first version rather than from any source that was ever cited. It follows " +
+                    "the intensity metrics: shown, exported, unable to fail a registration. Its job is to " +
+                    "qualify the MDA, which does gate — a mean distance inside tolerance beside a large " +
+                    "HD95 means the disagreement is local rather than uniform, and that is what sends a " +
+                    "physicist to look at the overlay."));
 
             // ---------------------------------------------------------- spatial accuracy
 

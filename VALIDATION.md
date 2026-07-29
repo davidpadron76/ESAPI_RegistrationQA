@@ -8,13 +8,12 @@ convention detection, voxel↔patient round-trips, the similarity metrics agains
 theoretical values, transform composition, and TRE against known landmark displacements —
 plus the fact that it builds and runs.
 
-Everything that touches the Varian API has been exercised on exactly one Eclipse
-installation. And the tolerance limits in the four anatomical profiles were inherited from
-the literature before the metrics were reimplemented; they have not been recalibrated against
-the current definitions.
+Everything that touches the Varian API has been exercised on exactly one Eclipse installation.
 
-So: **the numbers are measurements, the colours are provisional.** Read the values, treat the
-semaphore as a placeholder until the thresholds are derived from real data.
+The tolerances are no longer provisional in the way they were. Five metrics can fail a
+registration, they are exactly TG-132 Table III, and four of the five take their limit from the
+maximum voxel dimension of the images — the report's own rule, applied to the images in front of
+it rather than to a table of invented numbers. Everything else is reported without a colour.
 
 That is what this protocol is for. Tests 1 to 4 take an afternoon and close the open
 questions that cannot be answered without an Eclipse in front of you. Test 3b covers the two
@@ -314,11 +313,12 @@ Open an issue at
 | Inverse consistency | Measured, but only when the reverse registration exists in the workspace. Otherwise N/A saying so — it is a check you can enable, not a permanent limitation. |
 | Jacobian, DVF smoothness, max displacement for DIR | Not obtainable. They need the deformation vector field, which the scripting API does not expose. Reported as N/A rather than approximated from the linear component. |
 | Deformable registrations | Everything depends on finding a point-by-point mapping method on the registration object. Without it every metric is N/A and the verdict is NO EVIDENCE. See test 0b. |
+| HD95 and max displacement tolerances | None exist either. Both carried numbers with no source — HD95 from this project's first version, max displacement invented — and both are now **INFO**. |
 | NCC / NMI / SSD tolerances | None exist. TG-132 gives no limit for any of the three and §4.C.3 says they do not convert into spatial accuracy. Shown as **INFO** — value, no colour, no effect on the verdict. Section 5 is how you make them actionable. |
 | Smoothness tolerance | Same: not named in TG-132, limits were invented. Shown as **INFO**. For a rigid transform the value is 1.0 by definition. |
 | Max displacement tolerance | Applied only when both series share a DICOM frame of reference. Otherwise the magnitude spans two coordinate systems and is shown as **INFO**. |
 | Jacobian tolerance | 0 % in every profile, matching Table III's "no negative values". Not varied by anatomical site: the report ties this tolerance to the physics. |
-| Threshold profiles | Inherited values, not recalibrated for the current metric definitions. See section 5. |
+| Threshold profiles | Replaced. The four anatomical profiles had no basis in TG-132: the report gives no site-dependent tolerance, and the two interobserver studies it cites ran the other way from what they encoded. TRE, MDA and consistency now take the maximum voxel dimension of the images, DSC the 0.80–0.90 range of Table III, and the selector offers only what the report distinguishes — standard treatment or stereotactic, where it sets 1 mm. |
 | Registration matrix | The property holding it varies between Eclipse versions. A dozen paths and seven container shapes are tried, then a reflection sweep. If none answers, everything downstream is N/A and the object's member list goes to the Diagnostics tab. See test 0. |
 | Direction cosines | If the API does not expose them, canonical axial orientation is assumed and a warning is logged. A tilted-gantry acquisition would be misread; the Diagnostics tab will say so. |
 | Performance | Runs synchronously on the UI thread, capped at ~2·10⁶ voxel pairs. The interface stops responding while it computes. |

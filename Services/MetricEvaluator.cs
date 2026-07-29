@@ -171,15 +171,24 @@ namespace ESAPI_RegistrationQA.Services
             // metric tooltip and in the report appendix, both fed from MetricCatalog.
             if (!MetricCatalog.IsGating(key))
             {
+                // Maximum displacement keeps the more specific wording where it applies: that
+                // the number spans two coordinate systems is the thing worth saying about it.
+                if (key == MetricKeys.MaxDisplacement)
+                {
+                    bool? shares = measurements != null ? measurements.SharesFrameOfReference : null;
+
+                    if (shares.HasValue && !shares.Value) return "not in TG-132; different frames of reference";
+                    if (!shares.HasValue) return "not in TG-132; frame of reference unknown";
+                }
+
                 return "no TG-132 tolerance";
             }
 
-            if (key == MetricKeys.MaxDisplacement)
+            // A tolerance the report ties to the image cannot be applied without the image.
+            if (ThresholdProfile.IsVoxelDerived(key) &&
+                (measurements == null || !measurements.NativeVoxelSizeMm.HasValue))
             {
-                bool? shares = measurements != null ? measurements.SharesFrameOfReference : null;
-
-                if (shares == null) return "not graded — frame of reference unknown";
-                if (!shares.Value) return "not graded — different frames of reference";
+                return "not graded — voxel size unknown";
             }
 
             return null;

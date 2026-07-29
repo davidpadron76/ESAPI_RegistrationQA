@@ -292,14 +292,22 @@ namespace ESAPI_RegistrationQA.ViewModels
         /// </summary>
         private void ReevaluateThresholds()
         {
+            // The profile is resolved against this case before anything is classified. Four of
+            // the five Table III tolerances are not constants: the report states them as the
+            // maximum voxel dimension of the images being registered, so the numbers only exist
+            // once there is a measurement to read them from.
+            ThresholdProfile effective = ActiveProfile != null
+                ? ActiveProfile.Resolve(_measurements)
+                : null;
+
             Replace(IntensityMetrics, MetricEvaluator.Evaluate(
-                _measurements, ActiveProfile, MetricEvaluator.IntensityKeys, "Intensity similarity"));
+                _measurements, effective, MetricEvaluator.IntensityKeys, "Intensity similarity"));
             Replace(DeformationMetrics, MetricEvaluator.Evaluate(
-                _measurements, ActiveProfile, MetricEvaluator.DeformationKeys, "Deformation and topology"));
+                _measurements, effective, MetricEvaluator.DeformationKeys, "Deformation and topology"));
             Replace(SpatialAccuracyMetrics, MetricEvaluator.Evaluate(
-                _measurements, ActiveProfile, MetricEvaluator.SpatialAccuracyKeys, "Spatial accuracy (TG-132 Table III)"));
+                _measurements, effective, MetricEvaluator.SpatialAccuracyKeys, "Spatial accuracy (TG-132 Table III)"));
             Replace(StructureQAMetrics, MetricEvaluator.Evaluate(
-                _measurements, ActiveProfile, MetricEvaluator.StructureKeys, "Structures and surface"));
+                _measurements, effective, MetricEvaluator.StructureKeys, "Structures and surface"));
             Replace(RigidTransformData, MetricEvaluator.BuildRigidTransformRows(_measurements));
             Replace(NotApplicableMetrics, MetricEvaluator.NotApplicable(_measurements));
 
@@ -311,7 +319,7 @@ namespace ESAPI_RegistrationQA.ViewModels
             AdvisorySet advisorySet = AdvisoryEngine.Build(
                 IntensityMetrics.Concat(DeformationMetrics)
                     .Concat(SpatialAccuracyMetrics).Concat(StructureQAMetrics),
-                ActiveProfile,
+                effective,
                 _measurements);
 
             Replace(Advisories, advisorySet.Advisories);
@@ -402,7 +410,7 @@ namespace ESAPI_RegistrationQA.ViewModels
                 Advisories = AdvisoryEngine.Build(
                     IntensityMetrics.Concat(DeformationMetrics)
                     .Concat(SpatialAccuracyMetrics).Concat(StructureQAMetrics),
-                    ActiveProfile,
+                    ActiveProfile != null ? ActiveProfile.Resolve(_measurements) : null,
                     _measurements),
                 IntensityMetrics = IntensityMetrics.ToList(),
                 DeformationMetrics = DeformationMetrics.ToList(),

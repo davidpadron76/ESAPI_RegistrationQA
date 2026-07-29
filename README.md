@@ -29,15 +29,15 @@ number.
 | **NCC** | Does the anatomy line up, same modality? | §4.C.3, admitted for assessment | **No** — no tolerance exists | Measured |
 | **NMI** | Does it line up when intensities are not linearly comparable (CT-MR, CT-PET)? | §4.C.3, admitted for assessment | **No** — no tolerance exists | Measured |
 | **SSD** | Are there local intensity differences beyond the overall alignment? | §4.C.3, admitted for assessment | **No** — no tolerance exists | Measured |
-| **Jacobian < 0** | Has the deformation folded tissue onto itself? | Table III, no negative values | Yes, at 0 % in every profile | Exact for rigid · N/A for DIR |
-| **Max Displacement** | How far has the registration moved the anatomy? | Not tabulated; plausibility check | Only within one frame of reference | Exact for rigid · N/A for DIR |
+| **Jacobian < 0** | Has the deformation folded tissue onto itself? | Table III, no negative values | Yes, at 0 % | Exact for rigid · N/A for DIR |
+| **Max Displacement** | How far has the registration moved the anatomy? | Not tabulated; plausibility check | **No** — limits were invented | Exact for rigid · N/A for DIR |
 | **Smoothness** | Is the deformation physically plausible? | Not tabulated; related to §4.C.3 | **No** — limits were invented | Exact for rigid · N/A for DIR |
-| **DSC** | Do the same organs end up in the same place? | Table III, ~0.80–0.90 | Yes | Measured |
-| **MDA** | On average, how far apart are the two organ surfaces? | Table III, ~2–3 mm | Yes | Measured |
-| **HD95** | How far apart are the surfaces where they disagree most? | Not tabulated; report specifies MDA | Yes | Measured |
-| **TRE (mean)** | How large is the spatial error, in millimetres? | Table III, primary metric | Yes | Measured |
-| **TRE (max)** | Is any single landmark badly placed? | Table III; mean/max split is ours | Yes | Measured |
-| **Inverse consistency** | Is the algorithm behaving stably? | §4.C.4 and Table III | Yes | Measured |
+| **DSC** | Do the same organs end up in the same place? | Table III, ~0.80–0.90 | Yes, from that range | Measured |
+| **MDA** | On average, how far apart are the two organ surfaces? | Table III, ~2–3 mm | Yes, at the voxel dimension | Measured |
+| **HD95** | How far apart are the surfaces where they disagree most? | Not tabulated; report specifies MDA | **No** — limits were inherited | Measured |
+| **TRE (mean)** | How large is the spatial error, in millimetres? | Table III, primary metric | Yes, at the voxel dimension | Measured |
+| **TRE (max)** | Is any single landmark badly placed? | Table III; mean/max split is ours | Yes, at the voxel dimension | Measured |
+| **Inverse consistency** | Is the algorithm behaving stably? | §4.C.4 and Table III | Yes, at the voxel dimension | Measured |
 
 Two points the report makes that shape how the first three should be read. TG-132 §4.C.3
 admits SSD, CC and MI for assessment **provided the metric was not the one the registration
@@ -45,6 +45,39 @@ algorithm optimised** — otherwise the assessment is circular — and notes the
 to convert into a measure of spatial accuracy**. A compliant NCC does not establish
 millimetric accuracy; TRE is the metric that does. The plugin raises an advisory saying so on
 every case where those metrics are available.
+
+## Where every tolerance comes from
+
+Short answer: **five metrics can fail a registration, and they are exactly TG-132 Table III.**
+Four of the five limits are not constants — the report states them as a property of the images,
+and the plugin measures it.
+
+| Metric | Limit | Source |
+|---|---|---|
+| **TRE (mean and max)** | maximum voxel dimension of the two series | Table III, verbatim |
+| **MDA** | same | Table III, verbatim |
+| **Inverse consistency** | same | Table III, verbatim |
+| **DSC** | ≥ 0.90 green, ≥ 0.80 yellow | Table III's `~0.80–0.90` range mapped onto the two bands |
+| **Jacobian < 0** | 0 % | Table III, "no negative values" |
+
+The one exception the report makes: *"stereotactic radiosurgery tolerances are 1 mm."* That is
+the whole of the profile selector — **Standard treatment** or **Stereotactic (SRS/SBRT)**.
+
+**There used to be four anatomical profiles, and their spatial limits were a fiction.** TG-132
+has no tolerance that varies by anatomical site. Where it does allow variation, in the MDA and
+DSC rows, it attributes it to the contouring uncertainty and the volume of the *individual
+structure*, not to the region. And the two interobserver studies the report actually cites in
+§4.C.2 run the other way from the profiles this project shipped: 2.6 mm for peripheral lung
+(Persson) against 3.9 mm for glottic larynx (Brouwer), while the profiles allowed head and neck
+2.0 mm and thorax 3.0 mm. The ordering was inverted with respect to the evidence.
+
+For the record, since the question is a fair one to ask of any QA tool: **DSC and HD95 carried
+their per-site numbers from this project's first version.** MDA, TRE and inverse consistency did
+not exist then; their per-site numbers were invented when those metrics were implemented. None
+of them had a source.
+
+When the voxel size cannot be read, TRE, MDA and consistency are not classified at all — a limit
+the report ties to the image cannot be applied without the image.
 
 ## Which metrics can fail a registration
 
@@ -60,23 +93,23 @@ class of metric the report says cannot be converted into spatial accuracy. They 
 reported as **INFO**: value shown, no colour, no effect on the verdict, still written to the
 CSV — which is where they earn their keep, as a local baseline distribution.
 
-**Maximum displacement is classified only when both series share a DICOM frame of reference.**
-Within one frame the identity is the "no correction" state, so the displacement is the
-correction the registration applies. Across two frames — two scanners, or a CT and an MR — the
-matrix must also span the offset between the two coordinate systems, and a correct registration
-can exceed any limit for that reason alone. When the frames differ, or when either UID cannot
-be read, the value is reported without a classification and an advisory says why.
+**Maximum displacement does not classify at all.** It is not in TG-132 and its per-site limits
+were invented here, but there was a second reason before that one was faced: within one frame of
+reference the identity is the "no correction" state, so the displacement is the correction the
+registration applies — while across two frames, two scanners or a CT and an MR, the matrix must
+also span the offset between the coordinate systems, and a correct registration can exceed any
+limit for that reason alone. The value is shown as a plausibility check, with an advisory naming
+which of the two situations this case is in.
 
 **Smoothness follows the intensity metrics, for the same reason.** TG-132 does not name it and
 its limits were invented too. It stays on screen because 1.0 for a rigid transform is a true
 statement worth recording — the field gradient is constant, so no local irregularity is
 possible — but a statement true by definition cannot fail anything.
 
-**The Jacobian limit is now 0 % in all four profiles.** Table III admits no negative values;
-the profiles used to admit between 1 % and 4 %, so the tool was more permissive than the
-standard it cites, on its own authority. The limit is deliberately not varied by anatomical
-site: the report ties this tolerance to the physics, and a folded voxel is as unphysical in a
-lung as in a brain. Where the folding is confined to a region that does not affect the intended
+**The Jacobian limit is 0 %.** Table III admits no negative values; the profiles used to admit
+between 1 % and 4 %, so the tool was more permissive than the standard it cites, on its own
+authority. It does not vary with anything: the report ties this tolerance to the physics, and a
+folded voxel is as unphysical in a lung as in a brain. Where the folding is confined to a region that does not affect the intended
 use, TG-132 asks for that influence to be evaluated — that judgement is the physicist's, and
 the tool does not pre-empt it by relaxing the limit.
 
@@ -96,10 +129,10 @@ Where the tool departs from the report, deliberately:
   the segmentation literature reports, which keeps local results comparable with published
   series. Read together they separate a uniform offset from a local failure: on two
   concentric surfaces the two agree, and they diverge as the disagreement becomes uneven.
-- **Site-specific threshold profiles.** TG-132 ties its tolerances to voxel dimension and
-  contouring uncertainty rather than to anatomical site. The DSC range comes from Table III;
-  the rest are inherited values pending calibration against real data. See
-  [VALIDATION.md](VALIDATION.md).
+- **Nothing else.** The site-specific threshold profiles are gone; see the section above for
+  why. What the tool still cannot do is account for the structure-by-structure variation the
+  report attributes MDA and DSC to — it names the structure behind each value instead, and
+  leaves that judgement where it belongs. See [VALIDATION.md](VALIDATION.md).
 
 ## What it actually measures
 
