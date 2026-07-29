@@ -488,7 +488,13 @@ namespace VMS.IRS.Scripting
                 // though the runtime value is a real VVector built by the same reflection.
                 dynamic voxel = constructor.Invoke(new object[] { (double)i, (double)j, (double)k });
                 patientPoint = frame.VoxelToDicom(voxel);
-                return patientPoint != null;
+
+                // No null check: the prior run's exception ("Operator '!=' cannot be applied to
+                // operands of type 'VMS.CA.Scripting.VVector' and '<null>'") shows VVector is a
+                // struct, and patientPoint != null is itself a dynamically bound comparison —
+                // there is no operator!= against <null> for it, so the check throws rather than
+                // answering the question. Reaching this line without an exception is success.
+                return true;
             }
             catch (Exception ex)
             {
