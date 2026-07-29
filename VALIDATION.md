@@ -179,11 +179,12 @@ the report states for you in the provenance section.
 Combine this with test 2: apply a known 5 mm shift and the mean TRE should come out at 5 mm.
 That validates the landmark path and the axis convention at the same time.
 
-A marker's position is read from `CenterPoint` first, then `Position` and `Point` as
-alternatives — a real case (v2.13.0) had markers come back as a structure type
-(`VMS.CA.Scripting.PointsStructure`) that has none of `CenterPoint`, the property volumetric
-structures expose. If none of the three answer, Diagnostics logs the object's member surface so
-the real property name can be added the same way `StructureType` was found for the DICOM type.
+A marker's position is read from `CenterPoint` first, then `Position`, `Point` and the first
+element of `Points` as alternatives — a real case (v2.13.0–v2.14.0) had markers come back as
+`VMS.CA.Scripting.PointsStructure`, which has none of `CenterPoint`, `Position` or `Point` (the
+property volumetric structures expose), only a `Points` collection holding the one point. If none
+of the four answer, Diagnostics logs the object's member surface so the real property name can be
+added the same way `StructureType` was found for the DICOM type.
 
 **Inverse consistency.** Create the reverse registration (B→A) alongside the forward one and
 re-run. The residual should be small; TG-132 sets the tolerance at the maximum voxel dimension.
@@ -203,6 +204,14 @@ found as its reverse carry a `"reverse: "` prefix on the same operation names (`
 matrix`, `point mapping`), plus a line naming which registration was picked and which images
 matched it. Compare the two before assuming the check itself is broken — it may instead be that
 the "reverse" registration found in the workspace is not a genuine inverse of the active one.
+
+Diagnostics also logs `reverse: transform: translation`, the reverse registration's own
+translation and rotation in the same form the report's Rigid Transform table uses for the active
+one. Hold the two up against each other: a genuine inverse should read approximately opposite and
+of similar magnitude. One that looks like the active registration's own translation, same sign
+and similar size, is the round trip applying the same direction twice — which is what the
+identical operation names above cannot show by themselves, since both registrations resolving
+through the same method name is expected and not itself a fault.
 
 ## 3c. Structures and hidden metrics
 

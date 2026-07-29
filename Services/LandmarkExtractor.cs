@@ -121,14 +121,17 @@ namespace ESAPI_RegistrationQA.Services
             position = Vec3.Zero;
 
             // CenterPoint is VolumetricStructure's property. A MARKER/ISOCENTER structure can
-            // come back as a different API type — VMS.CA.Scripting.PointsStructure does not
-            // have it — so a couple of plausible names for a "point" type are tried too.
+            // come back as a different API type — confirmed on a real Eclipse install (v2.14.0):
+            // VMS.CA.Scripting.PointsStructure has none of CenterPoint, Position or Point, but
+            // does expose Points (a PointCollection) — a marker there is stored as a collection
+            // of one point rather than a single property, so the first element is taken.
             dynamic centre;
             string usedAlt;
             bool found = Dyn.TryGetFirst("landmarks: centre of " + id, log, out centre, out usedAlt,
                 Dyn.Alt("CenterPoint", () => structure.CenterPoint),
                 Dyn.Alt("Position", () => structure.Position),
-                Dyn.Alt("Point", () => structure.Point));
+                Dyn.Alt("Point", () => structure.Point),
+                Dyn.Alt("Points[0]", () => FirstOrDefault(structure.Points)));
 
             if (!found)
             {
@@ -158,6 +161,14 @@ namespace ESAPI_RegistrationQA.Services
 
             position = new Vec3(x, y, z);
             return position.IsFinite;
+        }
+
+        /// <summary>First element of a dynamic collection, or null if empty. For Points, above.</summary>
+        private static object FirstOrDefault(dynamic collection)
+        {
+            if (collection == null) return null;
+            foreach (dynamic item in collection) return item;
+            return null;
         }
 
         /// <summary>

@@ -1120,6 +1120,26 @@ namespace ESAPI_RegistrationQA.Services
             ExtractRigidTransform(reverse, reverseMeasurements, null, null, reverseLog);
             IPointMapper reverseMapper = BuildPointMapper(reverse, reverseMeasurements, reverseLog);
 
+            // The active registration's translation is already in the report's Rigid Transform
+            // table. This is the number to hold up against it: a genuine inverse should show an
+            // approximately opposite translation of similar magnitude. One that instead looks
+            // like the active registration's own is the round trip applying the same direction
+            // twice, and would explain a residual roughly double the active transform's
+            // displacement rather than the near-zero a true inverse would leave.
+            if (reverseMeasurements.Transform != null)
+            {
+                Vec3 t = reverseMeasurements.Transform.Translation;
+                EulerAngles? angles = reverseMeasurements.Transform.GetEulerAnglesDegrees();
+
+                reverseLog.Info("transform: translation", string.Format(CultureInfo.InvariantCulture,
+                    "({0:F2}, {1:F2}, {2:F2}) mm, magnitude {3:F2} mm" +
+                    (angles.HasValue
+                        ? string.Format(CultureInfo.InvariantCulture, "; rotation {0:F2}/{1:F2}/{2:F2}° (pitch/roll/yaw)",
+                            angles.Value.PitchX, angles.Value.RollY, angles.Value.YawZ)
+                        : string.Empty),
+                    t.X, t.Y, t.Z, t.Length));
+            }
+
             if (reverseMapper == null)
             {
                 measurements.InverseConsistency = MeasuredValue.Unavailable(
