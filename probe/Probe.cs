@@ -341,13 +341,16 @@ namespace VMS.IRS.Scripting
 
             // The net PointMapperReader does not cast: it only ever looks for a point-mapping
             // method, never for the field itself. If Eclipse exposes the DVF directly under some
-            // other name, this is what would catch it.
+            // other name, this is what would catch it. Unlike the method-name search above,
+            // this opens whatever it finds and tries to read from it, because knowing the DVF
+            // property exists (DeformationField : VectorField, confirmed on a real case) says
+            // nothing about whether it can actually be queried per point or per voxel.
             Line("");
             Line("Reflection sweep for anything DVF-shaped (name contains " +
-                 "Deform/Vector/Displacement/Field/DVF/Warp):");
-            SweepForDvfShapedMembers((object)deformable, deformableId ?? "registration");
+                 "Deform/Vector/Displacement/Field/DVF/Warp), opened and probed for read access:");
+            ExploreDvfShapedMembers((object)deformable, deformableId ?? "registration");
             foreach (KeyValuePair<string, object> holder in holders)
-                SweepForDvfShapedMembers(holder.Value, holder.Key);
+                ExploreDvfShapedMembers(holder.Value, holder.Key);
         }
 
         private void ProbeMappingCandidates(object target, string holderName, string[] methodNames)
@@ -401,7 +404,12 @@ namespace VMS.IRS.Scripting
             }
         }
 
-        private void SweepForDvfShapedMembers(object instance, string label)
+        /// <summary>
+        /// Finds properties whose name suggests a deformation vector field, reads each one
+        /// (not just names it), and hands the result to <see cref="ProbeDvfField"/> to see
+        /// whether it can actually be queried.
+        /// </summary>
+        private void ExploreDvfShapedMembers(object instance, string label)
         {
             if (instance == null) return;
 
@@ -411,25 +419,133 @@ namespace VMS.IRS.Scripting
 
             string[] keywords = { "Deform", "Vector", "Displacement", "Field", "DVF", "Warp" };
 
+            List<PropertyInfo> props;
             try
             {
-                var props = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                    .Where(p => keywords.Any(k => p.Name.IndexOf(k, StringComparison.OrdinalIgnoreCase) >= 0))
+                props = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(p => p.GetIndexParameters().Length == 0 &&
+                                keywords.Any(k => p.Name.IndexOf(k, StringComparison.OrdinalIgnoreCase) >= 0))
                     .ToList();
-
-                if (props.Count == 0)
-                {
-                    Line("  " + label + ": nothing DVF-shaped in its properties");
-                    return;
-                }
-
-                foreach (PropertyInfo p in props)
-                    Line("  " + label + "." + p.Name + " : " + p.PropertyType.Name);
             }
             catch (Exception ex)
             {
                 Line("  " + label + ": sweep failed — " + ex.GetType().Name + ": " + ex.Message);
+                return;
             }
+
+            if (props.Count == 0)
+            {
+                Line("  " + label + ": nothing DVF-shaped in its properties");
+                return;
+            }
+
+            foreach (PropertyInfo p in props)
+            {
+                object value;
+                try
+                {
+                    value = p.GetValue(instance, null);
+                }
+                catch (Exception ex)
+                {
+                    Line("  " + label + "." + p.Name + " : " + p.PropertyType.Name + " → " +
+                         ex.GetType().Name + ": " + Shorten(ex.Message));
+                    continue;
+                }
+
+                ProbeDvfField(label + "." + p.Name, value);
+            }
+        }
+
+        /// <summary>
+        /// Opens a candidate DVF object: its own member surface, then every indexer and every
+        /// read-like method that takes 1-3 simple numeric parameters, invoked with zeros and
+        /// reported with whatever came back — a real value, or the exception, either one
+        /// answers the question. Restricted to primitive numeric parameters because there is no
+        /// way to construct an arbitrary VVector/Point argument by reflection without already
+        /// knowing the vector type, which is exactly what this is trying to discover.
+        /// </summary>
+        private void ProbeDvfField(string label, object field)
+        {
+            if (field == null) { Line("  " + label + " → null"); return; }
+
+            Line("");
+            Line(label + " → " + field.GetType().FullName);
+            Members(field, "  ");
+            Scalars(field, "  ");
+
+            Type type = field.GetType();
+
+            try
+            {
+                var indexers = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(p => p.GetIndexParameters().Length >= 1 && p.GetIndexParameters().Length <= 3 &&
+                                p.GetIndexParameters().All(ip => IsProbeableType(ip.ParameterType)))
+                    .ToList();
+
+                if (indexers.Count == 0)
+                {
+                    Line("  no numeric-argument indexer found on " + type.Name);
+                }
+
+                foreach (PropertyInfo indexer in indexers)
+                    InvokeAndReport(args => indexer.GetValue(field, args), indexer.GetIndexParameters(),
+                        "  indexer");
+            }
+            catch (Exception ex)
+            {
+                Line("  indexer probe failed — " + ex.GetType().Name + ": " + ex.Message);
+            }
+
+            try
+            {
+                var candidates = type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(m => !m.IsSpecialName &&
+                                m.ReturnType != typeof(void) &&
+                                m.GetParameters().Length >= 1 && m.GetParameters().Length <= 3 &&
+                                m.GetParameters().All(p => IsProbeableType(p.ParameterType)))
+                    .ToList();
+
+                foreach (MethodInfo m in candidates)
+                    InvokeAndReport(args => m.Invoke(field, args), m.GetParameters(), "  " + m.Name);
+            }
+            catch (Exception ex)
+            {
+                Line("  method probe failed — " + ex.GetType().Name + ": " + ex.Message);
+            }
+        }
+
+        private void InvokeAndReport(Func<object[], object> invoke, ParameterInfo[] parameters, string label)
+        {
+            object[] args = parameters.Select(p => DefaultProbeValue(p.ParameterType)).ToArray();
+            string argsText = string.Join(", ", args.Select(a => Convert.ToString(a, CultureInfo.InvariantCulture)).ToArray());
+
+            try
+            {
+                object result = invoke(args);
+                Line(label + "(" + argsText + ") → " +
+                     (result == null ? "null" : result.GetType().Name + " = " +
+                         Convert.ToString(result, CultureInfo.InvariantCulture)));
+            }
+            catch (Exception ex)
+            {
+                Exception real = ex.InnerException ?? ex;
+                Line(label + "(" + argsText + ") → " + real.GetType().Name + ": " + Shorten(real.Message));
+            }
+        }
+
+        private static bool IsProbeableType(Type t)
+        {
+            return t == typeof(int) || t == typeof(long) || t == typeof(double) || t == typeof(float);
+        }
+
+        private static object DefaultProbeValue(Type t)
+        {
+            if (t == typeof(int)) return 0;
+            if (t == typeof(long)) return 0L;
+            if (t == typeof(double)) return 0.0;
+            if (t == typeof(float)) return 0.0f;
+            return null;
         }
 
         private static bool TryAssign(Func<object> accessor, out dynamic value)
