@@ -199,6 +199,13 @@ namespace ESAPI_RegistrationQA.Models
         // Rigid transform
         public RigidTransform Transform { get; set; }
         public string TransformSource { get; set; }
+
+        /// <summary>
+        /// Approval status as Eclipse reports it, when the API exposes one. Not a metric — it
+        /// says who signed the registration off, not whether it is accurate — but it changes
+        /// how an identity transform should be read.
+        /// </summary>
+        public string RegistrationStatus { get; set; }
         public EulerAngles? RigidEulerAngles { get; set; }
 
         // Sampling traceability

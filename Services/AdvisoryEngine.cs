@@ -136,6 +136,9 @@ namespace ESAPI_RegistrationQA.Services
             // --- Frame of reference ------------------------------------------------------
             AddFrameOfReferenceAdvisory(set, measurements);
 
+            // --- A registration that does not register anything --------------------------
+            AddEmptyRegistrationAdvisory(set, measurements);
+
             // --- Overall verdict ---------------------------------------------------------
             BuildVerdict(set, metrics, unavailable.Count, profileName, measurements);
 
@@ -325,6 +328,42 @@ namespace ESAPI_RegistrationQA.Services
         /// there is a maximum displacement on screen for the answer to bear on. It is the one
         /// metric whose interpretation the answer changes.
         /// </summary>
+        /// <summary>
+        /// Says so when the registration does not move anything.
+        ///
+        /// Eclipse hands out a perfectly valid identity matrix for a registration that was
+        /// created and never executed, and nothing else in the report distinguishes that from a
+        /// registration whose answer genuinely is "no shift". Three sessions were spent chasing
+        /// metrics that read as empty when the registration under audit was itself empty, and
+        /// nothing said so. Approval status alone is not enough — a real registration can sit
+        /// unapproved — so both conditions have to hold.
+        /// </summary>
+        private static void AddEmptyRegistrationAdvisory(AdvisorySet set, QaMeasurements measurements)
+        {
+            if (measurements == null || measurements.Transform == null) return;
+            if (!measurements.Transform.IsIdentity()) return;
+
+            bool unapproved = !string.IsNullOrEmpty(measurements.RegistrationStatus) &&
+                              measurements.RegistrationStatus.IndexOf(
+                                  "unapproved", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            string status = string.IsNullOrEmpty(measurements.RegistrationStatus)
+                ? string.Empty
+                : " Its status is " + measurements.RegistrationStatus + ".";
+
+            set.Advisories.Add(new Advisory(
+                unapproved ? AdvisorySeverity.Warning : AdvisorySeverity.Info,
+                "EMPTY REGISTRATION",
+                "The transform is exactly the identity: this registration moves nothing." + status +
+                (unapproved
+                    ? " An unapproved registration with an identity transform is almost always one that " +
+                      "was created and never executed. Run the registration, then audit it — the metrics " +
+                      "below describe the alignment of the two series as acquired, not the work of any " +
+                      "registration."
+                    : " If that is the intended answer the series were already aligned; otherwise check " +
+                      "that the registration was actually executed.")));
+        }
+
         private static void AddFrameOfReferenceAdvisory(AdvisorySet set, QaMeasurements measurements)
         {
             if (measurements == null) return;

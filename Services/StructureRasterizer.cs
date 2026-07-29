@@ -76,6 +76,55 @@ namespace ESAPI_RegistrationQA.Services
             _halfSpacing = median > 0 ? median / 2.0 : 1.5;
         }
 
+        /// <summary>
+        /// Axis-aligned extent of every polygon, in patient coordinates. False when the
+        /// structure holds no contour.
+        ///
+        /// This is what lets the surface metrics work on an Eclipse that will not hand over a
+        /// single voxel. The comparison grid used to be derived from the loaded image volume,
+        /// so DSC, MDA and HD95 died along with it — a dependency that was never real, since
+        /// contours carry their own coordinates. The z extent is padded by the half slice
+        /// spacing because <see cref="Contains"/> gives each plane that much thickness.
+        /// </summary>
+        public bool TryGetBounds(out Vec3 minimum, out Vec3 maximum)
+        {
+            minimum = Vec3.Zero;
+            maximum = Vec3.Zero;
+
+            if (_planes.Count == 0 || PolygonCount == 0) return false;
+
+            double minX = double.MaxValue, minY = double.MaxValue, minZ = double.MaxValue;
+            double maxX = double.MinValue, maxY = double.MinValue, maxZ = double.MinValue;
+            bool any = false;
+
+            foreach (Plane plane in _planes)
+            {
+                for (int p = 0; p < plane.PolygonsX.Count; p++)
+                {
+                    double[] xs = plane.PolygonsX[p];
+                    double[] ys = plane.PolygonsY[p];
+
+                    for (int i = 0; i < xs.Length; i++)
+                    {
+                        if (xs[i] < minX) minX = xs[i];
+                        if (xs[i] > maxX) maxX = xs[i];
+                        if (ys[i] < minY) minY = ys[i];
+                        if (ys[i] > maxY) maxY = ys[i];
+                        any = true;
+                    }
+                }
+
+                if (plane.Z - _halfSpacing < minZ) minZ = plane.Z - _halfSpacing;
+                if (plane.Z + _halfSpacing > maxZ) maxZ = plane.Z + _halfSpacing;
+            }
+
+            if (!any) return false;
+
+            minimum = new Vec3(minX, minY, minZ);
+            maximum = new Vec3(maxX, maxY, maxZ);
+            return true;
+        }
+
         public bool Contains(Vec3 point)
         {
             Plane nearest = null;

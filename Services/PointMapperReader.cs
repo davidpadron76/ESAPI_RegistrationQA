@@ -8,26 +8,31 @@ using ESAPI_RegistrationQA.Models;
 namespace ESAPI_RegistrationQA.Services
 {
     /// <summary>
-    /// Finds a way to push a point through a deformable registration.
+    /// Finds a way to push a point through a registration, using the API's own method rather
+    /// than a matrix.
     ///
-    /// Everything the tool measures on a deformable registration depends on this one thing.
-    /// The intensity metrics need it to pair voxels, DSC/MDA/HD95 need it to carry a contour
-    /// across, TRE needs it for the landmarks and consistency needs it twice. Without it every
-    /// metric is unavailable and the verdict is NO EVIDENCE — which is what a deformable case
-    /// produced, on every metric, every time.
+    /// This is now the primary route for every registration, rigid or deformable. The probe
+    /// against a real Eclipse found <c>TransformPoint(VVector)</c> and
+    /// <c>InverseTransformPoint(VVector)</c> on the nested
+    /// <c>VMS.CA.Scripting.RigidRegistration</c> object — Varian's own mapping, whose direction
+    /// is correct by construction, and which sidesteps the entire business of guessing whether
+    /// a matrix is row- or column-major. Two earlier mistakes kept it hidden: this search ran
+    /// only for deformable registrations, and <c>RigidRegistration</c> was not among the
+    /// wrapper properties it looked inside.
     ///
-    /// The cause was narrow reflection rather than a missing API. The previous version located
-    /// the method correctly and then rejected it, because it read the returned vector's
-    /// components with <c>GetField</c> only, while the ESAPI vector type exposes x, y and z as
-    /// properties. The factory that built the input vector had a constructor fallback and so
-    /// worked; the reader had none, came back null, and the whole mapper was discarded with a
-    /// warning that said the vector type "could not be constructed or read".
+    /// Everything measurable about a registration depends on this one thing. The intensity
+    /// metrics need it to pair voxels, DSC/MDA/HD95 to carry a contour across, TRE for the
+    /// landmarks and consistency twice over. Without it every metric is unavailable and the
+    /// verdict is NO EVIDENCE — which is what a deformable case produced on every metric, every
+    /// time, because the method was being located correctly and then thrown away: the returned
+    /// vector's components were read with <c>GetField</c> alone, and the ESAPI vector type
+    /// exposes x, y and z as properties.
     ///
-    /// So this class accepts a component as a field or a property, in either casing, and when
-    /// nothing at all matches it writes the object's member surface to the diagnostics — the
-    /// same evidence trail as <see cref="MatrixReader"/>, for the same reason.
+    /// So a component is accepted as a field or a property, in either casing, and when nothing
+    /// matches the object's member surface goes to the diagnostics — the same evidence trail as
+    /// <see cref="MatrixReader"/>, for the same reason.
     /// </summary>
-    public static class DeformableMapperReader
+    public static class PointMapperReader
     {
         /// <summary>
         /// Method names that might map a point through the registration, most specific first.
@@ -43,7 +48,11 @@ namespace ESAPI_RegistrationQA.Services
             "MapPoint",
             "DeformPoint",
             "TransformPointToSource",
-            "MapPointToSource"
+            "MapPointToSource",
+            // Last resort, and deliberately below every forward candidate: it maps the other
+            // way, so accepting it when a forward method exists would silently invert every
+            // measurement.
+            "InverseTransformPoint"
         };
 
         /// <summary>
@@ -52,6 +61,9 @@ namespace ESAPI_RegistrationQA.Services
         /// </summary>
         private static readonly string[] CandidateHolders =
         {
+            // First, because it is the one the probe actually found. MIRSRigidRegistration is a
+            // wrapper and the mapping lives on the RigidRegistration it holds.
+            "RigidRegistration",
             "NonRigidRegistration",
             "DeformableRegistration",
             "DeformableRegistrationField",
@@ -80,10 +92,10 @@ namespace ESAPI_RegistrationQA.Services
 
             if (log != null)
             {
-                log.Failure("deformable mapping",
-                    "no method was found that maps a point through this deformable registration, so " +
-                    "every metric that needs one is unavailable. Applying the linear component instead " +
-                    "would describe a different transform from the one under audit. " +
+                log.Info("point mapping",
+                    "the registration exposes no method for mapping a point. For a rigid registration " +
+                    "the matrix is used instead; for a deformable one nothing else is valid, since the " +
+                    "linear component describes a different transform from the one under audit. " +
                     MatrixReader.DescribeMemberSurface(registration) +
                     " Send this line with your Eclipse version: naming the right method is a one-line fix.");
             }
@@ -113,7 +125,7 @@ namespace ESAPI_RegistrationQA.Services
                 {
                     if (log != null)
                     {
-                        log.Warning("deformable mapping: " + prefix + name,
+                        log.Warning("point mapping: " + prefix + name,
                             "the method exists but its vector type could not be " +
                             (toVector == null ? "constructed" : "read") + ". Parameter type '" +
                             vectorType.Name + "', return type '" + method.ReturnType.Name + "'. " +
@@ -130,29 +142,27 @@ namespace ESAPI_RegistrationQA.Services
                 };
 
                 // The method existing does not mean it is implemented in this version, so it
-                // is probed with a real point before being trusted. Two points rather than
-                // one: a stub that returns the input unchanged would pass a single probe at
-                // the origin, and a mapping that is the identity everywhere is not a
-                // deformable registration.
+                // is probed with real points before being trusted. Two rather than one: a stub
+                // returning its input unchanged would pass a single probe at the origin.
                 string probeProblem;
                 if (!Probe(map, out probeProblem))
                 {
                     if (log != null)
-                        log.Warning("deformable mapping: " + prefix + name, probeProblem);
+                        log.Warning("point mapping: " + prefix + name, probeProblem);
                     continue;
                 }
 
                 if (log != null)
                 {
-                    log.Info("deformable mapping",
-                        "using " + targetType.Name + "." + name + " to map points through the deformation " +
-                        "field. The direction of this method is not verifiable from the API: if TRE comes " +
+                    log.Info("point mapping",
+                        "using " + targetType.Name + "." + name + " to map points through the registration. " +
+                        "The direction of this method is not verifiable from the API: if TRE comes " +
                         "out systematically large while the fusion looks correct, it may be mapping the " +
                         "other way.");
                 }
 
                 return new DynamicPointMapper(map,
-                    "point-by-point mapping via " + prefix + name + " (traverses the deformation field)");
+                    "point-by-point mapping via " + prefix + name + " (the API's own, no matrix involved)");
             }
 
             return null;

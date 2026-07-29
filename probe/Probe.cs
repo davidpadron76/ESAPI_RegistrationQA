@@ -153,6 +153,136 @@ namespace VMS.IRS.Scripting
 
             DumpDisplayRamp(frame, "Frame");
             DumpDisplayRamp(image, "Image");
+
+            ProbeImageProfile(frame, "Frame", xSize, ySize, plane);
+        }
+
+        /// <summary>
+        /// The other door to the same data.
+        ///
+        /// <c>GetImageProfile</c> samples intensities along a line rather than filling a plane,
+        /// and it is the one voxel-access route on this API that has never been tried. If it
+        /// returns real numbers while GetVoxels returns an untouched buffer, then the pixel data
+        /// is there and the whole intensity side of the audit can be rebuilt on line profiles
+        /// across the volume.
+        ///
+        /// The line runs through the middle of the plane, left to right in patient coordinates,
+        /// so it crosses anatomy rather than air.
+        /// </summary>
+        private void ProbeImageProfile(dynamic frame, string carrierName, int xSize, int ySize, int plane)
+        {
+            if (frame == null) return;
+
+            Line("");
+            Line("  --- GetImageProfile, the untried route ---");
+
+            dynamic start, stop;
+            if (!TryVoxelToDicom(frame, 0, ySize / 2, plane, out start) ||
+                !TryVoxelToDicom(frame, xSize - 1, ySize / 2, plane, out stop))
+            {
+                Line("  could not convert the line endpoints to patient coordinates");
+                return;
+            }
+
+            Line("  line from " + Convert.ToString((object)start, CultureInfo.InvariantCulture) +
+                 " to " + Convert.ToString((object)stop, CultureInfo.InvariantCulture));
+
+            var buffer = new double[xSize];
+
+            try
+            {
+                object profile = frame.GetImageProfile(start, stop, buffer);
+
+                int finite = 0;
+                double min = double.MaxValue, max = double.MinValue;
+                foreach (double v in buffer)
+                {
+                    if (double.IsNaN(v) || double.IsInfinity(v)) continue;
+                    finite++;
+                    if (v < min) min = v;
+                    if (v > max) max = v;
+                }
+
+                string state = finite == 0 ? "*** every sample non-finite ***"
+                    : min == max ? "*** ALL SAMPLES EQUAL — the call wrote nothing ***"
+                    : "REAL DATA";
+
+                Line(string.Format(CultureInfo.InvariantCulture,
+                    "  {0}.GetImageProfile → OK, buffer min {1}, max {2} → {3}",
+                    carrierName, min, max, state));
+
+                var first = new List<string>();
+                for (int i = 0; i < Math.Min(16, buffer.Length); i++)
+                    first.Add(buffer[i].ToString("F1", CultureInfo.InvariantCulture));
+                Line("  buffer first values: " + string.Join(", ", first.ToArray()));
+
+                if (profile != null)
+                {
+                    Line("  returned " + profile.GetType().FullName);
+                    Members(profile, "  ");
+                    Scalars(profile, "  ");
+                    DumpProfileSamples(profile);
+                }
+            }
+            catch (Exception ex)
+            {
+                Line("  " + carrierName + ".GetImageProfile → " + ex.GetType().Name + ": " + Shorten(ex.Message));
+            }
+        }
+
+        /// <summary>
+        /// The returned ImageProfile may carry the samples itself rather than through the
+        /// buffer, so whatever it enumerates is printed too.
+        /// </summary>
+        private void DumpProfileSamples(object profile)
+        {
+            var sequence = profile as IEnumerable;
+            if (sequence == null) return;
+
+            var values = new List<string>();
+            int taken = 0;
+
+            try
+            {
+                foreach (object item in sequence)
+                {
+                    values.Add(Convert.ToString(item, CultureInfo.InvariantCulture));
+                    if (++taken >= 12) break;
+                }
+            }
+            catch (Exception ex)
+            {
+                Line("  enumerating the profile → " + ex.GetType().Name + ": " + Shorten(ex.Message));
+                return;
+            }
+
+            Line("  profile enumerates: " + string.Join(", ", values.ToArray()));
+        }
+
+        private bool TryVoxelToDicom(dynamic frame, int i, int j, int k, out dynamic patientPoint)
+        {
+            patientPoint = null;
+
+            try
+            {
+                // VoxelToDicom takes a VVector, and the probe has no compile-time reference to
+                // that type, so one is built from the frame's own Origin.
+                object template = frame.Origin;
+                Type vectorType = template.GetType();
+
+                ConstructorInfo constructor = vectorType.GetConstructor(
+                    new[] { typeof(double), typeof(double), typeof(double) });
+                if (constructor == null) return false;
+
+                object voxel = constructor.Invoke(new object[] { (double)i, (double)j, (double)k });
+                patientPoint = frame.VoxelToDicom(voxel);
+                return patientPoint != null;
+            }
+            catch (Exception ex)
+            {
+                Line("  VoxelToDicom → " + ex.GetType().Name + ": " + Shorten(ex.Message));
+                return false;
+            }
         }
 
         /// <summary>

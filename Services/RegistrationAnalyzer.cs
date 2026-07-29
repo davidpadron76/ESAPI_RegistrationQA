@@ -24,6 +24,14 @@ namespace ESAPI_RegistrationQA.Services
         /// <summary>Geometry of the volume used as the sampling grid (the source image).</summary>
         private ImageGeometry _fixedGeometry;
 
+        /// <summary>
+        /// Region spanned by the matched contours, used wherever a region is needed and no
+        /// volume could be loaded. Maximum displacement and inverse consistency both need
+        /// somewhere to evaluate the transform over, and neither has any reason to insist that
+        /// somewhere be an image.
+        /// </summary>
+        private ImageGeometry _structureGeometry;
+
         /// <summary>Forward mapping source → registered, shared by the similarity and TRE paths.</summary>
         private IPointMapper _mapper;
 
@@ -94,12 +102,14 @@ namespace ESAPI_RegistrationQA.Services
                 ComputeIntensitySimilarity(registration, source, target, measurements);
             }
 
-            // --- Deformation / topology -------------------------------------------------
-            ComputeDeformationMetrics(measurements);
-
             // --- TG-132 Table III primary metrics ---------------------------------------
+            // Structures come first because they establish the region that the deformation and
+            // consistency metrics fall back on when no volume loads.
             RecordNativeVoxelSize(source, target, measurements);
             ComputeStructureMetrics(sourceImage, registeredImage, measurements);
+
+            // --- Deformation / topology -------------------------------------------------
+            ComputeDeformationMetrics(measurements);
             ComputeTargetRegistrationError(registration, sourceImage, registeredImage, measurements);
             ComputeInverseConsistency(scriptContext, registration, sourceImage, registeredImage, measurements);
 
@@ -132,7 +142,7 @@ namespace ESAPI_RegistrationQA.Services
         /// </summary>
         private void ClassifyRegistration(dynamic registration, QaMeasurements measurements)
         {
-            ReportRegistrationStatus(registration);
+            ReportRegistrationStatus(registration, measurements);
 
             dynamic value;
             string source;
@@ -174,7 +184,7 @@ namespace ESAPI_RegistrationQA.Services
         /// registration that was never approved for clinical use means something different
         /// from auditing one that was.
         /// </summary>
-        private void ReportRegistrationStatus(dynamic registration)
+        private void ReportRegistrationStatus(dynamic registration, QaMeasurements measurements)
         {
             dynamic value;
             string source;
@@ -186,8 +196,9 @@ namespace ESAPI_RegistrationQA.Services
                 return;
             }
 
-            _log.Info("registration: status",
-                Convert.ToString(value, CultureInfo.InvariantCulture) + " (via " + source + ")");
+            string status = Convert.ToString(value, CultureInfo.InvariantCulture);
+            measurements.RegistrationStatus = status;
+            _log.Info("registration: status", status + " (via " + source + ")");
         }
 
         private static void ApplyTypeText(string text, QaMeasurements measurements)
@@ -430,20 +441,17 @@ namespace ESAPI_RegistrationQA.Services
         /// </summary>
         private IPointMapper BuildPointMapper(dynamic registration, QaMeasurements measurements)
         {
-            // Only a deformable registration needs this search, and only there is its absence
-            // a fault worth reporting. Running it on a rigid registration produced a diagnostic
-            // failure saying no deformation mapping was found on a MIRSRigidRegistration —
-            // true, expected, and pure noise in a tab whose whole purpose is to point at the
-            // one thing that actually went wrong.
-            if (measurements.IsDeformable)
-            {
-                DynamicPointMapper deformableMapper =
-                    DeformableMapperReader.TryBuild((object)registration, _log);
+            // The API's own method comes first, for every kind of registration. The probe found
+            // it on the nested RigidRegistration object as TransformPoint(VVector), and it is
+            // strictly better than the matrix: no convention to detect, no orthonormality to
+            // verify, and a direction that is right by construction rather than by inference.
+            // Restricting this search to deformable registrations is what hid it.
+            DynamicPointMapper apiMapper = PointMapperReader.TryBuild((object)registration, _log);
+            if (apiMapper != null) return apiMapper;
 
-                // No fallback to the linear component: it describes a different transform from
-                // the one under audit.
-                return deformableMapper;
-            }
+            // For a deformable registration there is no second option: applying the linear
+            // component would describe a different transform from the one under audit.
+            if (measurements.IsDeformable) return null;
 
             if (measurements.Transform == null) return null;
 
@@ -509,13 +517,15 @@ namespace ESAPI_RegistrationQA.Services
                 return;
             }
 
-            ImageGeometry geometry = _fixedGeometry;
+            // The image extent when there is one, the contoured region otherwise. Maximum
+            // displacement depends on the size of the region evaluated, not on the transform
+            // alone, so the region used is named in the note.
+            ImageGeometry geometry = _fixedGeometry ?? _structureGeometry;
             if (geometry == null)
             {
-                // Without the volume extent, maximum displacement is undefined: it depends
-                // on the size of the evaluated region, not on the transform alone.
                 measurements.MaxDisplacement = MeasuredValue.Unavailable(
-                    "could not determine the volume extent over which to evaluate displacement");
+                    "no region could be established over which to evaluate displacement: neither " +
+                    "image volume loaded and no matched structures were found");
                 return;
             }
 
@@ -555,7 +565,13 @@ namespace ESAPI_RegistrationQA.Services
                 return;
             }
 
-            if (_mapper == null || _fixedGeometry == null)
+            // Only the mapping is required. The image geometry used to be required as well,
+            // because the comparison grid was derived from the loaded volume — a dependency
+            // that was never real. Contours carry their own patient coordinates, so these three
+            // metrics work on an installation that will not hand over a single voxel, which is
+            // exactly the situation this tool is in. They are also the TG-132 Table III metrics,
+            // so what survives is the part that matters most.
+            if (_mapper == null)
             {
                 measurements.Dsc = MeasuredValue.Unavailable(NoMappingReason(measurements));
                 measurements.Mda = MeasuredValue.Unavailable(NoMappingReason(measurements));
@@ -599,10 +615,21 @@ namespace ESAPI_RegistrationQA.Services
                 return;
             }
 
-            // The comparison grid is coarser than the sampling grid used for intensity: a
-            // contour surface does not need sub-millimetre sampling to be characterised, and
-            // the distance transform runs over the whole volume for every structure pair.
-            ImageGeometry grid = BuildComparisonGrid(_fixedGeometry);
+            // The comparison grid is built from the contours themselves, at roughly 2 mm: a
+            // surface does not need sub-millimetre sampling to be characterised, and the
+            // distance transform runs over the whole grid once per structure pair.
+            ImageGeometry grid = BuildContourGrid(pairs);
+            _structureGeometry = grid;
+            if (grid == null)
+            {
+                const string reason = "the matched structures carry no contour points, so there is no " +
+                                      "region over which to compare them";
+                measurements.Dsc = MeasuredValue.Unavailable(reason);
+                measurements.Mda = MeasuredValue.Unavailable(reason);
+                measurements.Hd95 = MeasuredValue.Unavailable(reason);
+                _log.Failure("structures", reason);
+                return;
+            }
 
             double worstDsc = double.MaxValue, worstMda = 0.0, worstHd95 = 0.0;
             string worstId = null;
@@ -664,33 +691,75 @@ namespace ESAPI_RegistrationQA.Services
         }
 
         /// <summary>
-        /// Grid on which both structures are rasterised. Capped at roughly 2 mm and 160
-        /// samples per axis: finer buys nothing for a contour surface and the distance
-        /// transform runs over the whole volume once per structure pair.
+        /// The grid the two structures are rasterised onto, derived from the contours rather
+        /// than from the image.
+        ///
+        /// It spans every matched contour on both series, padded so the surface distances near
+        /// the edge are not clipped, at roughly 2 mm and capped at 160 samples per axis. Finer
+        /// buys nothing for a contour surface, and the distance transform runs over the whole
+        /// grid once per structure pair.
+        ///
+        /// Building it from the image volume was the mistake that took DSC, MDA and HD95 down
+        /// with the voxels. Nothing here needs a voxel: contours are points in patient
+        /// coordinates and always were.
         /// </summary>
-        private static ImageGeometry BuildComparisonGrid(ImageGeometry reference)
+        private ImageGeometry BuildContourGrid(
+            List<Tuple<StructureRasterizer.NamedStructure, StructureRasterizer.NamedStructure>> pairs)
         {
             const double targetSpacingMm = 2.0;
             const int maxSamplesPerAxis = 160;
 
-            int stepX = Step(reference.XRes, reference.XSize, targetSpacingMm, maxSamplesPerAxis);
-            int stepY = Step(reference.YRes, reference.YSize, targetSpacingMm, maxSamplesPerAxis);
-            int stepZ = Step(reference.ZRes, reference.ZSize, targetSpacingMm, maxSamplesPerAxis);
+            // Enough room for the propagated structure to sit outside the reference one and
+            // still have its distances measured rather than clipped at the boundary.
+            const double marginMm = 20.0;
 
-            return reference.Subsampled(
-                stepX, stepY, stepZ,
-                (reference.XSize + stepX - 1) / stepX,
-                (reference.YSize + stepY - 1) / stepY,
-                (reference.ZSize + stepZ - 1) / stepZ);
-        }
+            var minimum = new Vec3(double.MaxValue, double.MaxValue, double.MaxValue);
+            var maximum = new Vec3(double.MinValue, double.MinValue, double.MinValue);
+            bool any = false;
 
-        private static int Step(double resolution, int size, double targetSpacing, int maxSamples)
-        {
-            int step = resolution > 0 ? (int)Math.Floor(targetSpacing / resolution) : 1;
-            if (step < 1) step = 1;
+            foreach (var pair in pairs)
+            {
+                foreach (ContourSet contours in new[] { pair.Item1.Contours, pair.Item2.Contours })
+                {
+                    Vec3 low, high;
+                    if (contours == null || !contours.TryGetBounds(out low, out high)) continue;
 
-            while (size / step > maxSamples) step++;
-            return step;
+                    minimum = new Vec3(
+                        Math.Min(minimum.X, low.X), Math.Min(minimum.Y, low.Y), Math.Min(minimum.Z, low.Z));
+                    maximum = new Vec3(
+                        Math.Max(maximum.X, high.X), Math.Max(maximum.Y, high.Y), Math.Max(maximum.Z, high.Z));
+                    any = true;
+                }
+            }
+
+            if (!any) return null;
+
+            var origin = new Vec3(minimum.X - marginMm, minimum.Y - marginMm, minimum.Z - marginMm);
+            var extent = new Vec3(
+                (maximum.X - minimum.X) + 2 * marginMm,
+                (maximum.Y - minimum.Y) + 2 * marginMm,
+                (maximum.Z - minimum.Z) + 2 * marginMm);
+
+            double spacing = targetSpacingMm;
+            double longest = Math.Max(extent.X, Math.Max(extent.Y, extent.Z));
+            if (longest / spacing > maxSamplesPerAxis) spacing = longest / maxSamplesPerAxis;
+
+            int xSize = (int)Math.Ceiling(extent.X / spacing) + 1;
+            int ySize = (int)Math.Ceiling(extent.Y / spacing) + 1;
+            int zSize = (int)Math.Ceiling(extent.Z / spacing) + 1;
+
+            _log.Info("structures: comparison grid", string.Format(CultureInfo.InvariantCulture,
+                "{0}x{1}x{2} at {3:F2} mm, spanning {4:F0}x{5:F0}x{6:F0} mm around the matched contours",
+                xSize, ySize, zSize, spacing, extent.X, extent.Y, extent.Z));
+
+            // Canonical axes: the grid is ours, not the scanner's, so there is no orientation to
+            // inherit. The rasteriser assumes contours lie on constant-z planes, which is the
+            // same assumption an axial acquisition already satisfies.
+            return new ImageGeometry(
+                origin,
+                new Vec3(1, 0, 0), new Vec3(0, 1, 0), new Vec3(0, 0, 1),
+                spacing, spacing, spacing,
+                xSize, ySize, zSize);
         }
 
         // ---------------------------------------------------------------- TG-132 Table III
@@ -822,10 +891,12 @@ namespace ESAPI_RegistrationQA.Services
             dynamic scriptContext, dynamic registration,
             dynamic sourceImage, dynamic registeredImage, QaMeasurements measurements)
         {
-            if (_mapper == null || _fixedGeometry == null)
+            ImageGeometry region = _fixedGeometry ?? _structureGeometry;
+            if (_mapper == null || region == null)
             {
                 measurements.InverseConsistency = MeasuredValue.Unavailable(
-                    "no forward mapping or image geometry is available");
+                    "no forward mapping, or no region to evaluate the round trip over: neither image " +
+                    "volume loaded and no matched structures were found");
                 return;
             }
 
@@ -870,7 +941,7 @@ namespace ESAPI_RegistrationQA.Services
 
             double residual;
             int evaluated;
-            if (!EvaluateRoundTripResidual(_mapper, reverseMapper, _fixedGeometry, out residual, out evaluated))
+            if (!EvaluateRoundTripResidual(_mapper, reverseMapper, region, out residual, out evaluated))
             {
                 measurements.InverseConsistency = MeasuredValue.Unavailable(
                     "the round trip could not be evaluated at any sampled point");

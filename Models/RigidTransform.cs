@@ -71,6 +71,23 @@ namespace ESAPI_RegistrationQA.Models
             get { return new Vec3(_m[0, 3], _m[1, 3], _m[2, 3]); }
         }
 
+        /// <summary>
+        /// True when the transform moves nothing. Worth asking, because Eclipse hands out a
+        /// perfectly valid identity matrix for a registration that was created and never
+        /// executed — and a registration that does not move anything is not something to audit.
+        /// </summary>
+        public bool IsIdentity(double toleranceMm = 1e-6)
+        {
+            for (int r = 0; r < 3; r++)
+                for (int c = 0; c < 3; c++)
+                {
+                    double expected = r == c ? 1.0 : 0.0;
+                    if (Math.Abs(_m[r, c] - expected) > 1e-9) return false;
+                }
+
+            return Translation.Length <= toleranceMm;
+        }
+
         public Vec3 Apply(Vec3 p)
         {
             return new Vec3(
