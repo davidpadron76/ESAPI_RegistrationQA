@@ -238,6 +238,16 @@ triggered the outline exclusion when it fires. That visibility is what let the v
 be diagnosed instead of guessed at: previously the value was read but never logged, so there was
 no way to see why the exclusion had not fired.
 
+**The field is read under two possible property names.** A real Eclipse install (v2.12.0, the
+`VMS.CA.Scripting` API) turned out to have no `DicomType` property on its structure type at all
+— the read failed with `RuntimeBinderException`, not an empty value. On that API the same DICOM
+field is exposed as `StructureType`, an enum rather than a string, carrying the same vocabulary
+(`EXTERNAL`, `MARKER`, `ISOCENTER`...) under a different name. Both are tried, `DicomType` first;
+if neither answers, Diagnostics logs the object's full member surface once so a third variant can
+be identified the same way this one was, without a separate probe session. This also fixes TRE:
+without a working DICOM type field, MARKER and ISOCENTER structures could never be recognised, so
+TRE stayed unreachable on that API regardless of whether markers existed in the case.
+
 **If the only structure pair that matches by identifier is the surface outline**, DSC, MDA and
 HD95 are still measured from it — useful as a coarse pre-propagation check, the kind done
 before any organ or target has been contoured on either series — but reported as **INFO**, not
