@@ -47,6 +47,7 @@ namespace ESAPI_RegistrationQA.Services
 
             int rejectedForType = 0;
             int rejectedForPosition = 0;
+            bool describedMemberSurfaceOnFailure = false;
 
             Dyn.TryInvoke("landmarks: walk structures of " + label, () =>
             {
@@ -61,8 +62,23 @@ namespace ESAPI_RegistrationQA.Services
                             continue;
 
                         string dicomType;
-                        if (!Dyn.TryGetString("landmarks: DicomType of " + id, () => structure.DicomType, log, out dicomType))
+                        bool readOk = Dyn.TryGetString("landmarks: DicomType of " + id, () => structure.DicomType, log, out dicomType);
+                        if (!readOk)
+                        {
                             dicomType = string.Empty;
+
+                            // On an API where VolumetricStructure has no DicomType property, this
+                            // is why: MARKER/ISOCENTER can never be recognised, so TRE stays
+                            // unreachable regardless of whether markers exist in the case. See
+                            // the matching note in StructureRasterizer.ReadContourStructures.
+                            if (!describedMemberSurfaceOnFailure)
+                            {
+                                describedMemberSurfaceOnFailure = true;
+                                log.Warning("landmarks: DicomType", "DicomType is not a member of this API's " +
+                                    "structure type, so no structure can be recognised as MARKER or ISOCENTER " +
+                                    "here. " + MatrixReader.DescribeMemberSurface((object)structure));
+                            }
+                        }
 
                         if (!PointTypes.Contains(dicomType))
                         {

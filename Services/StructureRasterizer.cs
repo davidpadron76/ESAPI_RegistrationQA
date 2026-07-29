@@ -271,6 +271,7 @@ namespace ESAPI_RegistrationQA.Services
 
             int skippedPoints = 0;
             int skippedEmpty = 0;
+            bool describedMemberSurfaceOnFailure = false;
 
             Dyn.TryInvoke("structures: walk contours of " + label, () =>
             {
@@ -286,8 +287,27 @@ namespace ESAPI_RegistrationQA.Services
                         if (!Dyn.TryGetString("structures: id", () => structure.Id, null, out id)) continue;
 
                         string dicomType;
-                        if (!Dyn.TryGetString("structures: DicomType of " + id, () => structure.DicomType, log, out dicomType))
+                        bool readOk = Dyn.TryGetString("structures: DicomType of " + id, () => structure.DicomType, log, out dicomType);
+                        if (!readOk)
+                        {
                             dicomType = string.Empty;
+
+                            // Confirmed on a real Eclipse install (v2.12.0): on the VMS.CA.Scripting
+                            // API, VolumetricStructure has no DicomType property at all — the read
+                            // fails with RuntimeBinderException, not merely an empty value. When that
+                            // happens, the surface outline exclusion falls back to name matching, but
+                            // it means DicomType can never confirm any other structure type either —
+                            // notably MARKER/ISOCENTER for TRE. The member surface is logged once so
+                            // the real property name (RTROIInterpretedType under another name, most
+                            // likely) can be found without a separate probe session.
+                            if (!describedMemberSurfaceOnFailure)
+                            {
+                                describedMemberSurfaceOnFailure = true;
+                                log.Warning("structures: DicomType", "DicomType is not a member of this API's " +
+                                    "structure type; the surface-outline exclusion is relying on name matching " +
+                                    "only for this run. " + MatrixReader.DescribeMemberSurface((object)structure));
+                            }
+                        }
 
                         // Read with the real log, not null: this value decides whether a
                         // structure gets excluded as the patient surface outline, and the
