@@ -131,11 +131,21 @@ the UI thread because the Varian API cannot be assumed safe to touch from anothe
 with thread affinity might not throw, it might hand back an empty buffer, which is precisely the
 failure mode `GetVoxels` produced for three sessions.
 
-**The probe settles that question.** Its "Thread affinity" section reads `Image.Id`,
-`Frame.XSize` and `Frame.GetVoxels` twice — once on the calling thread, once on an MTA worker —
-and prints both. Identical values mean the measurement could move to a background thread and the
-window could stay fully responsive; an exception, or a different value, means it must not. **Send
-that section.** It is the difference between the current design and a fully responsive one.
+**The probe has now settled that question, and the answer was the permissive one.** Its "Thread
+affinity" section read `Image.Id`, `Frame.XSize` and `Frame.GetVoxels` on the calling thread
+(managed id 1, STA) and on an MTA worker, and all three matched — `GetVoxels` included, returning
+the same `min 7127, max 10060` from both. No exception, and no empty buffer, which was the failure
+mode being guarded against.
+
+**What that does and does not establish.** It shows those three reads work from a worker on this
+Eclipse version. It does not cover the whole surface a measurement touches: the structure-set
+enumeration, `VectorField.GetVectors` and `TransformPoint` were not tested off-thread, and they
+are different objects. Nor does it establish safety under *concurrent* access — but that is not
+what a background measurement would do, since the whole pass would run on one worker with the UI
+thread idle, which is exactly the pattern that was tested.
+
+So the remaining risk is confined to the three untested reads. Extending the probe to cover them
+is the cheap way to close it before committing to the refactor.
 
 ---
 
@@ -457,7 +467,7 @@ Open an issue at
 | Threshold profiles | Replaced. The four anatomical profiles had no basis in TG-132: the report gives no site-dependent tolerance, and the two interobserver studies it cites ran the other way from what they encoded. TRE, MDA and consistency now take the maximum voxel dimension of the images, DSC the 0.80–0.90 range of Table III, and the selector offers only what the report distinguishes — standard treatment or stereotactic, where it sets 1 mm. |
 | Registration matrix | The property holding it varies between Eclipse versions. A dozen paths and seven container shapes are tried, then a reflection sweep. If none answers, everything downstream is N/A and the object's member list goes to the Diagnostics tab. See test 0. |
 | Direction cosines | If the API does not expose them, canonical axial orientation is assumed and a warning is logged. A tilted-gantry acquisition would be misread; the Diagnostics tab will say so. |
-| Performance | Runs on the UI thread, capped at ~2·10⁶ voxel pairs. The window now appears first and shows which stage is running, repainting between stages, but it does not accept clicks until the pass finishes. The work stays on the UI thread deliberately: the Varian API cannot be assumed safe to touch from another one. Test 0c is the probe check that would settle whether a background thread is viable. |
+| Performance | Runs on the UI thread, capped at ~2·10⁶ voxel pairs. The window appears first and shows which stage is running, repainting between stages, but it does not accept clicks until the pass finishes. **The probe has since shown this is more conservative than it needs to be:** `Image.Id`, `Frame.XSize` and `Frame.GetVoxels` all returned identical values from an MTA worker thread (Eclipse 15.6, 2026-07-30), so a background thread is viable. Moving the pass there is not done yet — see the caveat under test 0c. |
 
 ---
 
