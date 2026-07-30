@@ -112,6 +112,7 @@ namespace ESAPI_RegistrationQA.Tools
             GridTooThinForACentralDifference();
             UnreadableFieldIsReportedNotGuessed();
             RigidCaseDoesNotClaimAGradient();
+            RealSizedGridDoesNotTakeSeconds();
 
             Console.WriteLine();
             if (Failures.Count > 0)
@@ -351,6 +352,40 @@ namespace ESAPI_RegistrationQA.Tools
             DeformationFieldReader.Result field = DeformationFieldReader.TryRead(registration, log);
 
             Check("a present-but-null field is not treated as readable", field == null);
+        }
+
+        /// <summary>
+        /// A regression tripwire, not a benchmark.
+        ///
+        /// The first version of the reader took 5.0 s on this grid — the real 190x206x39 the probe
+        /// reported — because it read every element through Array.GetValue plus three
+        /// PropertyInfo.GetValue calls, boxing four times per element across 1.5 million elements.
+        /// Typed access through a generic method with compiled component accessors brought it to
+        /// 0.28 s. The plugin runs this on the UI thread, so five seconds is the difference between
+        /// a pause and an apparent hang.
+        ///
+        /// The limit is deliberately loose: it has to hold on a busy planning workstation, not
+        /// measure anything. It is set to catch a return to the boxing version, which would blow
+        /// through it by a factor of two even on slow hardware.
+        /// </summary>
+        private static void RealSizedGridDoesNotTakeSeconds()
+        {
+            var registration = Wrap(Field(190, 206, 39, 0.975, 0.975, 5.0,
+                (x, y, z) => Vec(0.01 * x, 0.01 * y, 0.01 * z)));
+
+            var log = new DiagnosticLog();
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            DeformationFieldReader.Result field = DeformationFieldReader.TryRead(registration, log);
+            watch.Stop();
+
+            Check("the real-sized grid is read", field != null);
+            if (field == null) return;
+
+            Check("reading a 190x206x39 field stays under 2.5 s",
+                watch.ElapsedMilliseconds < 2500,
+                watch.ElapsedMilliseconds + " ms");
+            Check("all 1,526,460 vectors are present",
+                field.XSize * field.YSize * field.ZSize == 1526460);
         }
 
         // --- plumbing -------------------------------------------------------------------

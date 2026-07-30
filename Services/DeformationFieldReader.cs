@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
 using ESAPI_RegistrationQA.Models;
 
@@ -181,37 +182,8 @@ namespace ESAPI_RegistrationQA.Services
                 return null;
             }
 
-            MemberReader rx = FindReader(elementType, "X", "x");
-            MemberReader ry = FindReader(elementType, "Y", "y");
-            MemberReader rz = FindReader(elementType, "Z", "z");
-
-            if (rx == null || ry == null || rz == null)
-            {
-                problem = elementType.Name + " exposes no recognisable X/Y/Z members";
-                return null;
-            }
-
-            var vectors = new Vec3[xSize, ySize, zSize];
-
-            for (int z = 0; z < zSize; z++)
-            {
-                for (int y = 0; y < ySize; y++)
-                {
-                    for (int x = 0; x < xSize; x++)
-                    {
-                        object element = buffer.GetValue(x, y, z);
-
-                        double vx, vy, vz;
-                        if (!rx(element, out vx) || !ry(element, out vy) || !rz(element, out vz))
-                        {
-                            problem = "an element in the buffer could not be read back as X/Y/Z";
-                            return null;
-                        }
-
-                        vectors[x, y, z] = new Vec3(vx, vy, vz);
-                    }
-                }
-            }
+            Vec3[,,] vectors = ConvertBuffer(buffer, elementType, xSize, ySize, zSize, out problem);
+            if (vectors == null) return null;
 
             return new Result
             {
@@ -230,38 +202,129 @@ namespace ESAPI_RegistrationQA.Services
             return value.ToString("F3", CultureInfo.InvariantCulture);
         }
 
-        // ------------------------------------------------------------------ reflection plumbing
+        // ------------------------------------------------------------------ buffer conversion
         //
-        // Duplicated rather than shared with PointMapperReader/MatrixReader: each reader in this
-        // project probes its own object graph independently, and the three copies have already
-        // drifted in small ways (this one needs field element readers for a type that is never
-        // known until GetVectors' parameter is inspected at runtime).
+        // The naive version of this — Array.GetValue(x, y, z) followed by three
+        // PropertyInfo.GetValue calls — took 5.0 s on the 190x206x39 grid the probe reported,
+        // twelve times longer than computing every metric from the result. All of it was
+        // reflection overhead and boxing, once per element, 1.5 million times over: GetValue on
+        // a multidimensional array boxes the struct it returns, and each PropertyInfo.GetValue
+        // boxes the float it reads.
+        //
+        // Both disappear if the loop runs against a strongly-typed array. The element type is
+        // only known at runtime, so the typing is recovered by invoking a generic method through
+        // reflection exactly once, and the component reads are compiled to delegates once as
+        // well. Everything inside the loop is then ordinary typed code.
+        //
+        // Measured on the same grid: 5043 ms -> see tools/run_checks.sh, which pins it.
 
-        private delegate bool MemberReader(object instance, out double value);
+        private static readonly MethodInfo ConvertTypedMethod = typeof(DeformationFieldReader)
+            .GetMethod("ConvertTyped", BindingFlags.NonPublic | BindingFlags.Static);
 
-        private static MemberReader FindReader(Type type, params string[] names)
+        private static Vec3[,,] ConvertBuffer(
+            Array buffer, Type elementType, int xSize, int ySize, int zSize, out string problem)
+        {
+            problem = null;
+
+            Delegate rx = BuildComponentAccessor(elementType, "X", "x");
+            Delegate ry = BuildComponentAccessor(elementType, "Y", "y");
+            Delegate rz = BuildComponentAccessor(elementType, "Z", "z");
+
+            if (rx == null || ry == null || rz == null)
+            {
+                problem = elementType.Name + " exposes no recognisable X/Y/Z members";
+                return null;
+            }
+
+            if (ConvertTypedMethod == null)
+            {
+                problem = "the internal buffer converter could not be located";
+                return null;
+            }
+
+            try
+            {
+                return (Vec3[,,])ConvertTypedMethod
+                    .MakeGenericMethod(elementType)
+                    .Invoke(null, new object[] { buffer, xSize, ySize, zSize, rx, ry, rz });
+            }
+            catch (Exception ex)
+            {
+                Exception real = ex.InnerException ?? ex;
+                problem = "the buffer could not be read back as X/Y/Z — " +
+                          real.GetType().Name + ": " + real.Message;
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Invoked through reflection once, so that <typeparamref name="T"/> is a real type for
+        /// the duration of the loop and neither the array access nor the component reads box.
+        /// </summary>
+        private static Vec3[,,] ConvertTyped<T>(
+            Array buffer, int xSize, int ySize, int zSize,
+            Func<T, double> readX, Func<T, double> readY, Func<T, double> readZ)
+        {
+            var typed = (T[,,])buffer;
+            var vectors = new Vec3[xSize, ySize, zSize];
+
+            for (int z = 0; z < zSize; z++)
+            {
+                for (int y = 0; y < ySize; y++)
+                {
+                    for (int x = 0; x < xSize; x++)
+                    {
+                        T element = typed[x, y, z];
+                        vectors[x, y, z] = new Vec3(readX(element), readY(element), readZ(element));
+                    }
+                }
+            }
+
+            return vectors;
+        }
+
+        /// <summary>
+        /// Compiles a <c>Func&lt;TElement, double&gt;</c> reading one component, as a property or
+        /// a field, in either casing. The conversion to double is part of the compiled
+        /// expression: the API's component type is float, and converting per element through
+        /// <see cref="Convert.ToDouble(object)"/> would box it again.
+        /// </summary>
+        private static Delegate BuildComponentAccessor(Type elementType, params string[] names)
         {
             foreach (string name in names)
             {
-                PropertyInfo property = SafeGetProperty(type, name);
-                if (property != null && property.CanRead)
-                {
-                    PropertyInfo captured = property;
-                    return (object instance, out double value) =>
-                        TryConvert(captured.GetValue(instance, null), out value);
-                }
+                MemberInfo member = SafeGetProperty(elementType, name);
+                if (member == null) member = SafeGetField(elementType, name);
+                if (member == null) continue;
 
-                FieldInfo field = SafeGetField(type, name);
-                if (field != null)
+                try
                 {
-                    FieldInfo captured = field;
-                    return (object instance, out double value) =>
-                        TryConvert(captured.GetValue(instance), out value);
+                    ParameterExpression parameter = Expression.Parameter(elementType, "v");
+                    Expression access = Expression.MakeMemberAccess(parameter, member);
+
+                    // A component that is not numeric cannot be converted, and Expression.Convert
+                    // would throw at build time rather than produce a wrong number.
+                    Expression asDouble = Expression.Convert(access, typeof(double));
+
+                    Type delegateType = typeof(Func<,>).MakeGenericType(elementType, typeof(double));
+                    return Expression.Lambda(delegateType, asDouble, parameter).Compile();
+                }
+                catch
+                {
+                    // Try the next candidate name rather than failing outright: a member of the
+                    // right name but the wrong shape is not the one being looked for.
                 }
             }
 
             return null;
         }
+
+        // ------------------------------------------------------------------ reflection plumbing
+        //
+        // Duplicated rather than shared with PointMapperReader/MatrixReader: each reader in this
+        // project probes its own object graph independently, and the copies have already drifted
+        // (the element accessors here are compiled expressions rather than PropertyInfo lookups,
+        // because they run 1.5 million times rather than twice).
 
         private static PropertyInfo SafeGetProperty(Type type, string name)
         {
