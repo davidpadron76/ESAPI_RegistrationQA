@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -70,6 +71,7 @@ namespace VMS.IRS.Scripting
             DumpPatientLibrary(context);
             DumpRegistrationCollection(context);
             DumpDeformableRegistration(context);
+            DumpThreadAffinity(context);
 
             dynamic registration = Try(() => context.Registration, "context.Registration");
             if (registration == null)
@@ -351,6 +353,119 @@ namespace VMS.IRS.Scripting
             ExploreDvfShapedMembers((object)deformable, deformableId ?? "registration");
             foreach (KeyValuePair<string, object> holder in holders)
                 ExploreDvfShapedMembers(holder.Value, holder.Key);
+        }
+
+        /// <summary>
+        /// Can the API be read from a thread other than the one Eclipse handed the script?
+        ///
+        /// This decides how the audit plugin can report progress. Its measurement takes seconds —
+        /// long enough that a window with no feedback reads as a hang — and the fix depends on
+        /// whether the work can move off the UI thread. Nothing in the Varian documentation says,
+        /// and guessing the permissive answer is the expensive mistake: an API with thread
+        /// affinity may not throw, it may quietly hand back an empty buffer, which is exactly the
+        /// failure mode that cost three sessions with GetVoxels.
+        ///
+        /// So each read is done twice, on the calling thread and on a worker, and the two results
+        /// are compared. A read that throws off-thread answers the question. A read that succeeds
+        /// but disagrees with the on-thread value answers it more urgently.
+        /// </summary>
+        private void DumpThreadAffinity(dynamic context)
+        {
+            Section("Thread affinity (can the API be read off the UI thread?)");
+
+            Line("calling thread: managed id " + Thread.CurrentThread.ManagedThreadId +
+                 ", apartment " + Thread.CurrentThread.GetApartmentState());
+            Line("");
+
+            dynamic image = Try(() => context.Image, "context.Image");
+            if (image == null)
+            {
+                dynamic registration = Try(() => context.Registration, "context.Registration (for thread test)");
+                if (registration != null) image = Try(() => registration.SourceImage, "registration.SourceImage");
+            }
+
+            if (image == null)
+            {
+                Line("no image reachable, so the thread test cannot run. Open a registration and re-run.");
+                return;
+            }
+
+            // A scalar property first: the cheapest possible read, and if even this fails
+            // off-thread then nothing else needs testing.
+            CompareAcrossThreads("Image.Id", () => Convert.ToString(image.Id, CultureInfo.InvariantCulture));
+
+            dynamic frame = Try(() => image.Frame, "image.Frame (for thread test)");
+            if (frame != null)
+            {
+                CompareAcrossThreads("Frame.XSize",
+                    () => Convert.ToString(frame.XSize, CultureInfo.InvariantCulture));
+
+                // The real question. GetVoxels is the call that took three sessions to get right
+                // on-thread; whether it also works off-thread is what decides the design.
+                int xSize = ReadInt(frame, null, "XSize");
+                int ySize = ReadInt(frame, null, "YSize");
+                int zSize = ReadInt(frame, null, "ZSize");
+
+                if (xSize > 0 && ySize > 0)
+                {
+                    int plane = zSize > 1 ? zSize / 2 : 0;
+                    CompareAcrossThreads("Frame.GetVoxels(mid plane) range", () =>
+                    {
+                        var buffer = new ushort[xSize, ySize];
+                        frame.GetVoxels(plane, buffer);
+
+                        ushort min = ushort.MaxValue, max = ushort.MinValue;
+                        foreach (ushort v in buffer)
+                        {
+                            if (v < min) min = v;
+                            if (v > max) max = v;
+                        }
+                        return "min " + min + ", max " + max;
+                    });
+                }
+            }
+
+            Line("");
+            Line("Reading the result: identical values on both threads means the measurement could");
+            Line("move to a background thread and the window could stay fully responsive. An");
+            Line("exception, or a different value — especially an empty range where the calling");
+            Line("thread saw real data — means it must not, and the plugin is right to keep the work");
+            Line("on the UI thread and yield between stages instead.");
+        }
+
+        /// <summary>
+        /// Runs the same read on this thread and on a worker, printing both. Exceptions are
+        /// reported rather than propagated: an exception off-thread is the answer, not a fault.
+        /// </summary>
+        private void CompareAcrossThreads(string label, Func<string> read)
+        {
+            string onThread;
+            try { onThread = read(); }
+            catch (Exception ex) { onThread = ex.GetType().Name + ": " + Shorten(ex.Message); }
+
+            string offThread = null;
+            var worker = new Thread(() =>
+            {
+                try { offThread = read(); }
+                catch (Exception ex) { offThread = ex.GetType().Name + ": " + Shorten(ex.Message); }
+            });
+
+            // MTA deliberately: an STA worker would give the API the apartment it may be relying
+            // on and hide the very affinity being tested. A background thread in a real plugin
+            // would be a thread-pool thread, which is MTA.
+            worker.SetApartmentState(ApartmentState.MTA);
+            worker.IsBackground = true;
+            worker.Start();
+
+            if (!worker.Join(TimeSpan.FromSeconds(30)))
+                offThread = "*** did not return within 30 s — the call appears to block off-thread ***";
+
+            Line("  " + label);
+            Line("    on the calling thread : " + onThread);
+            Line("    on a worker thread    : " + offThread);
+            Line("    " + (string.Equals(onThread, offThread, StringComparison.Ordinal)
+                ? "MATCH — this read is thread-safe"
+                : "*** DIFFERS — this read has thread affinity ***"));
         }
 
         private void ProbeMappingCandidates(object target, string holderName, string[] methodNames)

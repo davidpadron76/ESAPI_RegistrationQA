@@ -113,6 +113,8 @@ namespace ESAPI_RegistrationQA.Tools
             UnreadableFieldIsReportedNotGuessed();
             RigidCaseDoesNotClaimAGradient();
             RealSizedGridDoesNotTakeSeconds();
+            ProgressStagesAreOrderedAndComplete();
+            AFailingProgressSinkDoesNotAbortTheMeasurement();
 
             Console.WriteLine();
             if (Failures.Count > 0)
@@ -386,6 +388,113 @@ namespace ESAPI_RegistrationQA.Tools
                 watch.ElapsedMilliseconds + " ms");
             Check("all 1,526,460 vectors are present",
                 field.XSize * field.YSize * field.ZSize == 1526460);
+        }
+
+        /// <summary>
+        /// The bar must not go backwards, must not exceed its total, and must reach it. A stage
+        /// left out of MeasurementProgress's ordered list would silently report position 0, so a
+        /// bar that stalls at the start is the symptom of a missing entry rather than a slow read.
+        /// </summary>
+        private static void ProgressStagesAreOrderedAndComplete()
+        {
+            var sink = new RecordingProgressSink();
+            var progress = new MeasurementProgress(sink);
+
+            progress.Report(MeasurementStage.Starting);
+            foreach (MeasurementStage stage in MeasurementProgress.AllStages)
+                progress.Report(stage);
+            progress.Report(MeasurementStage.Finished);
+
+            Check("every stage reports", sink.Reports.Count == MeasurementProgress.StageCount + 2,
+                sink.Reports.Count + " reports");
+
+            bool monotonic = true;
+            for (int i = 1; i < sink.Reports.Count; i++)
+                if (sink.Reports[i].Completed < sink.Reports[i - 1].Completed) monotonic = false;
+
+            Check("progress never goes backwards", monotonic);
+
+            bool withinBounds = true;
+            foreach (RecordedReport r in sink.Reports)
+                if (r.Completed < 0 || r.Completed > r.Total) withinBounds = false;
+
+            Check("progress never exceeds its total", withinBounds);
+
+            Check("progress starts at zero", sink.Reports[0].Completed == 0);
+            Check("progress reaches its total",
+                sink.Reports[sink.Reports.Count - 1].Completed == MeasurementProgress.StageCount,
+                sink.Reports[sink.Reports.Count - 1].Completed + "/" + MeasurementProgress.StageCount);
+
+            // A stage missing from the ordered list falls through to 0. Two stages reporting the
+            // same position is the signature.
+            var seen = new HashSet<int>();
+            bool distinct = true;
+            foreach (MeasurementStage stage in MeasurementProgress.AllStages)
+            {
+                var probe = new RecordingProgressSink();
+                new MeasurementProgress(probe).Report(stage);
+                if (!seen.Add(probe.Reports[0].Completed)) distinct = false;
+            }
+
+            Check("each stage maps to its own position", distinct);
+
+            bool described = true;
+            foreach (RecordedReport r in sink.Reports)
+                if (string.IsNullOrEmpty(r.Description)) described = false;
+
+            Check("every stage carries a caption", described);
+        }
+
+        /// <summary>
+        /// The audit is the deliverable and the progress numbers are a courtesy. A sink that
+        /// throws — a UI already torn down, a dispatcher shutting down — must not take the
+        /// measurement with it.
+        /// </summary>
+        private static void AFailingProgressSinkDoesNotAbortTheMeasurement()
+        {
+            var progress = new MeasurementProgress(new ThrowingProgressSink());
+
+            bool survived = true;
+            try
+            {
+                progress.Report(MeasurementStage.LoadingSourceVolume);
+            }
+            catch
+            {
+                survived = false;
+            }
+
+            Check("a throwing progress sink is swallowed", survived);
+        }
+
+        private struct RecordedReport
+        {
+            public int Completed;
+            public int Total;
+            public string Description;
+        }
+
+        private sealed class RecordingProgressSink : IMeasurementProgressSink
+        {
+            public readonly List<RecordedReport> Reports = new List<RecordedReport>();
+
+            public void Report(MeasurementStage stage, int completed, int total, string description)
+            {
+                Reports.Add(new RecordedReport
+                {
+                    Completed = completed,
+                    Total = total,
+                    Description = description
+                });
+            }
+        }
+
+        private sealed class ThrowingProgressSink : IMeasurementProgressSink
+        {
+            public void Report(MeasurementStage stage, int completed, int total, string description)
+            {
+                throw new InvalidOperationException("the window is gone");
+            }
         }
 
         // --- plumbing -------------------------------------------------------------------

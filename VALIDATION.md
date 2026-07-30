@@ -105,6 +105,40 @@ method name is recorded in the report.
 
 ---
 
+## 0c. Progress feedback, and whether a background thread is viable
+
+**Setup.** Open any registration and run the plugin. Watch the window as it appears.
+
+**Expected.** The window appears **immediately**, showing "Measuring registration" over a
+progress bar and the name of the stage running — "Reading the source volume…", "Reading the
+deformation field…", and so on through ten stages.
+
+Earlier versions computed everything before creating the window, so Eclipse sat with no window at
+all for several seconds. That is what this changes: nothing is faster except the deformation-field
+read, which went from 5.0 s to 0.28 s, but the wait is now visible and attributable.
+
+**What to report.**
+
+- **Which stage is slowest on your data.** The stage caption names the API read, so a case that
+  dwells on one of them tells us where to look. This is the useful measurement.
+- **If the bar reaches the end but the window stays on the progress panel**, the pass threw
+  somewhere the diagnostics should still record — send the Diagnostics tab.
+- **If the window never appears at all**, the deferred start did not fire. That would mean
+  `Loaded` never raised, and it is worth knowing.
+
+The window deliberately does not accept clicks while measuring, and says so. The work stays on
+the UI thread because the Varian API cannot be assumed safe to touch from another one — an API
+with thread affinity might not throw, it might hand back an empty buffer, which is precisely the
+failure mode `GetVoxels` produced for three sessions.
+
+**The probe settles that question.** Its "Thread affinity" section reads `Image.Id`,
+`Frame.XSize` and `Frame.GetVoxels` twice — once on the calling thread, once on an MTA worker —
+and prints both. Identical values mean the measurement could move to a background thread and the
+window could stay fully responsive; an exception, or a different value, means it must not. **Send
+that section.** It is the difference between the current design and a fully responsive one.
+
+---
+
 ## 1. Identity registration
 
 **Setup.** Register a CT to itself, or select an identity registration if the workspace has
@@ -423,7 +457,7 @@ Open an issue at
 | Threshold profiles | Replaced. The four anatomical profiles had no basis in TG-132: the report gives no site-dependent tolerance, and the two interobserver studies it cites ran the other way from what they encoded. TRE, MDA and consistency now take the maximum voxel dimension of the images, DSC the 0.80–0.90 range of Table III, and the selector offers only what the report distinguishes — standard treatment or stereotactic, where it sets 1 mm. |
 | Registration matrix | The property holding it varies between Eclipse versions. A dozen paths and seven container shapes are tried, then a reflection sweep. If none answers, everything downstream is N/A and the object's member list goes to the Diagnostics tab. See test 0. |
 | Direction cosines | If the API does not expose them, canonical axial orientation is assumed and a warning is logged. A tilted-gantry acquisition would be misread; the Diagnostics tab will say so. |
-| Performance | Runs synchronously on the UI thread, capped at ~2·10⁶ voxel pairs. The interface stops responding while it computes. |
+| Performance | Runs on the UI thread, capped at ~2·10⁶ voxel pairs. The window now appears first and shows which stage is running, repainting between stages, but it does not accept clicks until the pass finishes. The work stays on the UI thread deliberately: the Varian API cannot be assumed safe to touch from another one. Test 0c is the probe check that would settle whether a background thread is viable. |
 
 ---
 
@@ -435,6 +469,8 @@ Open an issue at
 | 0 | Frame of Reference read | same / different | | | affects whether Max Displacement is graded |
 | 0a | **Voxels read: min ≠ max** | real HU range | | | if equal, nothing downstream works |
 | 0b | **Deformable: point mapping found** | method named in Diagnostics | | | if not, everything is N/A |
+| 0c | Window appears before measuring | immediately, with progress | | | slowest stage: |
+| 0c | **Probe: thread affinity** | MATCH or DIFFERS | | | decides whether a background thread is viable |
 | 1 | Identity — NCC | 1.000 | | | |
 | 1 | Identity — NMI | 2.000 | | | |
 | 1 | Identity — SSD | 0.000 | | | |

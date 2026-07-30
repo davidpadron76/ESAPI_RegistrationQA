@@ -8,6 +8,9 @@
 
     <UserControl.Resources>
 
+        <!-- Drives the progress panel's visibility off MainViewModel.IsMeasuring. -->
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+
         <!-- Semaphore palette. A single point of definition for all three tables. -->
         <SolidColorBrush x:Key="StatusGreenBg"  Color="#C8E6C9"/>
         <SolidColorBrush x:Key="StatusGreenFg"  Color="#2E7D32"/>
@@ -245,6 +248,53 @@
                                         CellTemplate="{StaticResource MetricSummaryTemplate}"/>
             </DataGrid.Columns>
         </DataGrid>
+
+        <!--
+            Progress panel, over the table area because that is the region that is empty until
+            the pass finishes.
+
+            It replaces nothing on screen: before this existed, the window itself did not appear
+            until every metric had been computed, so Eclipse looked frozen for the duration. The
+            measurement now starts after the first render and reports the stage it is in, which
+            is the part a physicist needs when a case stops moving — the stage names the API read
+            that is blocking.
+
+            Collapsed rather than hidden so it stops participating in layout once done.
+        -->
+        <Border Grid.Row="2" Background="#F4F6F9"
+                Visibility="{Binding IsMeasuring, Converter={StaticResource BoolToVisibility}}">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="420">
+                <TextBlock Text="Measuring registration" FontSize="14" FontWeight="SemiBold"
+                           Foreground="{StaticResource Accent}" HorizontalAlignment="Center"/>
+
+                <TextBlock Text="{Binding StageDescription}" FontSize="12" Foreground="#546E7A"
+                           Margin="0,10,0,0" HorizontalAlignment="Center"
+                           TextWrapping="Wrap" TextAlignment="Center"/>
+
+                <ProgressBar Minimum="0" Maximum="{Binding StageTotal}" Value="{Binding StageCompleted}"
+                             Height="6" Width="380" Margin="0,12,0,0"
+                             Foreground="{StaticResource Accent}" Background="#DDE3EA"
+                             BorderThickness="0"/>
+
+                <TextBlock FontSize="10.5" Foreground="#78909C" Margin="0,6,0,0"
+                           HorizontalAlignment="Center">
+                    <Run Text="Stage"/>
+                    <Run Text="{Binding StageCompleted, Mode=OneWay}"/>
+                    <Run Text="of"/>
+                    <Run Text="{Binding StageTotal, Mode=OneWay}"/>
+                </TextBlock>
+
+                <!--
+                    Says plainly that the window will not answer clicks. The measurement runs on
+                    the UI thread on purpose — the Varian API cannot be assumed safe to touch
+                    from another one — so between stages the window repaints but does not accept
+                    input. Stating that is better than letting the reader conclude it crashed.
+                -->
+                <TextBlock Text="The window will not respond to clicks until this finishes."
+                           FontSize="10" Foreground="#90A4AE" Margin="0,14,0,0"
+                           HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+            </StackPanel>
+        </Border>
 
         <TextBlock Grid.Row="3" Text="{Binding TransformSummary}" FontSize="11" Foreground="#546E7A"
                    Margin="2,10,0,0" TextWrapping="Wrap"

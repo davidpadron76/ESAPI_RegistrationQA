@@ -35,15 +35,29 @@ namespace ESAPI_RegistrationQA.Services
         /// <summary>Forward mapping source → registered, shared by the similarity and TRE paths.</summary>
         private IPointMapper _mapper;
 
+        /// <summary>
+        /// Where stage changes go. Never null — a null sink is wrapped, so the reporting calls
+        /// below need no guard.
+        /// </summary>
+        private readonly MeasurementProgress _progress;
+
         public RegistrationAnalyzer(DiagnosticLog log)
+            : this(log, null)
+        {
+        }
+
+        public RegistrationAnalyzer(DiagnosticLog log, IMeasurementProgressSink progressSink)
         {
             if (log == null) throw new ArgumentNullException("log");
             _log = log;
+            _progress = new MeasurementProgress(progressSink);
         }
 
         public QaMeasurements Analyze(dynamic scriptContext)
         {
             var measurements = new QaMeasurements();
+
+            _progress.Report(MeasurementStage.Starting);
 
             dynamic registration;
             if (!Dyn.TryGet("context: active registration", () => scriptContext.Registration, _log, out registration))
@@ -51,9 +65,11 @@ namespace ESAPI_RegistrationQA.Services
                 MarkAllUnavailable(measurements,
                     "there is no active registration in the Eclipse workspace");
                 measurements.RegistrationId = "(no active registration)";
+                _progress.Report(MeasurementStage.Finished);
                 return measurements;
             }
 
+            _progress.Report(MeasurementStage.IdentifyingRegistration);
             measurements.RegistrationId = ReadRegistrationId(registration);
             ClassifyRegistration(registration, measurements);
 
@@ -67,7 +83,12 @@ namespace ESAPI_RegistrationQA.Services
             bool haveSource = Dyn.TryGet("registration: SourceImage", () => registration.SourceImage, _log, out sourceImage);
             bool haveRegistered = Dyn.TryGet("registration: RegisteredImage", () => registration.RegisteredImage, _log, out registeredImage);
 
+            // Reported separately: these are the two slowest API reads in the pass, and when a
+            // case stops moving it is almost always inside one of them.
+            _progress.Report(MeasurementStage.LoadingSourceVolume);
             if (haveSource) source = EsapiImageReader.Load(sourceImage, "source image", _log);
+
+            _progress.Report(MeasurementStage.LoadingRegisteredVolume);
             if (haveRegistered) target = EsapiImageReader.Load(registeredImage, "registered image", _log);
 
             if (source != null) measurements.FixedModality = source.Modality;
@@ -78,15 +99,18 @@ namespace ESAPI_RegistrationQA.Services
             ReadFrameOfReference(sourceImage, registeredImage, measurements);
 
             // --- Rigid transform --------------------------------------------------------
+            _progress.Report(MeasurementStage.ReadingTransform);
             ExtractRigidTransform(registration, measurements, source, target);
 
             // Built once and shared: the similarity sampling and the TRE both need to push
             // points through the same registration, and for a deformable case that mapping
             // is expensive to construct.
+            _progress.Report(MeasurementStage.BuildingPointMapping);
             _mapper = BuildPointMapper(registration, measurements);
             if (_mapper != null) _log.Info("mapping", _mapper.Description);
 
             // --- Intensity similarity ---------------------------------------------------
+            _progress.Report(MeasurementStage.IntensitySimilarity);
             if (source == null || target == null || !source.Success || !target.Success)
             {
                 string reason = source == null || target == null
@@ -106,16 +130,24 @@ namespace ESAPI_RegistrationQA.Services
             // Structures come first because they establish the region that the deformation and
             // consistency metrics fall back on when no volume loads.
             RecordNativeVoxelSize(source, target, measurements);
+
+            _progress.Report(MeasurementStage.StructureMetrics);
             ComputeStructureMetrics(sourceImage, registeredImage, measurements);
 
             // --- Deformation / topology -------------------------------------------------
+            _progress.Report(MeasurementStage.DeformationField);
             ComputeDeformationMetrics(measurements, registration);
+
+            _progress.Report(MeasurementStage.TargetRegistrationError);
             ComputeTargetRegistrationError(registration, sourceImage, registeredImage, measurements);
+
+            _progress.Report(MeasurementStage.InverseConsistency);
             ComputeInverseConsistency(scriptContext, registration, sourceImage, registeredImage, measurements);
 
             foreach (DiagnosticEntry entry in _log.Entries)
                 measurements.Diagnostics.Add(entry.ToString());
 
+            _progress.Report(MeasurementStage.Finished);
             return measurements;
         }
 

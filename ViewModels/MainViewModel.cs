@@ -6,13 +6,14 @@ using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using ESAPI_RegistrationQA.Models;
 using ESAPI_RegistrationQA.Services;
 
 namespace ESAPI_RegistrationQA.ViewModels
 {
-    public class MainViewModel : INotifyPropertyChanged
+    public class MainViewModel : INotifyPropertyChanged, IMeasurementProgressSink
     {
         /// <summary>
         /// The Eclipse script context, held as <c>dynamic</c>.
@@ -27,6 +28,17 @@ namespace ESAPI_RegistrationQA.ViewModels
         private readonly dynamic _context;
 
         private readonly DiagnosticLog _log = new DiagnosticLog();
+
+        /// <summary>
+        /// The dispatcher of the thread that constructed this view model — the Eclipse UI thread.
+        ///
+        /// Captured here rather than reached for through <c>Application.Current.Dispatcher</c>,
+        /// which is null whenever the host process did not create a WPF <see cref="Application"/>.
+        /// Eclipse loads a script plugin into its own already-running UI, so there is no guarantee
+        /// one exists; relying on it would mean the measurement never started and the progress
+        /// panel spun for ever.
+        /// </summary>
+        private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
 
         /// <summary>
         /// Raw measurements. Computed exactly once: switching anatomical profile does not
@@ -74,7 +86,14 @@ namespace ESAPI_RegistrationQA.ViewModels
             ShowAdvisoriesCommand = new RelayCommand(_ => ShowAdvisories());
             ShowDiagnosticsCommand = new RelayCommand(_ => ShowDiagnostics());
 
-            RunMeasurement();
+            // Deliberately NOT measuring here. This constructor used to run the whole pass, and
+            // since the caller creates the window afterwards, there was nothing on screen for the
+            // several seconds it took: Eclipse simply froze with no window at all, which reads as
+            // a hang rather than as work in progress. The measurement is now started by the view
+            // once it has rendered — see StartMeasurement.
+            IsMeasuring = true;
+            StageDescription = MeasurementProgress.Describe(MeasurementStage.Starting);
+            StageTotal = MeasurementProgress.StageCount;
         }
 
         // ------------------------------------------------------------------ properties
@@ -239,6 +258,82 @@ namespace ESAPI_RegistrationQA.ViewModels
             }
         }
 
+        // ------------------------------------------------------------------ progress
+
+        private bool _isMeasuring;
+        private string _stageDescription;
+        private int _stageCompleted;
+        private int _stageTotal;
+
+        /// <summary>True while the measurement is running. The view shows its progress panel
+        /// and disables the export commands off this.</summary>
+        public bool IsMeasuring
+        {
+            get { return _isMeasuring; }
+            private set { _isMeasuring = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>Caption of the stage under way, e.g. "Reading the source volume…".</summary>
+        public string StageDescription
+        {
+            get { return _stageDescription; }
+            private set { _stageDescription = value; OnPropertyChanged(); }
+        }
+
+        public int StageCompleted
+        {
+            get { return _stageCompleted; }
+            private set { _stageCompleted = value; OnPropertyChanged(); }
+        }
+
+        public int StageTotal
+        {
+            get { return _stageTotal; }
+            private set { _stageTotal = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Starts the measurement, which the view calls once it has rendered.
+        ///
+        /// Queued at <see cref="DispatcherPriority.Background"/> rather than run inline: that
+        /// lets the window finish laying out and painting first, so the progress panel is
+        /// actually visible before the first API read blocks the thread. Called inline, the
+        /// window would still be invisible for the duration and nothing would be gained.
+        ///
+        /// The work stays on the UI thread. The Varian API cannot be assumed safe to touch from
+        /// another one, and a QA tool is the wrong place to find out — so instead of moving the
+        /// work away from the dispatcher, the dispatcher is given the chance to breathe between
+        /// stages. See <see cref="Report"/>.
+        /// </summary>
+        public void StartMeasurement()
+        {
+            _dispatcher.BeginInvoke(new Action(RunMeasurement), DispatcherPriority.Background);
+        }
+
+        /// <summary>
+        /// Receives a stage change from the analyzer, on the UI thread, and yields to the
+        /// dispatcher so the window repaints.
+        ///
+        /// The empty delegate at <see cref="DispatcherPriority.Render"/> is the yield: invoking
+        /// it synchronously forces every queued operation of that priority or higher — layout,
+        /// render — to run before control returns. Without it the bound properties would change
+        /// and nothing would be drawn, because the thread never goes idle between stages.
+        ///
+        /// Input is deliberately not pumped. Letting clicks through mid-measurement would allow
+        /// re-entering a command while the analyzer holds half-built state; the window is
+        /// visibly busy and unresponsive to clicks, which is honest, rather than frozen with no
+        /// explanation, which is not.
+        /// </summary>
+        void IMeasurementProgressSink.Report(
+            MeasurementStage stage, int completed, int total, string description)
+        {
+            StageCompleted = completed;
+            StageTotal = total;
+            StageDescription = description;
+
+            _dispatcher.Invoke(new Action(() => { }), DispatcherPriority.Render);
+        }
+
         // ------------------------------------------------------------------ measurement
 
         /// <summary>
@@ -255,7 +350,7 @@ namespace ESAPI_RegistrationQA.ViewModels
 
             try
             {
-                var analyzer = new RegistrationAnalyzer(_log);
+                var analyzer = new RegistrationAnalyzer(_log, this);
                 _measurements = analyzer.Analyze(_context);
             }
             catch (Exception ex)
@@ -265,6 +360,12 @@ namespace ESAPI_RegistrationQA.ViewModels
                 // evaluation layer will translate into unavailable metrics.
                 _log.Failure("measurement", ex);
                 _measurements = new QaMeasurements { RegistrationId = "(measurement interrupted)" };
+            }
+            finally
+            {
+                // In a finally block so the progress panel is dismissed even when the pass threw.
+                // Left set, the window would show a half-filled bar over a populated table.
+                IsMeasuring = false;
             }
 
             RegContext = new RegistrationContext
