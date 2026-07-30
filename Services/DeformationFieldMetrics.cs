@@ -37,6 +37,37 @@ namespace ESAPI_RegistrationQA.Services
 
             /// <summary>Maximum |displacement| over the whole field, in millimetres.</summary>
             public double MaxDisplacementMm;
+
+            /// <summary>
+            /// How many of the folded points lie within two grid steps of the edge of the field.
+            ///
+            /// TG-132 does not ask only whether a registration folds, but what the folding
+            /// affects: "where the folding is confined to a region that does not affect the
+            /// intended use, the influence should be evaluated". A physicist cannot make that
+            /// judgement from a percentage alone. Folding hard against the boundary of the
+            /// field's support is usually the algorithm running out of image to drive it —
+            /// commonly air, or beyond the patient — while folding in the middle of the volume is
+            /// inside the anatomy and is the case that matters.
+            /// </summary>
+            public int NegativeNearBoundary;
+
+            /// <summary>
+            /// Extent of the folded region in grid indices, or null when nothing folded. Reported
+            /// in the field's own indices rather than millimetres: converting would need
+            /// GridToDicom, which is on the API object and not available to this pure computation.
+            /// </summary>
+            public int[] NegativeBoundsMin;
+            public int[] NegativeBoundsMax;
+
+            /// <summary>Fraction of folded points that sit against the field's edge, 0 to 1.</summary>
+            public double NegativeBoundaryFraction
+            {
+                get
+                {
+                    int negative = (int)Math.Round(NegativeJacobianPercent * JacobianSampleCount / 100.0);
+                    return negative <= 0 ? 0.0 : (double)NegativeNearBoundary / negative;
+                }
+            }
         }
 
         /// <summary>
@@ -81,6 +112,14 @@ namespace ESAPI_RegistrationQA.Services
             double minJacobian = double.MaxValue;
             double maxGradient = 0.0;
 
+            // Where the folding is, not just how much. Two grid steps from the edge: one is the
+            // shell the central difference already excludes, so the first evaluated layer would
+            // otherwise always count as "interior" by a hair.
+            const int BoundaryMargin = 2;
+            int negativeNearBoundary = 0;
+            int minNx = int.MaxValue, minNy = int.MaxValue, minNz = int.MaxValue;
+            int maxNx = int.MinValue, maxNy = int.MinValue, maxNz = int.MinValue;
+
             for (int z = 1; z < nz - 1; z++)
             {
                 for (int y = 1; y < ny - 1; y++)
@@ -109,8 +148,26 @@ namespace ESAPI_RegistrationQA.Services
                         if (double.IsNaN(j) || double.IsInfinity(j)) continue;
 
                         samples++;
-                        if (j <= 0.0) negative++;
                         if (j < minJacobian) minJacobian = j;
+
+                        if (j <= 0.0)
+                        {
+                            negative++;
+
+                            if (x < BoundaryMargin || x >= nx - BoundaryMargin ||
+                                y < BoundaryMargin || y >= ny - BoundaryMargin ||
+                                z < BoundaryMargin || z >= nz - BoundaryMargin)
+                            {
+                                negativeNearBoundary++;
+                            }
+
+                            if (x < minNx) minNx = x;
+                            if (y < minNy) minNy = y;
+                            if (z < minNz) minNz = z;
+                            if (x > maxNx) maxNx = x;
+                            if (y > maxNy) maxNy = y;
+                            if (z > maxNz) maxNz = z;
+                        }
 
                         double gradient = Math.Sqrt(
                             dudx.X * dudx.X + dudx.Y * dudx.Y + dudx.Z * dudx.Z +
@@ -134,7 +191,10 @@ namespace ESAPI_RegistrationQA.Services
                 MinJacobian = minJacobian,
                 JacobianSampleCount = samples,
                 MaxGradientMagnitude = maxGradient,
-                MaxDisplacementMm = maxDisplacement
+                MaxDisplacementMm = maxDisplacement,
+                NegativeNearBoundary = negativeNearBoundary,
+                NegativeBoundsMin = negative > 0 ? new[] { minNx, minNy, minNz } : null,
+                NegativeBoundsMax = negative > 0 ? new[] { maxNx, maxNy, maxNz } : null
             };
         }
 

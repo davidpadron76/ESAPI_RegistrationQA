@@ -45,6 +45,50 @@ namespace ESAPI_RegistrationQA.Services
 
             /// <summary>Displacement in millimetres, indexed [x, y, z] on the field's own grid.</summary>
             public Vec3[,,] Vectors;
+
+            /// <summary>
+            /// Determinants of the linear part of the affine transforms the field is composed
+            /// with, when the API exposes them. Null when the property was absent or unreadable.
+            ///
+            /// These decide whether the Jacobian computed from the field alone is the Jacobian of
+            /// the registration. The deformable transform is the composition of
+            /// <c>PreTransformationMatrix</c>, the field, and <c>PostTransformationMatrix</c>, so
+            /// det J_total = det(Pre) · det(I + grad u) · det(Post). When both are rigid — det
+            /// exactly +1, no scaling and no reflection — the field's own determinant *is* the
+            /// registration's, and the folding percentage stands. A negative determinant on
+            /// either would flip the sign of every point, turning folding into no folding and
+            /// back; a scaling factor would rescale all of them.
+            /// </summary>
+            public double? PreDeterminant;
+            public double? PostDeterminant;
+
+            /// <summary>
+            /// True when both affine parts were read and both are orientation-preserving with
+            /// unit volume, so the field's Jacobian can be reported as the registration's without
+            /// qualification.
+            /// </summary>
+            public bool AffinePartsAreRigid
+            {
+                get
+                {
+                    if (!PreDeterminant.HasValue || !PostDeterminant.HasValue) return false;
+                    return Math.Abs(PreDeterminant.Value - 1.0) < 1e-6
+                        && Math.Abs(PostDeterminant.Value - 1.0) < 1e-6;
+                }
+            }
+
+            /// <summary>
+            /// What the field's determinant must be multiplied by to become the registration's,
+            /// or null when the affine parts could not be read.
+            /// </summary>
+            public double? AffineDeterminantProduct
+            {
+                get
+                {
+                    if (!PreDeterminant.HasValue || !PostDeterminant.HasValue) return null;
+                    return PreDeterminant.Value * PostDeterminant.Value;
+                }
+            }
         }
 
         /// <summary>
@@ -89,6 +133,11 @@ namespace ESAPI_RegistrationQA.Services
 
                 if (result != null)
                 {
+                    // Read from the holder, not the field: the affine parts sit alongside
+                    // DeformationField on NonRigidRegistration, not inside it.
+                    result.PreDeterminant = TryReadLinearDeterminant(holder, "PreTransformationMatrix");
+                    result.PostDeterminant = TryReadLinearDeterminant(holder, "PostTransformationMatrix");
+
                     if (log != null)
                     {
                         log.Info("deformation field",
@@ -96,6 +145,8 @@ namespace ESAPI_RegistrationQA.Services
                             result.ZSize + " grid, " +
                             FormatMm(result.XResMm) + "x" + FormatMm(result.YResMm) + "x" +
                             FormatMm(result.ZResMm) + " mm spacing, native to the field, not the image)");
+
+                        ReportAffineParts(result, log);
                     }
                     return result;
                 }
@@ -200,6 +251,79 @@ namespace ESAPI_RegistrationQA.Services
         private static string FormatMm(double value)
         {
             return value.ToString("F3", CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// Says whether the Jacobian computed from the field alone can be reported as the
+        /// registration's, and if not, by what factor it differs.
+        /// </summary>
+        private static void ReportAffineParts(Result result, DiagnosticLog log)
+        {
+            if (!result.PreDeterminant.HasValue || !result.PostDeterminant.HasValue)
+            {
+                log.Warning("deformation field: affine parts",
+                    "Pre/PostTransformationMatrix could not both be read, so it cannot be confirmed " +
+                    "that the field's Jacobian is the registration's. The deformable transform is " +
+                    "the composition of the two affine parts with the field, and a scaling or " +
+                    "reflection in either would rescale or invert every determinant.");
+                return;
+            }
+
+            string values = string.Format(CultureInfo.InvariantCulture,
+                "det(Pre) = {0:F6}, det(Post) = {1:F6}",
+                result.PreDeterminant.Value, result.PostDeterminant.Value);
+
+            if (result.AffinePartsAreRigid)
+            {
+                log.Info("deformation field: affine parts",
+                    values + " — both are orientation-preserving with unit volume, so the field's " +
+                    "own Jacobian is the registration's and the folding percentage needs no " +
+                    "correction.");
+                return;
+            }
+
+            log.Warning("deformation field: affine parts",
+                values + " — at least one is not a unit-determinant rigid transform, so the " +
+                "registration's Jacobian is the field's multiplied by " +
+                result.AffineDeterminantProduct.Value.ToString("F6", CultureInfo.InvariantCulture) +
+                ". A negative product would invert the sign of every point, so the reported " +
+                "percentage of folding is not trustworthy until this is accounted for.");
+        }
+
+        /// <summary>
+        /// Determinant of the top-left 3x3 of a 4x4 affine matrix — its linear part.
+        ///
+        /// The row-major/column-major question that <see cref="MatrixReader"/> has to settle does
+        /// not arise here: transposing a matrix leaves its determinant unchanged, and the linear
+        /// block is the top-left 3x3 under either convention.
+        /// </summary>
+        private static double? TryReadLinearDeterminant(object holder, string propertyName)
+        {
+            object raw;
+            if (!TryReadProperty(holder, propertyName, out raw) || raw == null) return null;
+
+            var matrix = raw as Array;
+            if (matrix == null || matrix.Rank != 2) return null;
+            if (matrix.GetLength(0) < 3 || matrix.GetLength(1) < 3) return null;
+
+            var m = new double[3, 3];
+            try
+            {
+                for (int r = 0; r < 3; r++)
+                    for (int c = 0; c < 3; c++)
+                        m[r, c] = Convert.ToDouble(matrix.GetValue(r, c), CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                return null;
+            }
+
+            double determinant =
+                m[0, 0] * (m[1, 1] * m[2, 2] - m[1, 2] * m[2, 1])
+              - m[0, 1] * (m[1, 0] * m[2, 2] - m[1, 2] * m[2, 0])
+              + m[0, 2] * (m[1, 0] * m[2, 1] - m[1, 1] * m[2, 0]);
+
+            return double.IsNaN(determinant) || double.IsInfinity(determinant) ? (double?)null : determinant;
         }
 
         // ------------------------------------------------------------------ buffer conversion

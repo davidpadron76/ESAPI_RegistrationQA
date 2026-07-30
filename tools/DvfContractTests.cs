@@ -77,6 +77,48 @@ namespace ESAPI_RegistrationQA.Tools
     public sealed class StubNonRigidRegistration
     {
         public StubVectorField DeformationField { get; set; }
+
+        /// <summary>
+        /// Default to the identity, which is what a registration with no affine component
+        /// carries. Tests that care set them explicitly.
+        /// </summary>
+        public double[,] PreTransformationMatrix { get; set; } = Identity();
+        public double[,] PostTransformationMatrix { get; set; } = Identity();
+
+        public static double[,] Identity()
+        {
+            return new double[,]
+            {
+                { 1, 0, 0, 0 },
+                { 0, 1, 0, 0 },
+                { 0, 0, 1, 0 },
+                { 0, 0, 0, 1 }
+            };
+        }
+
+        /// <summary>A uniform scaling by <paramref name="s"/>: determinant s^3.</summary>
+        public static double[,] Scaling(double s)
+        {
+            return new double[,]
+            {
+                { s, 0, 0, 0 },
+                { 0, s, 0, 0 },
+                { 0, 0, s, 0 },
+                { 0, 0, 0, 1 }
+            };
+        }
+
+        /// <summary>A reflection through the x axis: determinant -1.</summary>
+        public static double[,] Reflection()
+        {
+            return new double[,]
+            {
+                { -1, 0, 0, 0 },
+                {  0, 1, 0, 0 },
+                {  0, 0, 1, 0 },
+                {  0, 0, 0, 1 }
+            };
+        }
     }
 
     /// <summary>
@@ -115,6 +157,8 @@ namespace ESAPI_RegistrationQA.Tools
             RealSizedGridDoesNotTakeSeconds();
             ProgressStagesAreOrderedAndComplete();
             AFailingProgressSinkDoesNotAbortTheMeasurement();
+            AffineDeterminantsAreReadAndJudged();
+            FoldingIsLocatedNotJustCounted();
 
             Console.WriteLine();
             if (Failures.Count > 0)
@@ -465,6 +509,132 @@ namespace ESAPI_RegistrationQA.Tools
             }
 
             Check("a throwing progress sink is swallowed", survived);
+        }
+
+        /// <summary>
+        /// The deformable transform is Pre ∘ field ∘ Post, so det J_total = det(Pre) ·
+        /// det(I + grad u) · det(Post). Reporting the field's determinant as the registration's
+        /// is only honest when both affine parts are rigid, and a reflection in either would
+        /// invert the sign of every point — turning folding into no folding.
+        /// </summary>
+        private static void AffineDeterminantsAreReadAndJudged()
+        {
+            StubVectorField field = Field(5, 5, 5, 1.0, 1.0, 1.0, (x, y, z) => Vec(0, 0, 0));
+
+            var identity = new StubMirsNonRigidRegistration
+            {
+                NonRigidRegistration = new StubNonRigidRegistration { DeformationField = field }
+            };
+
+            DeformationFieldReader.Result read =
+                DeformationFieldReader.TryRead(identity, new DiagnosticLog());
+
+            Check("affine determinants are read", read != null &&
+                read.PreDeterminant.HasValue && read.PostDeterminant.HasValue);
+            if (read == null || !read.PreDeterminant.HasValue) return;
+
+            Check("identity affine parts read as determinant 1",
+                Near(read.PreDeterminant.Value, 1.0) && Near(read.PostDeterminant.Value, 1.0),
+                read.PreDeterminant.Value + " / " + read.PostDeterminant.Value);
+            Check("identity affine parts are judged rigid", read.AffinePartsAreRigid);
+
+            // A 2x scaling has determinant 8, so the registration's Jacobian is eight times the
+            // field's — the folding percentage would be unchanged in sign but the magnitude wrong.
+            var scaled = new StubMirsNonRigidRegistration
+            {
+                NonRigidRegistration = new StubNonRigidRegistration
+                {
+                    DeformationField = field,
+                    PreTransformationMatrix = StubNonRigidRegistration.Scaling(2.0)
+                }
+            };
+
+            DeformationFieldReader.Result scaledRead =
+                DeformationFieldReader.TryRead(scaled, new DiagnosticLog());
+
+            Check("a scaling affine part is detected", scaledRead != null &&
+                Near(scaledRead.PreDeterminant.Value, 8.0),
+                scaledRead == null ? "null" : scaledRead.PreDeterminant.Value.ToString());
+            Check("a scaling affine part is not judged rigid",
+                scaledRead != null && !scaledRead.AffinePartsAreRigid);
+
+            // The dangerous one: a reflection flips the sign of every determinant, so folding and
+            // no folding swap places.
+            var reflected = new StubMirsNonRigidRegistration
+            {
+                NonRigidRegistration = new StubNonRigidRegistration
+                {
+                    DeformationField = field,
+                    PostTransformationMatrix = StubNonRigidRegistration.Reflection()
+                }
+            };
+
+            DeformationFieldReader.Result reflectedRead =
+                DeformationFieldReader.TryRead(reflected, new DiagnosticLog());
+
+            Check("a reflecting affine part is detected as negative",
+                reflectedRead != null && reflectedRead.PostDeterminant.Value < 0,
+                reflectedRead == null ? "null" : reflectedRead.PostDeterminant.Value.ToString());
+            Check("a reflecting affine part is not judged rigid",
+                reflectedRead != null && !reflectedRead.AffinePartsAreRigid);
+            Check("the correction factor is reported",
+                reflectedRead != null && Near(reflectedRead.AffineDeterminantProduct.Value, -1.0),
+                reflectedRead == null ? "null" : reflectedRead.AffineDeterminantProduct.ToString());
+        }
+
+        /// <summary>
+        /// TG-132 asks for the influence of folding on the intended use to be evaluated, not for
+        /// any non-zero value to disqualify outright. That judgement needs to know where the
+        /// folding is: against the edge of the field's support, where the algorithm had no image
+        /// to work from, or in the middle of the anatomy.
+        /// </summary>
+        private static void FoldingIsLocatedNotJustCounted()
+        {
+            const int n = 21;
+            const double sp = 1.0;
+
+            // Folding confined to a slab at the low-x edge: u_x = -2x there, identity elsewhere.
+            var atEdge = Wrap(Field(n, n, n, sp, sp, sp,
+                (x, y, z) => x <= 2 ? Vec(-2.0 * x * sp, 0, 0) : Vec(0, 0, 0)));
+
+            DeformationFieldMetrics.Result edge = Measure(atEdge, "folding at the edge");
+            if (edge == null) return;
+
+            Check("edge folding is detected at all", edge.NegativeJacobianPercent > 0.0,
+                edge.NegativeJacobianPercent + "%");
+            Check("edge folding is reported as being at the edge",
+                edge.NegativeBoundaryFraction >= 0.95,
+                edge.NegativeBoundaryFraction.ToString("P0"));
+
+            // Folding in a slab through the centre instead.
+            int mid = n / 2;
+            var atCentre = Wrap(Field(n, n, n, sp, sp, sp,
+                (x, y, z) => Math.Abs(x - mid) <= 1 ? Vec(-2.0 * x * sp, 0, 0) : Vec(0, 0, 0)));
+
+            DeformationFieldMetrics.Result centre = Measure(atCentre, "folding at the centre");
+            if (centre == null) return;
+
+            Check("central folding is detected at all", centre.NegativeJacobianPercent > 0.0,
+                centre.NegativeJacobianPercent + "%");
+            Check("central folding is not attributed to the edge",
+                centre.NegativeBoundaryFraction < 0.5,
+                centre.NegativeBoundaryFraction.ToString("P0"));
+            Check("the folded region is bounded away from the field edges in x",
+                centre.NegativeBoundsMin != null && centre.NegativeBoundsMin[0] > 2 &&
+                centre.NegativeBoundsMax[0] < n - 3,
+                centre.NegativeBoundsMin == null
+                    ? "null"
+                    : "x " + centre.NegativeBoundsMin[0] + "-" + centre.NegativeBoundsMax[0]);
+
+            // A field with no folding must report no location rather than an empty box.
+            DeformationFieldMetrics.Result clean = Measure(
+                Wrap(Field(n, n, n, sp, sp, sp, (x, y, z) => Vec(1, 0, 0))), "clean field");
+            if (clean == null) return;
+
+            Check("a field with no folding reports no folded region",
+                clean.NegativeBoundsMin == null && clean.NegativeNearBoundary == 0);
+            Check("a field with no folding reports a boundary fraction of zero",
+                clean.NegativeBoundaryFraction == 0.0);
         }
 
         private struct RecordedReport

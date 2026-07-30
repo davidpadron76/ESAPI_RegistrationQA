@@ -646,8 +646,11 @@ namespace ESAPI_RegistrationQA.Services
             measurements.JacobianNegativePercent = MeasuredValue.Measured(
                 metrics.NegativeJacobianPercent,
                 string.Format(CultureInfo.InvariantCulture,
-                    "det(I + grad u) over {0:N0} interior grid points, minimum {1:F4}; {2}",
-                    metrics.JacobianSampleCount, metrics.MinJacobian, gridNote));
+                    "det(I + grad u) over {0:N0} interior grid points, minimum {1:F4}{2}; {3}",
+                    metrics.JacobianSampleCount, metrics.MinJacobian,
+                    DescribeFoldingLocation(metrics), gridNote));
+
+            LogFoldingEvidence(field, metrics);
 
             measurements.DvfGradientMax = MeasuredValue.Measured(
                 metrics.MaxGradientMagnitude,
@@ -657,6 +660,78 @@ namespace ESAPI_RegistrationQA.Services
                 metrics.MaxDisplacementMm,
                 "maximum |displacement| over every field point — the real maximum, not the eight-corner " +
                 "bound a rigid transform allows, " + gridNote);
+        }
+
+        /// <summary>
+        /// A short clause naming where the folding sits, for the criterion column. Empty when
+        /// nothing folded.
+        /// </summary>
+        private static string DescribeFoldingLocation(DeformationFieldMetrics.Result metrics)
+        {
+            if (metrics.NegativeJacobianPercent <= 0.0) return string.Empty;
+
+            double fraction = metrics.NegativeBoundaryFraction;
+
+            if (fraction >= 0.95)
+                return ", essentially all of it against the edge of the field";
+            if (fraction >= 0.5)
+                return string.Format(CultureInfo.InvariantCulture,
+                    ", {0:P0} of it against the edge of the field", fraction);
+
+            return string.Format(CultureInfo.InvariantCulture,
+                ", {0:P0} of it away from the edge — inside the field's support", 1.0 - fraction);
+        }
+
+        /// <summary>
+        /// The evidence a physicist needs to act on a folding result, which a percentage alone
+        /// does not carry: where it is, and whether the field's Jacobian is the registration's.
+        ///
+        /// TG-132 asks for the influence of folding on the intended use to be evaluated rather
+        /// than treating any non-zero value as disqualifying outright. That judgement needs to
+        /// know whether the folded region is in the anatomy or hard against the boundary of the
+        /// field's support, where the algorithm had no image to work from.
+        /// </summary>
+        private void LogFoldingEvidence(
+            DeformationFieldReader.Result field, DeformationFieldMetrics.Result metrics)
+        {
+            if (metrics.NegativeJacobianPercent <= 0.0)
+            {
+                _log.Info("jacobian", "no folding: det(I + grad u) is positive at every interior grid point.");
+                return;
+            }
+
+            int negative = (int)Math.Round(
+                metrics.NegativeJacobianPercent * metrics.JacobianSampleCount / 100.0);
+
+            var text = new System.Text.StringBuilder();
+            text.AppendFormat(CultureInfo.InvariantCulture,
+                "{0:N0} of {1:N0} interior points fold (minimum determinant {2:F4}). ",
+                negative, metrics.JacobianSampleCount, metrics.MinJacobian);
+
+            if (metrics.NegativeBoundsMin != null)
+            {
+                text.AppendFormat(CultureInfo.InvariantCulture,
+                    "They span grid indices x {0}-{1}, y {2}-{3}, z {4}-{5} of a {6}x{7}x{8} field; ",
+                    metrics.NegativeBoundsMin[0], metrics.NegativeBoundsMax[0],
+                    metrics.NegativeBoundsMin[1], metrics.NegativeBoundsMax[1],
+                    metrics.NegativeBoundsMin[2], metrics.NegativeBoundsMax[2],
+                    field.XSize, field.YSize, field.ZSize);
+            }
+
+            text.AppendFormat(CultureInfo.InvariantCulture,
+                "{0:N0} of them ({1:P0}) lie within two grid steps of the edge of the field. ",
+                metrics.NegativeNearBoundary, metrics.NegativeBoundaryFraction);
+
+            text.Append(metrics.NegativeBoundaryFraction >= 0.95
+                ? "Folding confined to the edge of the field's support is usually the algorithm " +
+                  "running out of image to drive it rather than a statement about the anatomy — " +
+                  "TG-132 asks for the influence on the intended use to be evaluated, and a region " +
+                  "outside the patient may have none."
+                : "Folding away from the edge is inside the field's support, which is the case " +
+                  "TG-132 is concerned with: evaluate its influence on the intended use before " +
+                  "relying on this registration for dose accumulation or contour propagation.");
+
+            _log.Warning("jacobian", text.ToString());
         }
 
         // ---------------------------------------------------------------- structures

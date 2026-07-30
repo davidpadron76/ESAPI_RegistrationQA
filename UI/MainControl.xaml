@@ -121,6 +121,24 @@
             <Setter Property="RowHeight" Value="30"/>
             <Setter Property="Margin" Value="5"/>
             <Setter Property="CanUserAddRows" Value="False"/>
+
+            <!--
+                Hidden while measuring, so the grid and the progress panel are never both in the
+                layout. They share a Grid cell, and leaving the grid present but empty underneath
+                the panel collapsed its columns: the 220/110/80 px widths came out a few pixels
+                wide once the rows arrived, with the headers reduced to single letters.
+
+                The precise mechanism is not worth chasing, because the condition is avoidable.
+                Before the progress panel existed the grid was measured exactly once — with its
+                data, at full width — because the window was only created after the pass finished.
+                Collapsing it here restores that: it is laid out once, when it has something to
+                lay out.
+            -->
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsMeasuring}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
 
         <!--
