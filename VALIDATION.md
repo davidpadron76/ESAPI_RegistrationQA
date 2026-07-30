@@ -390,9 +390,23 @@ and none of them is a small perturbation. It also implies the affine parts are r
 case — a scaling or reflection in `PreTransformationMatrix` or `PostTransformationMatrix` would
 have put the plugin's determinants out by that factor against Eclipse's.
 
-**Repeat this comparison whenever you can.** Open the Jacobian view in Eclipse, read the colour
-bar, and check it against the min and max the plugin reports in the Jacobian row's note. It costs
-nothing and it is a real answer.
+**There is a second view to compare, and the plugin now reports it.** Eclipse also displays the
+*divergence* of the same field, div u = trace(grad u). It is not a TG-132 metric and is
+deliberately not a table row — adding it would be adding a criterion the report does not have —
+but it is a second independent quantity computed from the same field read, so it goes to the
+Diagnostics tab as `deformation field: divergence`.
+
+The two views constrain each other. Where the deformation is small,
+det(I + grad u) = 1 + div u + higher-order terms, so a large negative divergence should accompany
+volume inversion and a large positive one large expansion. On the phantom case Eclipse showed
+divergence spanning **−2.87 to +1.46** against a determinant of −0.72 to +3.04 — the signs agree
+at both ends, and the gap is the higher-order terms, which is what a deformation this far from
+small should show.
+
+**Repeat both comparisons whenever you can.** Open the Jacobian view in Eclipse, read the colour
+bar, and check it against the min and max in the Jacobian row's note; then switch to the
+divergence view and check it against the Diagnostics line. It costs nothing and it is a real
+answer.
 
 What it does *not* establish: the percentage of folded voxels (2.979 % on that case) and the
 percentiles are not visible on the colour bar, so they remain checked only against the analytic
@@ -526,6 +540,7 @@ Open an issue at
 | 3d | **Deformation field read** | grid + spacing in Diagnostics | | | must be the field's, not the image's |
 | 3d | **Jacobian on a trusted DIR** | 0 % | | | any folding is a Table III breach |
 | 3d | **Jacobian min/max vs Eclipse's colour bar** | agree to 2 dp | | | matched −0.72/+3.04 on 2026-07-30 |
+| 3d | **Divergence vs Eclipse's divergence view** | agree | | | Diagnostics line; Eclipse showed −2.87/+1.46 |
 | 3d | Jacobian departure from 1 | plausible, INFO | | | judge against expected volume change |
 | 3d | DVF gradient (max) | plausible, INFO | | | no TG-132 tolerance |
 | 3d | Max displacement over the field | ≥ the old corner bound | | | true maximum now |

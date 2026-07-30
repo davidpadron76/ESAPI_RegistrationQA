@@ -39,6 +39,20 @@ namespace ESAPI_RegistrationQA.Services
             public double MaxDisplacementMm;
 
             /// <summary>
+            /// Range of the divergence of the displacement field, div u = trace(grad u).
+            ///
+            /// Not a TG-132 metric and not reported as one — it exists because Eclipse displays it
+            /// alongside the Jacobian, which makes it a second quantity the plugin's reading of
+            /// the field can be held against an independent implementation. It comes free: the
+            /// trace is the diagonal of the gradient the Jacobian already needs.
+            ///
+            /// Dimensionless, and related to the determinant by det(I + grad u) = 1 + div u +
+            /// higher-order terms, so the two agree closely only where the deformation is small.
+            /// </summary>
+            public double MinDivergence;
+            public double MaxDivergence;
+
+            /// <summary>
             /// How many of the folded points lie within two grid steps of the edge of the field.
             ///
             /// TG-132 does not ask only whether a registration folds, but what the folding
@@ -154,6 +168,7 @@ namespace ESAPI_RegistrationQA.Services
             // against a clinical expectation.
             var jacobians = new double[(nx - 2) * (ny - 2) * (nz - 2)];
             double maxJacobian = double.MinValue;
+            double minDivergence = double.MaxValue, maxDivergence = double.MinValue;
 
             for (int z = 1; z < nz - 1; z++)
             {
@@ -181,6 +196,12 @@ namespace ESAPI_RegistrationQA.Services
                             dudx.Z, dudy.Z, 1.0 + dudz.Z);
 
                         if (double.IsNaN(j) || double.IsInfinity(j)) continue;
+
+                        // The trace of grad u. Free here, and the quantity Eclipse's divergence
+                        // view shows.
+                        double divergence = dudx.X + dudy.Y + dudz.Z;
+                        if (divergence < minDivergence) minDivergence = divergence;
+                        if (divergence > maxDivergence) maxDivergence = divergence;
 
                         jacobians[samples] = j;
                         samples++;
@@ -237,6 +258,8 @@ namespace ESAPI_RegistrationQA.Services
                 JacobianSampleCount = samples,
                 MaxGradientMagnitude = maxGradient,
                 MaxDisplacementMm = maxDisplacement,
+                MinDivergence = minDivergence,
+                MaxDivergence = maxDivergence,
                 NegativeNearBoundary = negativeNearBoundary,
                 NegativeBoundsMin = negative > 0 ? new[] { minNx, minNy, minNz } : null,
                 NegativeBoundsMax = negative > 0 ? new[] { maxNx, maxNy, maxNz } : null

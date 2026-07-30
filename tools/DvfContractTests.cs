@@ -160,6 +160,7 @@ namespace ESAPI_RegistrationQA.Tools
             AffineDeterminantsAreReadAndJudged();
             FoldingIsLocatedNotJustCounted();
             JacobianDepartureFollowsTableIIISecondClause();
+            DivergenceIsTheTraceOfTheGradient();
 
             Console.WriteLine();
             if (Failures.Count > 0)
@@ -714,6 +715,60 @@ namespace ESAPI_RegistrationQA.Tools
             Check("a localised spike does not dominate the percentile departure",
                 spiked.MaxDepartureFromOne < 0.05,
                 spiked.MaxDepartureFromOne.ToString("F6", CultureInfo.InvariantCulture));
+        }
+
+        /// <summary>
+        /// div u = trace(grad u), the quantity Eclipse displays beside the Jacobian. Verified
+        /// against fields whose divergence is known in closed form, so that the comparison
+        /// against Eclipse's own view tests the field read rather than this arithmetic.
+        /// </summary>
+        private static void DivergenceIsTheTraceOfTheGradient()
+        {
+            const int n = 21;
+            const double sp = 2.0;
+
+            // A pure translation has no gradient at all, so no divergence.
+            DeformationFieldMetrics.Result shift = Measure(
+                Wrap(Field(n, n, n, sp, sp, sp, (x, y, z) => Vec(3, -1, 2))), "translation divergence");
+            if (shift == null) return;
+
+            Check("a pure translation has zero divergence",
+                Math.Abs(shift.MinDivergence) < 1e-9 && Math.Abs(shift.MaxDivergence) < 1e-9,
+                shift.MinDivergence.ToString("E3", CultureInfo.InvariantCulture) + " to " +
+                shift.MaxDivergence.ToString("E3", CultureInfo.InvariantCulture));
+
+            // u = k*x isotropically: each diagonal term is k, so div u = 3k exactly.
+            const double k = 0.10;
+            DeformationFieldMetrics.Result expand = Measure(
+                Wrap(Field(n, n, n, sp, sp, sp, (x, y, z) => Vec(k * x * sp, k * y * sp, k * z * sp))),
+                "expansion divergence");
+            if (expand == null) return;
+
+            Check("uniform expansion has divergence 3k",
+                Near(expand.MinDivergence, 3.0 * k, 1e-6) && Near(expand.MaxDivergence, 3.0 * k, 1e-6),
+                expand.MinDivergence.ToString("F6", CultureInfo.InvariantCulture));
+
+            // u_x = -2x and nothing else: div u = -2.
+            DeformationFieldMetrics.Result fold = Measure(
+                Wrap(Field(n, n, n, sp, sp, sp, (x, y, z) => Vec(-2.0 * x * sp, 0, 0))),
+                "fold divergence");
+            if (fold == null) return;
+
+            Check("a single-axis inversion has divergence -2",
+                Near(fold.MinDivergence, -2.0, 1e-6) && Near(fold.MaxDivergence, -2.0, 1e-6),
+                fold.MinDivergence.ToString("F6", CultureInfo.InvariantCulture));
+
+            // Compression and expansion must land on opposite sides of zero, which is the sign
+            // convention the Eclipse comparison depends on.
+            DeformationFieldMetrics.Result shrink = Measure(
+                Wrap(Field(n, n, n, sp, sp, sp,
+                    (x, y, z) => Vec(-k * x * sp, -k * y * sp, -k * z * sp))), "compression divergence");
+            if (shrink == null) return;
+
+            Check("compression is negative divergence, expansion positive",
+                shrink.MaxDivergence < 0 && expand.MinDivergence > 0,
+                shrink.MaxDivergence.ToString("F4", CultureInfo.InvariantCulture) + " vs " +
+                expand.MinDivergence.ToString("F4", CultureInfo.InvariantCulture));
         }
 
         private struct RecordedReport

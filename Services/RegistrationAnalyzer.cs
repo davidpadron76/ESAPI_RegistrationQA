@@ -672,6 +672,16 @@ namespace ESAPI_RegistrationQA.Services
                     "|J| p1 {0:F3}, median {1:F3}, p99 {2:F3}",
                     metrics.JacobianP1, metrics.JacobianMedian, metrics.JacobianP99));
 
+            // Diagnostics, not a table row: divergence is not a TG-132 metric and adding it to the
+            // graded surface would be adding a criterion the report does not have. Its worth is as
+            // a second quantity to hold against Eclipse's own display of the same field.
+            _log.Info("deformation field: divergence", string.Format(CultureInfo.InvariantCulture,
+                "div u ranges {0:F2} to {1:F2}. Eclipse shows this field under its divergence view; " +
+                "the two should agree. Not a TG-132 metric — reported here only as a cross-check on " +
+                "the field read, alongside the Jacobian range {2:F2} to {3:F2}.",
+                metrics.MinDivergence, metrics.MaxDivergence,
+                metrics.MinJacobian, metrics.MaxJacobian));
+
             LogFoldingEvidence(field, metrics);
 
             measurements.DvfGradientMax = MeasuredValue.Measured(
