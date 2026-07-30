@@ -557,7 +557,7 @@ Open an issue at
 | 3d | **Jacobian min/max vs Eclipse's colour bar** | agree to 2 dp | | | matched −0.72/+3.04 on 2026-07-30 |
 | 3d | **Divergence vs Eclipse's divergence view** | agree | | | Diagnostics line; Eclipse showed −2.87/+1.46 |
 | 3d | **Distance vs Eclipse's distance view** | agree | | | matched 58.4 mm on 2026-07-30 |
-| 3d | Curl vs Eclipse, if it displays one | agree | | | Diagnostics line |
+| 3d | **Curl vs Eclipse's curl view** | agree | | | Eclipse showed 0–2.15 on 2026-07-30; plugin value not yet compared — needs a rebuild after b9976ec |
 | 2 | **Per-axis displacement vs Eclipse** | X=LR, Y=AP, Z=CC | | | settles the axis convention without a known shift |
 | 3d | Jacobian departure from 1 | plausible, INFO | | | judge against expected volume change |
 | 3d | DVF gradient (max) | plausible, INFO | | | no TG-132 tolerance |
