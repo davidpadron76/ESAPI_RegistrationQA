@@ -271,7 +271,17 @@
                            Margin="0,10,0,0" HorizontalAlignment="Center"
                            TextWrapping="Wrap" TextAlignment="Center"/>
 
-                <ProgressBar Minimum="0" Maximum="{Binding StageTotal}" Value="{Binding StageCompleted}"
+                <!--
+                    Mode=OneWay on Value is required, not stylistic. RangeBase.Value is registered
+                    with BindsTwoWayByDefault, so an unqualified binding tries to write the value
+                    back into StageCompleted, whose setter is private — and WPF throws
+                    InvalidOperationException while building the visual tree, before the window is
+                    ever shown. It compiles cleanly either way; the failure is at run time only.
+                    Maximum carries it too, for the same reason it would if the default ever changed.
+                -->
+                <ProgressBar Minimum="0"
+                             Maximum="{Binding StageTotal, Mode=OneWay}"
+                             Value="{Binding StageCompleted, Mode=OneWay}"
                              Height="6" Width="380" Margin="0,12,0,0"
                              Foreground="{StaticResource Accent}" Background="#DDE3EA"
                              BorderThickness="0"/>
