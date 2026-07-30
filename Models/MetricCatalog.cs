@@ -24,6 +24,14 @@ namespace ESAPI_RegistrationQA.Models
         /// print two incompatible scales under one heading.
         /// </summary>
         public const string DvfGradientMax = "DVF_Gradient_Max";
+
+        /// <summary>
+        /// The second clause of the Table III Jacobian row, which
+        /// <see cref="JacobianNegative"/> does not cover. That one implements "no negative
+        /// values"; this one measures the departure from 1 the same sentence goes on to
+        /// constrain.
+        /// </summary>
+        public const string JacobianDeparture = "Jacobian_Departure";
         public const string Dsc = "DSC";
         public const string Mda = "MDA";
         public const string Hd95 = "HD95";
@@ -293,6 +301,45 @@ namespace ESAPI_RegistrationQA.Models
                     "constant, so no local irregularity is possible — but a statement that is true by " +
                     "definition cannot fail anything. For a deformable registration the real quantity is " +
                     "reported separately as the DVF gradient, which is measured rather than asserted."));
+
+            Register(new MetricDefinition(
+                key: MetricKeys.JacobianDeparture,
+                displayName: "Jacobian departure from 1",
+                unit: "",
+                higherIsBetter: false,
+                description:
+                    "How far the Jacobian determinant departs from 1 over the central 98 % of the " +
+                    "deformation field: the larger of |p99 - 1| and |1 - p1|. A determinant of 1 " +
+                    "means the deformation preserves volume at that point; below 1 it compresses, " +
+                    "above 1 it expands. Percentiles rather than the extremes, because a single " +
+                    "voxel at the edge of the field's support controls min and max while saying " +
+                    "nothing about the deformation as a whole.",
+                clinicalQuestion:
+                    "Is the volume change this deformation applies the volume change the case led " +
+                    "you to expect?",
+                decisionSupported:
+                    "A departure larger than the anatomy can justify — a structure expanding where " +
+                    "it was expected to shrink, or either happening far more than the interval " +
+                    "between scans allows — points at the registration rather than at the patient. " +
+                    "It is the check that catches a deformation which folds nowhere and is still " +
+                    "physically wrong.",
+                standardBasis:
+                    "TG-132 Table III, second clause of the Jacobian row: \u201Cno negative values, " +
+                    "nor values departing from 1 relative to what is expected for the clinical " +
+                    "scenario (0-1 for structures where volume reduction is expected; above 1 for " +
+                    "structures where volume expansion is expected)\u201D.",
+                gating: false,
+                gatingBasis:
+                    "Measured but not graded, and the reason is in the criterion itself: Table III " +
+                    "ties the acceptable departure to \u201Cwhat is expected for the clinical " +
+                    "scenario\u201D and states it per structure — 0-1 where reduction is expected, " +
+                    "above 1 where expansion is. Neither the expectation nor the structure it " +
+                    "applies to is available to this tool, and choosing a fixed band here would be " +
+                    "inventing the very number the report declined to give. What the tool can do " +
+                    "honestly is measure the departure and put it in front of the physicist, who " +
+                    "knows which structures were expected to change and by how much. The first " +
+                    "clause of the same row is gated, at 0 %, because \u201Cno negative values\u201D " +
+                    "is absolute and needs no clinical context."));
 
             Register(new MetricDefinition(
                 key: MetricKeys.DvfGradientMax,

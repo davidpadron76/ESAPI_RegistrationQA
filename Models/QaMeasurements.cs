@@ -143,6 +143,7 @@ namespace ESAPI_RegistrationQA.Models
         public MeasuredValue MaxDisplacement { get; set; }
         public MeasuredValue Smoothness { get; set; }
         public MeasuredValue DvfGradientMax { get; set; }
+        public MeasuredValue JacobianDeparture { get; set; }
 
         // Structures
         public MeasuredValue Dsc { get; set; }
@@ -242,6 +243,7 @@ namespace ESAPI_RegistrationQA.Models
             MaxDisplacement = MeasuredValue.Unavailable(notMeasured);
             Smoothness = MeasuredValue.Unavailable(notMeasured);
             DvfGradientMax = MeasuredValue.Unavailable(notMeasured);
+            JacobianDeparture = MeasuredValue.Unavailable(notMeasured);
             Dsc = MeasuredValue.Unavailable(notMeasured);
             Mda = MeasuredValue.Unavailable(notMeasured);
             Hd95 = MeasuredValue.Unavailable(notMeasured);
@@ -261,6 +263,7 @@ namespace ESAPI_RegistrationQA.Models
                 case MetricKeys.MaxDisplacement: return MaxDisplacement;
                 case MetricKeys.Smoothness: return Smoothness;
                 case MetricKeys.DvfGradientMax: return DvfGradientMax;
+                case MetricKeys.JacobianDeparture: return JacobianDeparture;
                 case MetricKeys.Dsc: return Dsc;
                 case MetricKeys.Mda: return Mda;
                 case MetricKeys.Hd95: return Hd95;

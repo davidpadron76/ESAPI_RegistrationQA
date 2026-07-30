@@ -29,7 +29,8 @@ number.
 | **NCC** | Does the anatomy line up, same modality? | §4.C.3, admitted for assessment | **No** — no tolerance exists | Measured |
 | **NMI** | Does it line up when intensities are not linearly comparable (CT-MR, CT-PET)? | §4.C.3, admitted for assessment | **No** — no tolerance exists | Measured |
 | **SSD** | Are there local intensity differences beyond the overall alignment? | §4.C.3, admitted for assessment | **No** — no tolerance exists | Measured |
-| **Jacobian < 0** | Has the deformation folded tissue onto itself? | Table III, no negative values | Yes, at 0 % | Exact for rigid · measured from the field for DIR |
+| **Jacobian < 0** | Has the deformation folded tissue onto itself? | Table III, first clause: no negative values | Yes, at 0 % | Exact for rigid · measured from the field for DIR |
+| **Jacobian departure from 1** | Is the volume change the one the case led you to expect? | Table III, second clause: no departure from 1 beyond what the clinical scenario expects | **No** — the report ties it to the structure and the expectation, neither of which the tool knows | Exact for rigid · measured from the field for DIR |
 | **Max Displacement** | How far has the registration moved the anatomy? | Not tabulated; plausibility check | **No** — limits were invented | Exact for rigid · measured over the field for DIR |
 | **Smoothness** | Is the deformation physically plausible? | Not tabulated; related to §4.C.3 | **No** — limits were invented | Exact for rigid · hidden for DIR, see DVF gradient |
 | **DVF Gradient (max)** | Does the deformation vary abruptly between neighbouring points? | Not tabulated; related to §4.C.3 | **No** — no tolerance exists | Measured for DIR only |
@@ -59,7 +60,8 @@ and the plugin measures it.
 | **MDA** | same | Table III, verbatim |
 | **Inverse consistency** | same | Table III, verbatim |
 | **DSC** | ≥ 0.90 green, ≥ 0.80 yellow | Table III's `~0.80–0.90` range mapped onto the two bands |
-| **Jacobian < 0** | 0 % | Table III, "no negative values" |
+| **Jacobian < 0** | 0 % | Table III, first clause: "no negative values" |
+| **Jacobian departure from 1** | *ungraded* | Table III, second clause — tied to the structure and the expected volume change, so no fixed band exists to apply |
 
 The one exception the report makes: *"stereotactic radiosurgery tolerances are 1 mm."* That is
 the whole of the profile selector — **Standard treatment** or **Stereotactic (SRS/SBRT)**.
@@ -110,6 +112,14 @@ hidden and the **DVF gradient** carries the real measurement, on the opposite sc
 means what 1.0 means here. It is ungraded for the same reason — the report sets no limit for
 field regularity, so any number chosen would be invented. Section 5 of `VALIDATION.md` is how a
 local baseline makes it actionable.
+
+**The Jacobian row of Table III has two clauses, and only one of them can be gated.** The row
+reads: no negative values, *nor values departing from 1 relative to what is expected for the
+clinical scenario (0–1 for structures where volume reduction is expected; above 1 where expansion
+is expected)*. The first clause is absolute and is gated at 0 %. The second is explicitly relative
+to the structure and to what the physicist expected of it, so it is measured — as the departure of
+the p1/p99 Jacobian from 1 — and shown ungraded. Picking a fixed band there would invent the very
+number the report declined to give.
 
 **The Jacobian limit is 0 %.** Table III admits no negative values; the profiles used to admit
 between 1 % and 4 %, so the tool was more permissive than the standard it cites, on its own

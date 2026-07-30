@@ -159,6 +159,7 @@ namespace ESAPI_RegistrationQA.Tools
             AFailingProgressSinkDoesNotAbortTheMeasurement();
             AffineDeterminantsAreReadAndJudged();
             FoldingIsLocatedNotJustCounted();
+            JacobianDepartureFollowsTableIIISecondClause();
 
             Console.WriteLine();
             if (Failures.Count > 0)
@@ -635,6 +636,84 @@ namespace ESAPI_RegistrationQA.Tools
                 clean.NegativeBoundsMin == null && clean.NegativeNearBoundary == 0);
             Check("a field with no folding reports a boundary fraction of zero",
                 clean.NegativeBoundaryFraction == 0.0);
+        }
+
+        /// <summary>
+        /// TG-132 Table III's Jacobian row has two clauses. The first — no negative values — is
+        /// gated at 0 %. The second constrains how far the determinant departs from 1 relative to
+        /// the volume change expected for the structure, and this measures it.
+        ///
+        /// The percentile basis is the point of the last case here: min and max are controlled by
+        /// whichever single voxel is worst, usually at the edge of the field's support, so a
+        /// metric built on them would report a wild departure for a deformation that is uniform
+        /// everywhere it matters.
+        /// </summary>
+        private static void JacobianDepartureFollowsTableIIISecondClause()
+        {
+            const int n = 21;
+            const double sp = 1.0;
+
+            // A pure translation preserves volume everywhere: J = 1, so the departure is 0.
+            DeformationFieldMetrics.Result rigidLike = Measure(
+                Wrap(Field(n, n, n, sp, sp, sp, (x, y, z) => Vec(3, -1, 2))), "volume-preserving");
+            if (rigidLike == null) return;
+
+            Check("a volume-preserving field departs from 1 by 0",
+                Near(rigidLike.MaxDepartureFromOne, 0.0, 1e-9),
+                rigidLike.MaxDepartureFromOne.ToString("E3", CultureInfo.InvariantCulture));
+            Check("a volume-preserving field has median Jacobian 1",
+                Near(rigidLike.JacobianMedian, 1.0, 1e-9),
+                rigidLike.JacobianMedian.ToString("F9", CultureInfo.InvariantCulture));
+
+            // Uniform expansion by k: J = (1+k)^3 everywhere, so every percentile is that value
+            // and the departure is (1+k)^3 - 1. Expansion, so above 1 — the sign Table III cares
+            // about for a structure expected to grow.
+            const double k = 0.10;
+            DeformationFieldMetrics.Result expand = Measure(
+                Wrap(Field(n, n, n, sp, sp, sp, (x, y, z) => Vec(k * x * sp, k * y * sp, k * z * sp))),
+                "uniform expansion");
+            if (expand == null) return;
+
+            double expected = Math.Pow(1.0 + k, 3);
+            Check("uniform expansion reports its determinant at every percentile",
+                Near(expand.JacobianP1, expected, 1e-6) &&
+                Near(expand.JacobianMedian, expected, 1e-6) &&
+                Near(expand.JacobianP99, expected, 1e-6),
+                expand.JacobianP1.ToString("F6", CultureInfo.InvariantCulture) + " / " +
+                expand.JacobianMedian.ToString("F6", CultureInfo.InvariantCulture) + " / " +
+                expand.JacobianP99.ToString("F6", CultureInfo.InvariantCulture));
+            Check("uniform expansion departs from 1 by (1+k)^3 - 1",
+                Near(expand.MaxDepartureFromOne, expected - 1.0, 1e-6),
+                expand.MaxDepartureFromOne.ToString("F6", CultureInfo.InvariantCulture));
+            Check("expansion is above 1, the side Table III ties to expected growth",
+                expand.JacobianMedian > 1.0);
+
+            // Compression: below 1, the side Table III ties to expected volume reduction.
+            DeformationFieldMetrics.Result shrink = Measure(
+                Wrap(Field(n, n, n, sp, sp, sp,
+                    (x, y, z) => Vec(-k * x * sp, -k * y * sp, -k * z * sp))), "uniform compression");
+            if (shrink == null) return;
+
+            Check("compression is below 1, the side Table III ties to expected reduction",
+                shrink.JacobianMedian < 1.0,
+                shrink.JacobianMedian.ToString("F6", CultureInfo.InvariantCulture));
+
+            // The case that justifies percentiles. One small corner distorts violently; the rest
+            // of the field is a plain translation. min/max would report the corner; p1/p99 should
+            // report the field.
+            var spike = Wrap(Field(n, n, n, sp, sp, sp,
+                (x, y, z) => (x <= 1 && y <= 1 && z <= 1) ? Vec(-4.0 * x * sp, 0, 0) : Vec(3, -1, 2)));
+
+            DeformationFieldMetrics.Result spiked = Measure(spike, "localised spike");
+            if (spiked == null) return;
+
+            Check("a localised spike still moves the full range",
+                spiked.MinJacobian < 0.5 || spiked.MaxJacobian > 1.5,
+                "min " + spiked.MinJacobian.ToString("F3", CultureInfo.InvariantCulture) +
+                ", max " + spiked.MaxJacobian.ToString("F3", CultureInfo.InvariantCulture));
+            Check("a localised spike does not dominate the percentile departure",
+                spiked.MaxDepartureFromOne < 0.05,
+                spiked.MaxDepartureFromOne.ToString("F6", CultureInfo.InvariantCulture));
         }
 
         private struct RecordedReport

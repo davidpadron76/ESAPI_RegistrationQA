@@ -540,6 +540,13 @@ namespace ESAPI_RegistrationQA.Services
                 "this is a rigid registration: the displacement gradient is constant, so there is no " +
                 "local irregularity to measure. Smoothness carries that statement instead.");
 
+            // The second clause of the Table III Jacobian row. A rigid transform preserves volume
+            // everywhere, so the departure from 1 is exactly zero — true by definition, like the
+            // 0 % above, and marked analytic for the same reason.
+            measurements.JacobianDeparture = MeasuredValue.Analytic(0.0,
+                "|J| = 1 at every point of a rigid transform, so no volume change is applied. " +
+                analyticNote);
+
             if (measurements.Transform == null)
             {
                 measurements.MaxDisplacement = MeasuredValue.Unavailable(
@@ -604,6 +611,7 @@ namespace ESAPI_RegistrationQA.Services
                     "different transform from the one under audit.";
 
                 measurements.JacobianNegativePercent = MeasuredValue.Unavailable(reason);
+                measurements.JacobianDeparture = MeasuredValue.Unavailable(reason);
                 measurements.DvfGradientMax = MeasuredValue.Unavailable(reason);
                 measurements.MaxDisplacement = MeasuredValue.Unavailable(reason);
                 return;
@@ -623,6 +631,7 @@ namespace ESAPI_RegistrationQA.Services
                                 (problem ?? "no metric could be computed from it") + ".";
 
                 measurements.JacobianNegativePercent = MeasuredValue.Unavailable(reason);
+                measurements.JacobianDeparture = MeasuredValue.Unavailable(reason);
                 measurements.DvfGradientMax = MeasuredValue.Unavailable(reason);
 
                 // Maximum displacement needs no derivative, so a grid too thin for a central
@@ -649,6 +658,16 @@ namespace ESAPI_RegistrationQA.Services
                     "det(I + grad u) over {0:N0} interior grid points, minimum {1:F4}{2}; {3}",
                     metrics.JacobianSampleCount, metrics.MinJacobian,
                     DescribeFoldingLocation(metrics), gridNote));
+
+            measurements.JacobianDeparture = MeasuredValue.Measured(
+                metrics.MaxDepartureFromOne,
+                string.Format(CultureInfo.InvariantCulture,
+                    "Jacobian p1 {0:F4}, median {1:F4}, p99 {2:F4} (full range {3:F4} to {4:F4}); " +
+                    "the value is the larger of |p99-1| and |1-p1|. TG-132 ties the acceptable " +
+                    "departure to the volume change expected for the structure, which is the " +
+                    "physicist's to apply; {5}",
+                    metrics.JacobianP1, metrics.JacobianMedian, metrics.JacobianP99,
+                    metrics.MinJacobian, metrics.MaxJacobian, gridNote));
 
             LogFoldingEvidence(field, metrics);
 
@@ -1490,6 +1509,7 @@ namespace ESAPI_RegistrationQA.Services
             measurements.MaxDisplacement = MeasuredValue.Unavailable(reason);
             measurements.Smoothness = MeasuredValue.Unavailable(reason);
             measurements.DvfGradientMax = MeasuredValue.Unavailable(reason);
+            measurements.JacobianDeparture = MeasuredValue.Unavailable(reason);
             measurements.Dsc = MeasuredValue.Unavailable(reason);
             measurements.Hd95 = MeasuredValue.Unavailable(reason);
             measurements.TreMean = MeasuredValue.Unavailable(reason);

@@ -59,6 +59,34 @@ namespace ESAPI_RegistrationQA.Services
             public int[] NegativeBoundsMin;
             public int[] NegativeBoundsMax;
 
+            /// <summary>
+            /// Distribution of the Jacobian determinant, for the second clause of TG-132
+            /// Table III: "no values departing from 1 relative to what is expected for the
+            /// clinical scenario (0-1 where volume reduction is expected, above 1 where
+            /// expansion is expected)".
+            ///
+            /// Percentiles rather than the extremes alone: a single voxel at the edge of the
+            /// field's support says nothing about whether the deformation as a whole is
+            /// plausible, and min/max are exactly the values that voxel controls.
+            /// </summary>
+            public double JacobianP1;
+            public double JacobianMedian;
+            public double JacobianP99;
+            public double MaxJacobian;
+
+            /// <summary>
+            /// How far the Jacobian departs from 1 over the central 98 % of the field — the
+            /// larger of |p99 - 1| and |1 - p1|.
+            ///
+            /// A measurement, not a threshold. Whether a given departure is acceptable depends on
+            /// the structure and on whether volume change was expected there, which is what
+            /// Table III ties the criterion to and what this tool cannot know.
+            /// </summary>
+            public double MaxDepartureFromOne
+            {
+                get { return Math.Max(Math.Abs(JacobianP99 - 1.0), Math.Abs(1.0 - JacobianP1)); }
+            }
+
             /// <summary>Fraction of folded points that sit against the field's edge, 0 to 1.</summary>
             public double NegativeBoundaryFraction
             {
@@ -120,6 +148,13 @@ namespace ESAPI_RegistrationQA.Services
             int minNx = int.MaxValue, minNy = int.MaxValue, minNz = int.MaxValue;
             int maxNx = int.MinValue, maxNy = int.MinValue, maxNz = int.MinValue;
 
+            // Kept so the distribution can be reported, not only the extremes. Sorting 1.4 million
+            // doubles costs about a tenth of the field read it follows, and an exact percentile is
+            // worth more than a histogram's approximation on a number a physicist will compare
+            // against a clinical expectation.
+            var jacobians = new double[(nx - 2) * (ny - 2) * (nz - 2)];
+            double maxJacobian = double.MinValue;
+
             for (int z = 1; z < nz - 1; z++)
             {
                 for (int y = 1; y < ny - 1; y++)
@@ -147,8 +182,10 @@ namespace ESAPI_RegistrationQA.Services
 
                         if (double.IsNaN(j) || double.IsInfinity(j)) continue;
 
+                        jacobians[samples] = j;
                         samples++;
                         if (j < minJacobian) minJacobian = j;
+                        if (j > maxJacobian) maxJacobian = j;
 
                         if (j <= 0.0)
                         {
@@ -185,10 +222,18 @@ namespace ESAPI_RegistrationQA.Services
                 return null;
             }
 
+            // Only the entries actually written: a point whose derivatives came back non-finite is
+            // skipped above, so samples can be short of the array's length.
+            Array.Sort(jacobians, 0, samples);
+
             return new Result
             {
                 NegativeJacobianPercent = 100.0 * negative / samples,
                 MinJacobian = minJacobian,
+                MaxJacobian = maxJacobian,
+                JacobianP1 = Percentile(jacobians, samples, 0.01),
+                JacobianMedian = Percentile(jacobians, samples, 0.50),
+                JacobianP99 = Percentile(jacobians, samples, 0.99),
                 JacobianSampleCount = samples,
                 MaxGradientMagnitude = maxGradient,
                 MaxDisplacementMm = maxDisplacement,
@@ -196,6 +241,22 @@ namespace ESAPI_RegistrationQA.Services
                 NegativeBoundsMin = negative > 0 ? new[] { minNx, minNy, minNz } : null,
                 NegativeBoundsMax = negative > 0 ? new[] { maxNx, maxNy, maxNz } : null
             };
+        }
+
+        /// <summary>
+        /// Nearest-rank percentile over the already-sorted prefix. No interpolation: the value
+        /// reported is one the field actually attains, which is the honest thing for a number a
+        /// physicist will hold against a clinical expectation.
+        /// </summary>
+        private static double Percentile(double[] sorted, int count, double fraction)
+        {
+            if (count <= 0) return double.NaN;
+
+            int index = (int)Math.Ceiling(fraction * count) - 1;
+            if (index < 0) index = 0;
+            if (index >= count) index = count - 1;
+
+            return sorted[index];
         }
 
         private static double Determinant(

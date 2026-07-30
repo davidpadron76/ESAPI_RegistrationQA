@@ -351,7 +351,8 @@ accounted for in the diagnostics tab instead. So:
 **Setup.** Open a deformable registration. The Diagnostics tab should carry a line beginning
 `deformation field: read from ...DeformationField`, naming the grid size and its spacing.
 
-**Expected.** Three rows appear that a rigid case does not have: `Jacobian < 0`,
+**Expected.** Four rows appear that a rigid case does not have: `Jacobian < 0`,
+`Jacobian departure from 1`,
 `DVF Gradient (max)` and a `Max Displacement` measured over every field point rather than the
 eight FOV corners.
 
@@ -376,9 +377,14 @@ eight FOV corners.
 actually used. **None of it has run against a real deformation with a known answer.** If you can
 produce a phantom with a known applied deformation, that is the test worth doing.
 
-**Nothing here is graded.** TG-132 gives a tolerance for the Jacobian only — no negative values
-— and that one is applied. The DVF gradient has no tolerance in the report, so it is shown as
-INFO; section 5 is how it becomes actionable.
+**Only one thing here is graded, and it is half of one row.** TG-132 Table III's Jacobian row
+reads: no negative values, *nor values departing from 1 relative to what is expected for the
+clinical scenario (0–1 for structures where volume reduction is expected; above 1 where expansion
+is expected)*. The first clause is absolute and is gated at 0 %. The second is measured — as the
+departure of the p1/p99 Jacobian from 1 — and shown ungraded, because the report ties it to the
+structure and to what you expected of it. **That second number is yours to judge:** compare it
+against the volume change the interval between the two scans can justify. The DVF gradient has no
+tolerance in the report either, so it is INFO as well; section 5 is how both become actionable.
 
 ## 4. Multimodal pair
 
@@ -463,7 +469,8 @@ Open an issue at
 | NCC / NMI / SSD tolerances | None exist. TG-132 gives no limit for any of the three and §4.C.3 says they do not convert into spatial accuracy. Shown as **INFO** — value, no colour, no effect on the verdict. Section 5 is how you make them actionable. |
 | Smoothness tolerance | Same: not named in TG-132, limits were invented. Shown as **INFO**. For a rigid transform the value is 1.0 by definition. |
 | Max displacement tolerance | Applied only when both series share a DICOM frame of reference. Otherwise the magnitude spans two coordinate systems and is shown as **INFO**. |
-| Jacobian tolerance | 0 % in every profile, matching Table III's "no negative values". Not varied by anatomical site: the report ties this tolerance to the physics. |
+| Jacobian tolerance | 0 % in every profile, matching the first clause of Table III's Jacobian row, "no negative values". Not varied by anatomical site: the report ties this clause to the physics. |
+| Jacobian departure from 1 | **Measured, not graded.** The second clause of the same row constrains departure from 1 "relative to what is expected for the clinical scenario", per structure. Neither the expectation nor the structure it applies to is available to the tool, so a fixed band here would invent the number the report declined to give. Reported as the departure of the p1/p99 Jacobian from 1, for the physicist to judge. |
 | Threshold profiles | Replaced. The four anatomical profiles had no basis in TG-132: the report gives no site-dependent tolerance, and the two interobserver studies it cites ran the other way from what they encoded. TRE, MDA and consistency now take the maximum voxel dimension of the images, DSC the 0.80–0.90 range of Table III, and the selector offers only what the report distinguishes — standard treatment or stereotactic, where it sets 1 mm. |
 | Registration matrix | The property holding it varies between Eclipse versions. A dozen paths and seven container shapes are tried, then a reflection sweep. If none answers, everything downstream is N/A and the object's member list goes to the Diagnostics tab. See test 0. |
 | Direction cosines | If the API does not expose them, canonical axial orientation is assumed and a warning is logged. A tilted-gantry acquisition would be misread; the Diagnostics tab will say so. |
@@ -497,6 +504,7 @@ Open an issue at
 | 3b | Inverse consistency residual | ≤ max voxel dim | | | |
 | 3d | **Deformation field read** | grid + spacing in Diagnostics | | | must be the field's, not the image's |
 | 3d | **Jacobian on a trusted DIR** | 0 % | | | any folding is a Table III breach |
+| 3d | Jacobian departure from 1 | plausible, INFO | | | judge against expected volume change |
 | 3d | DVF gradient (max) | plausible, INFO | | | no TG-132 tolerance |
 | 3d | Max displacement over the field | ≥ the old corner bound | | | true maximum now |
 | 3c | DSC on a matched structure | plausible | | | |
