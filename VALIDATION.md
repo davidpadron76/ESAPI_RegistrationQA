@@ -403,10 +403,25 @@ divergence spanning **−2.87 to +1.46** against a determinant of −0.72 to +3.
 at both ends, and the gap is the higher-order terms, which is what a deformation this far from
 small should show.
 
-**Repeat both comparisons whenever you can.** Open the Jacobian view in Eclipse, read the colour
-bar, and check it against the min and max in the Jacobian row's note; then switch to the
-divergence view and check it against the Diagnostics line. It costs nothing and it is a real
-answer.
+**The distance view matched too, exactly.** Eclipse showed 0 to **58.4 mm**; the plugin reported a
+maximum displacement of **58.399 mm**. That one also resolved an ambiguity worth recording: the
+two series sit in different frames of reference with a 122.75 mm offset between them, and the
+agreement at 58.4 mm confirms that Eclipse's distance view — like the plugin's max displacement —
+measures the deformation field alone and not the total transform including that offset.
+
+**Repeat every comparison you can.** The Diagnostics tab now carries a
+`deformation field: cross-checks` line holding the Jacobian range, the divergence range, the
+maximum distance and the maximum curl together, precisely so they can be read against Eclipse's
+views one after another. Any single disagreement points at the field read rather than at the
+registration, because all four come from the same read.
+
+**One comparison is worth more than the rest, and it is not on this list.** A second Diagnostics
+line, `deformation field: displacement per axis`, gives the field's range on X, Y and Z
+separately. If Eclipse displays the field per component, checking those three against it settles
+the axis convention — the question test 2 calls the largest open risk in the project, and which
+has so far needed a phantom shifted by a known amount to answer. The same goes for the rigid
+translation: Eclipse displays the registration's own translation, and holding it against the
+plugin's `Translation … (LR / AP / CC)` line answers test 2 directly, without shifting anything.
 
 What it does *not* establish: the percentage of folded voxels (2.979 % on that case) and the
 percentiles are not visible on the colour bar, so they remain checked only against the analytic
@@ -541,6 +556,9 @@ Open an issue at
 | 3d | **Jacobian on a trusted DIR** | 0 % | | | any folding is a Table III breach |
 | 3d | **Jacobian min/max vs Eclipse's colour bar** | agree to 2 dp | | | matched −0.72/+3.04 on 2026-07-30 |
 | 3d | **Divergence vs Eclipse's divergence view** | agree | | | Diagnostics line; Eclipse showed −2.87/+1.46 |
+| 3d | **Distance vs Eclipse's distance view** | agree | | | matched 58.4 mm on 2026-07-30 |
+| 3d | Curl vs Eclipse, if it displays one | agree | | | Diagnostics line |
+| 2 | **Per-axis displacement vs Eclipse** | X=LR, Y=AP, Z=CC | | | settles the axis convention without a known shift |
 | 3d | Jacobian departure from 1 | plausible, INFO | | | judge against expected volume change |
 | 3d | DVF gradient (max) | plausible, INFO | | | no TG-132 tolerance |
 | 3d | Max displacement over the field | ≥ the old corner bound | | | true maximum now |

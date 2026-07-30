@@ -22,6 +22,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using ESAPI_RegistrationQA.Models;
 using ESAPI_RegistrationQA.Services;
 
@@ -161,6 +162,7 @@ namespace ESAPI_RegistrationQA.Tools
             FoldingIsLocatedNotJustCounted();
             JacobianDepartureFollowsTableIIISecondClause();
             DivergenceIsTheTraceOfTheGradient();
+            CurlAndPerAxisRangesAreCorrect();
 
             Console.WriteLine();
             if (Failures.Count > 0)
@@ -769,6 +771,72 @@ namespace ESAPI_RegistrationQA.Tools
                 shrink.MaxDivergence < 0 && expand.MinDivergence > 0,
                 shrink.MaxDivergence.ToString("F4", CultureInfo.InvariantCulture) + " vs " +
                 expand.MinDivergence.ToString("F4", CultureInfo.InvariantCulture));
+        }
+
+        /// <summary>
+        /// Curl is the rotational part of the gradient the divergence takes the trace of, and the
+        /// per-axis ranges are what would settle whether this code's X/Y/Z are Eclipse's.
+        /// </summary>
+        private static void CurlAndPerAxisRangesAreCorrect()
+        {
+            const int n = 21;
+            const double sp = 2.0;
+
+            // A pure translation and an isotropic expansion are both irrotational: curl is zero.
+            DeformationFieldMetrics.Result shift = Measure(
+                Wrap(Field(n, n, n, sp, sp, sp, (x, y, z) => Vec(3, -1, 2))), "translation curl");
+            if (shift == null) return;
+
+            Check("a pure translation has zero curl", shift.MaxCurlMagnitude < 1e-9,
+                shift.MaxCurlMagnitude.ToString("E3", CultureInfo.InvariantCulture));
+
+            DeformationFieldMetrics.Result expand = Measure(
+                Wrap(Field(n, n, n, sp, sp, sp,
+                    (x, y, z) => Vec(0.1 * x * sp, 0.1 * y * sp, 0.1 * z * sp))), "expansion curl");
+            if (expand == null) return;
+
+            Check("an isotropic expansion has zero curl", expand.MaxCurlMagnitude < 1e-6,
+                expand.MaxCurlMagnitude.ToString("E3", CultureInfo.InvariantCulture));
+
+            // A shear u = (a*y, 0, 0) has curl_z = d(u_y)/dx - d(u_x)/dy = -a, so |curl| = |a|,
+            // while its divergence is 0 — the case that separates the two quantities.
+            const double a = 0.25;
+            DeformationFieldMetrics.Result shear = Measure(
+                Wrap(Field(n, n, n, sp, sp, sp, (x, y, z) => Vec(a * y * sp, 0, 0))), "shear curl");
+            if (shear == null) return;
+
+            Check("a shear has curl equal to the shear rate",
+                Near(shear.MaxCurlMagnitude, a, 1e-6),
+                shear.MaxCurlMagnitude.ToString("F6", CultureInfo.InvariantCulture));
+            Check("a shear has zero divergence, unlike its curl",
+                Math.Abs(shear.MinDivergence) < 1e-9 && Math.Abs(shear.MaxDivergence) < 1e-9,
+                shear.MaxDivergence.ToString("E3", CultureInfo.InvariantCulture));
+
+            // Per-axis ranges: a field that moves only along Z must show a range on Z and none on
+            // X or Y. This is the check that would catch a transposed component ordering.
+            DeformationFieldMetrics.Result zOnly = Measure(
+                Wrap(Field(n, n, n, sp, sp, sp, (x, y, z) => Vec(0, 0, 5.0))), "z-only displacement");
+            if (zOnly == null) return;
+
+            Check("a Z-only field reports its range on Z",
+                Near(zOnly.MinDisplacementPerAxis[2], 5.0, 1e-6) &&
+                Near(zOnly.MaxDisplacementPerAxis[2], 5.0, 1e-6),
+                zOnly.MinDisplacementPerAxis[2].ToString("F3", CultureInfo.InvariantCulture));
+            Check("a Z-only field reports nothing on X or Y",
+                Near(zOnly.MaxDisplacementPerAxis[0], 0.0, 1e-9) &&
+                Near(zOnly.MaxDisplacementPerAxis[1], 0.0, 1e-9));
+
+            // And the components must not be transposed among themselves.
+            DeformationFieldMetrics.Result distinct = Measure(
+                Wrap(Field(n, n, n, sp, sp, sp, (x, y, z) => Vec(1.0, 2.0, 3.0))), "distinct axes");
+            if (distinct == null) return;
+
+            Check("each axis reports its own component, untransposed",
+                Near(distinct.MaxDisplacementPerAxis[0], 1.0, 1e-6) &&
+                Near(distinct.MaxDisplacementPerAxis[1], 2.0, 1e-6) &&
+                Near(distinct.MaxDisplacementPerAxis[2], 3.0, 1e-6),
+                string.Join(" / ", distinct.MaxDisplacementPerAxis
+                    .Select(v => v.ToString("F2", CultureInfo.InvariantCulture)).ToArray()));
         }
 
         private struct RecordedReport

@@ -53,6 +53,29 @@ namespace ESAPI_RegistrationQA.Services
             public double MaxDivergence;
 
             /// <summary>
+            /// Largest curl magnitude, |curl u| = |grad x u|. The rotational part of the field,
+            /// where divergence is the volumetric part. Free from the same gradient.
+            ///
+            /// Like divergence, not a TG-132 metric and not reported as one — it is here because
+            /// Eclipse may display it, and every additional quantity derived from the same field
+            /// read is another chance to catch a misread before it reaches a report.
+            /// </summary>
+            public double MaxCurlMagnitude;
+
+            /// <summary>
+            /// Per-component displacement range, in millimetres.
+            ///
+            /// These settle a question the extremes of |u| cannot: whether the component this code
+            /// calls X is the component Eclipse calls X. The audit labels axes by the DICOM patient
+            /// convention (X left-right, Y anterior-posterior, Z cranio-caudal), and an earlier
+            /// version of this project had Y and Z transposed. If Eclipse displays the field
+            /// per component, comparing these three ranges against it settles the ordering without
+            /// needing a phantom shifted by a known amount.
+            /// </summary>
+            public double[] MinDisplacementPerAxis;
+            public double[] MaxDisplacementPerAxis;
+
+            /// <summary>
             /// How many of the folded points lie within two grid steps of the edge of the field.
             ///
             /// TG-132 does not ask only whether a registration folds, but what the folding
@@ -134,12 +157,28 @@ namespace ESAPI_RegistrationQA.Services
             int nx = field.XSize, ny = field.YSize, nz = field.ZSize;
 
             double maxDisplacement = 0.0;
+
+            // Filled by the same pass as maxDisplacement: these walk every point, not just the
+            // interior, because a displacement needs no derivative and the field's extremes are
+            // as meaningful at the boundary as anywhere else.
+            var minAxis = new[] { double.MaxValue, double.MaxValue, double.MaxValue };
+            var maxAxis = new[] { double.MinValue, double.MinValue, double.MinValue };
+
             for (int z = 0; z < nz; z++)
                 for (int y = 0; y < ny; y++)
                     for (int x = 0; x < nx; x++)
                     {
-                        double length = field.Vectors[x, y, z].Length;
+                        Vec3 u = field.Vectors[x, y, z];
+
+                        double length = u.Length;
                         if (length > maxDisplacement) maxDisplacement = length;
+
+                        if (u.X < minAxis[0]) minAxis[0] = u.X;
+                        if (u.Y < minAxis[1]) minAxis[1] = u.Y;
+                        if (u.Z < minAxis[2]) minAxis[2] = u.Z;
+                        if (u.X > maxAxis[0]) maxAxis[0] = u.X;
+                        if (u.Y > maxAxis[1]) maxAxis[1] = u.Y;
+                        if (u.Z > maxAxis[2]) maxAxis[2] = u.Z;
                     }
 
             if (nx < 3 || ny < 3 || nz < 3)
@@ -169,6 +208,7 @@ namespace ESAPI_RegistrationQA.Services
             var jacobians = new double[(nx - 2) * (ny - 2) * (nz - 2)];
             double maxJacobian = double.MinValue;
             double minDivergence = double.MaxValue, maxDivergence = double.MinValue;
+            double maxCurl = 0.0;
 
             for (int z = 1; z < nz - 1; z++)
             {
@@ -202,6 +242,14 @@ namespace ESAPI_RegistrationQA.Services
                         double divergence = dudx.X + dudy.Y + dudz.Z;
                         if (divergence < minDivergence) minDivergence = divergence;
                         if (divergence > maxDivergence) maxDivergence = divergence;
+
+                        // curl u = (dz/dy - dy/dz, dx/dz - dz/dx, dy/dx - dx/dy): the antisymmetric
+                        // part of the same gradient, where the divergence is the trace.
+                        double curlX = dudy.Z - dudz.Y;
+                        double curlY = dudz.X - dudx.Z;
+                        double curlZ = dudx.Y - dudy.X;
+                        double curl = Math.Sqrt(curlX * curlX + curlY * curlY + curlZ * curlZ);
+                        if (curl > maxCurl) maxCurl = curl;
 
                         jacobians[samples] = j;
                         samples++;
@@ -260,6 +308,9 @@ namespace ESAPI_RegistrationQA.Services
                 MaxDisplacementMm = maxDisplacement,
                 MinDivergence = minDivergence,
                 MaxDivergence = maxDivergence,
+                MaxCurlMagnitude = maxCurl,
+                MinDisplacementPerAxis = minAxis,
+                MaxDisplacementPerAxis = maxAxis,
                 NegativeNearBoundary = negativeNearBoundary,
                 NegativeBoundsMin = negative > 0 ? new[] { minNx, minNy, minNz } : null,
                 NegativeBoundsMax = negative > 0 ? new[] { maxNx, maxNy, maxNz } : null

@@ -675,12 +675,27 @@ namespace ESAPI_RegistrationQA.Services
             // Diagnostics, not a table row: divergence is not a TG-132 metric and adding it to the
             // graded surface would be adding a criterion the report does not have. Its worth is as
             // a second quantity to hold against Eclipse's own display of the same field.
-            _log.Info("deformation field: divergence", string.Format(CultureInfo.InvariantCulture,
-                "div u ranges {0:F2} to {1:F2}. Eclipse shows this field under its divergence view; " +
-                "the two should agree. Not a TG-132 metric — reported here only as a cross-check on " +
-                "the field read, alongside the Jacobian range {2:F2} to {3:F2}.",
+            _log.Info("deformation field: cross-checks", string.Format(CultureInfo.InvariantCulture,
+                "Hold these against Eclipse's own views of the same field. " +
+                "Jacobian {0:F2} to {1:F2} · divergence {2:F2} to {3:F2} · distance 0 to {4:F1} mm · " +
+                "max |curl u| {5:F2}. None is a TG-132 metric except the Jacobian; they are here " +
+                "because each is derived from the same field read, so a disagreement in any of them " +
+                "points at the read rather than at the registration.",
+                metrics.MinJacobian, metrics.MaxJacobian,
                 metrics.MinDivergence, metrics.MaxDivergence,
-                metrics.MinJacobian, metrics.MaxJacobian));
+                metrics.MaxDisplacementMm, metrics.MaxCurlMagnitude));
+
+            // Separate line because it answers a different question: not whether the field was read
+            // correctly, but whether this code's X/Y/Z are Eclipse's. VALIDATION.md test 2 calls the
+            // axis convention the largest open risk in the project, and an earlier version did have
+            // Y and Z transposed.
+            _log.Info("deformation field: displacement per axis", string.Format(CultureInfo.InvariantCulture,
+                "X (LR) {0:F2} to {1:F2} mm · Y (AP) {2:F2} to {3:F2} mm · Z (CC) {4:F2} to {5:F2} mm. " +
+                "If Eclipse displays the field per component, these three ranges settle whether the " +
+                "axis labelling matches without needing a phantom shifted by a known amount.",
+                metrics.MinDisplacementPerAxis[0], metrics.MaxDisplacementPerAxis[0],
+                metrics.MinDisplacementPerAxis[1], metrics.MaxDisplacementPerAxis[1],
+                metrics.MinDisplacementPerAxis[2], metrics.MaxDisplacementPerAxis[2]));
 
             LogFoldingEvidence(field, metrics);
 
