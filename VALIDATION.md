@@ -2,8 +2,9 @@
 
 ## Why this document exists
 
-The tool has never been checked against a known answer. What has been verified is the pure
-mathematics — 76 analytic checks in `tools/verify_math.py`, covering Euler extraction, matrix
+One part of the tool has now been checked against an independent answer: the deformation-field
+Jacobian agrees with Eclipse's own to the precision Eclipse displays (see test 3d). Everything
+else rests on the pure mathematics — 76 analytic checks in `tools/verify_math.py`, covering Euler extraction, matrix
 convention detection, voxel↔patient round-trips, the similarity metrics against their
 theoretical values, transform composition, TRE against known landmark displacements, and the
 deformation-field Jacobian and gradient against fields whose answer is known exactly (a pure
@@ -19,8 +20,9 @@ it rather than to a table of invented numbers. Everything else is reported witho
 That is what this protocol is for. Tests 1 to 4 take an afternoon and close the open
 questions that cannot be answered without an Eclipse in front of you. Tests 3b and 3d cover the
 newest code — the TG-132 Table III spatial metrics, and the deformation-field metrics that
-became possible once the vector field turned out to be readable. Neither has run against a case
-with a known answer. Section 5 is the part that turns a group of testers into a dataset.
+became possible once the vector field turned out to be readable. Of those, only the Jacobian has
+been held against an independent answer; TRE, inverse consistency and the DVF gradient have not.
+Section 5 is the part that turns a group of testers into a dataset.
 
 ---
 
@@ -374,8 +376,27 @@ eight FOV corners.
 **The mathematics is checked analytically** — `tools/verify_math.py` covers a pure translation
 (det J exactly 1, gradient exactly 0), a uniform expansion (det J = (1+k)³), a deliberate fold
 (det J = −1, flagged 100 % negative), and that the gradient scales with the axis spacing
-actually used. **None of it has run against a real deformation with a known answer.** If you can
-produce a phantom with a known applied deformation, that is the test worth doing.
+actually used.
+
+**It has now also been checked against Eclipse's own Jacobian.** On a head phantom CT→CT
+deformable registration (2026-07-30), Eclipse's Jacobian determinant view showed a colour-bar
+range of **−0.72 to +3.04**. The plugin computed **−0.7213 to +3.0431** on the same registration:
+agreement on both extremes to the two decimals Eclipse displays.
+
+That is the strongest external check available without a phantom of known deformation, and it
+exercises the whole chain at once. Reading the field wrongly, using the image's spacing instead
+of the field's, or computing det(grad u) instead of det(I + grad u) would each move those numbers,
+and none of them is a small perturbation. It also implies the affine parts are rigid on this
+case — a scaling or reflection in `PreTransformationMatrix` or `PostTransformationMatrix` would
+have put the plugin's determinants out by that factor against Eclipse's.
+
+**Repeat this comparison whenever you can.** Open the Jacobian view in Eclipse, read the colour
+bar, and check it against the min and max the plugin reports in the Jacobian row's note. It costs
+nothing and it is a real answer.
+
+What it does *not* establish: the percentage of folded voxels (2.979 % on that case) and the
+percentiles are not visible on the colour bar, so they remain checked only against the analytic
+cases. And it is one registration on one Eclipse version.
 
 **Only one thing here is graded, and it is half of one row.** TG-132 Table III's Jacobian row
 reads: no negative values, *nor values departing from 1 relative to what is expected for the
@@ -504,6 +525,7 @@ Open an issue at
 | 3b | Inverse consistency residual | ≤ max voxel dim | | | |
 | 3d | **Deformation field read** | grid + spacing in Diagnostics | | | must be the field's, not the image's |
 | 3d | **Jacobian on a trusted DIR** | 0 % | | | any folding is a Table III breach |
+| 3d | **Jacobian min/max vs Eclipse's colour bar** | agree to 2 dp | | | matched −0.72/+3.04 on 2026-07-30 |
 | 3d | Jacobian departure from 1 | plausible, INFO | | | judge against expected volume change |
 | 3d | DVF gradient (max) | plausible, INFO | | | no TG-132 tolerance |
 | 3d | Max displacement over the field | ≥ the old corner bound | | | true maximum now |
