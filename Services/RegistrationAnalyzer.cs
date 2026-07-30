@@ -620,10 +620,17 @@ namespace ESAPI_RegistrationQA.Services
             string problem;
             DeformationFieldMetrics.Result metrics = DeformationFieldMetrics.Compute(field, out problem);
 
+            // Logged once rather than repeated in every metric's note. It was appended to all
+            // four, which pushed the criterion column past what fits on screen even maximised —
+            // and the geometry is the same sentence every time, so the table was carrying four
+            // copies of a fact that belongs in the diagnostics.
+            _log.Info("deformation field: grid", string.Format(CultureInfo.InvariantCulture,
+                "{0}x{1}x{2} at {3:F2}/{4:F2}/{5:F2} mm — the field's own spacing, coarser than the " +
+                "image grid, and what every derivative below uses",
+                field.XSize, field.YSize, field.ZSize, field.XResMm, field.YResMm, field.ZResMm));
+
             string gridNote = string.Format(CultureInfo.InvariantCulture,
-                "from the deformation field's own {0}x{1}x{2} grid at {3:F2}/{4:F2}/{5:F2} mm spacing — " +
-                "coarser than the image grid, and the spacing the derivatives use",
-                field.XSize, field.YSize, field.ZSize, field.XResMm, field.YResMm, field.ZResMm);
+                "field grid {0}x{1}x{2}", field.XSize, field.YSize, field.ZSize);
 
             if (metrics == null)
             {
@@ -647,7 +654,7 @@ namespace ESAPI_RegistrationQA.Services
                         }
 
                 measurements.MaxDisplacement = MeasuredValue.Measured(maxDisplacement,
-                    "maximum |displacement| over every field point, " + gridNote);
+                    "max over every field point; " + gridNote);
                 _log.Warning("deformation metrics", reason);
                 return;
             }
@@ -655,30 +662,25 @@ namespace ESAPI_RegistrationQA.Services
             measurements.JacobianNegativePercent = MeasuredValue.Measured(
                 metrics.NegativeJacobianPercent,
                 string.Format(CultureInfo.InvariantCulture,
-                    "det(I + grad u) over {0:N0} interior grid points, minimum {1:F4}{2}; {3}",
-                    metrics.JacobianSampleCount, metrics.MinJacobian,
-                    DescribeFoldingLocation(metrics), gridNote));
+                    "min |J| {0:F4} over {1:N0} pts{2}",
+                    metrics.MinJacobian, metrics.JacobianSampleCount,
+                    DescribeFoldingLocation(metrics)));
 
             measurements.JacobianDeparture = MeasuredValue.Measured(
                 metrics.MaxDepartureFromOne,
                 string.Format(CultureInfo.InvariantCulture,
-                    "Jacobian p1 {0:F4}, median {1:F4}, p99 {2:F4} (full range {3:F4} to {4:F4}); " +
-                    "the value is the larger of |p99-1| and |1-p1|. TG-132 ties the acceptable " +
-                    "departure to the volume change expected for the structure, which is the " +
-                    "physicist's to apply; {5}",
-                    metrics.JacobianP1, metrics.JacobianMedian, metrics.JacobianP99,
-                    metrics.MinJacobian, metrics.MaxJacobian, gridNote));
+                    "|J| p1 {0:F3}, median {1:F3}, p99 {2:F3}",
+                    metrics.JacobianP1, metrics.JacobianMedian, metrics.JacobianP99));
 
             LogFoldingEvidence(field, metrics);
 
             measurements.DvfGradientMax = MeasuredValue.Measured(
                 metrics.MaxGradientMagnitude,
-                "largest Frobenius norm of grad u over the interior grid points, " + gridNote);
+                "largest \u2016grad u\u2016 over the interior points");
 
             measurements.MaxDisplacement = MeasuredValue.Measured(
                 metrics.MaxDisplacementMm,
-                "maximum |displacement| over every field point — the real maximum, not the eight-corner " +
-                "bound a rigid transform allows, " + gridNote);
+                "max over every field point, not an eight-corner bound; " + gridNote);
         }
 
         /// <summary>
@@ -691,14 +693,17 @@ namespace ESAPI_RegistrationQA.Services
 
             double fraction = metrics.NegativeBoundaryFraction;
 
+            // Terse: this lands in a table cell beside the criterion. The full reading — what
+            // edge-confined folding usually means, and what TG-132 asks be evaluated — goes to
+            // the diagnostics in LogFoldingEvidence.
             if (fraction >= 0.95)
-                return ", essentially all of it against the edge of the field";
+                return ", all at the field edge";
             if (fraction >= 0.5)
                 return string.Format(CultureInfo.InvariantCulture,
-                    ", {0:P0} of it against the edge of the field", fraction);
+                    ", {0:P0} at the field edge", fraction);
 
             return string.Format(CultureInfo.InvariantCulture,
-                ", {0:P0} of it away from the edge — inside the field's support", 1.0 - fraction);
+                ", {0:P0} inside the field", 1.0 - fraction);
         }
 
         /// <summary>
@@ -1258,9 +1263,11 @@ namespace ESAPI_RegistrationQA.Services
 
             if (errors.Count < 3)
             {
-                note += "; fewer than three landmarks, so this is an indication rather than a " +
-                        "characterisation of the registration accuracy";
-                _log.Warning("TRE", note);
+                // The full caveat goes to the diagnostics, not the cell: it is the same sentence
+                // on every under-landmarked case and it crowded out the criterion it sat beside.
+                _log.Warning("TRE", note + "; fewer than three landmarks, so this is an indication " +
+                    "rather than a characterisation of the registration accuracy");
+                note += " — indicative only";
             }
 
             measurements.TreMean = MeasuredValue.Measured(mean, note);

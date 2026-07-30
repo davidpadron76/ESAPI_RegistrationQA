@@ -242,9 +242,25 @@
             reference material: needed when a number has to be explained, in the way and not
             read the rest of the time. They are a line of text and two buttons now.
         -->
+        <!--
+            HorizontalScrollBarVisibility="Disabled" is what keeps the columns their declared
+            widths, and it is not a cosmetic choice.
+
+            With the default of Auto, the ScrollViewer measures its content against infinite
+            width. A star column cannot take a share of infinity, so it falls back to the width
+            its content wants — the full untrimmed criterion text, thousands of pixels — and the
+            grid ends up wider than the window with every other column squeezed against it. The
+            symptom was a horizontal scrollbar present even maximised, and headers reduced to
+            single letters.
+
+            Disabled makes the measure finite, so the star column resolves against the space that
+            actually exists. MinWidth on the other three is the belt to that braces: no matter
+            what the grid decides, no column can collapse below something readable.
+        -->
         <DataGrid Grid.Row="2" ItemsSource="{Binding Source={StaticResource GroupedMetrics}}"
                   Style="{StaticResource MetricGridStyle}" Margin="0"
-                  ScrollViewer.VerticalScrollBarVisibility="Auto">
+                  ScrollViewer.VerticalScrollBarVisibility="Auto"
+                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <DataGrid.GroupStyle>
                 <GroupStyle>
                     <GroupStyle.HeaderTemplate>
@@ -256,13 +272,19 @@
                 </GroupStyle>
             </DataGrid.GroupStyle>
             <DataGrid.Columns>
-                <DataGridTemplateColumn Header="Metric" Width="220"
+                <DataGridTemplateColumn Header="Metric" Width="220" MinWidth="150"
                                         CellTemplate="{StaticResource MetricNameTemplate}"/>
-                <DataGridTemplateColumn Header="Value" Width="110"
+                <DataGridTemplateColumn Header="Value" Width="110" MinWidth="90"
                                         CellTemplate="{StaticResource MetricValueTemplate}"/>
-                <DataGridTemplateColumn Header="Status" Width="80"
+                <DataGridTemplateColumn Header="Status" Width="80" MinWidth="70"
                                         CellTemplate="{StaticResource StatusBadgeTemplate}"/>
-                <DataGridTemplateColumn Header="Criterion / reason" Width="*"
+                <!--
+                    The criterion the value was held to, and a short note on what it was measured
+                    on. Anything longer belongs in the tooltip, which carries the metric's full
+                    definition and its TG-132 basis, or in the diagnostics. This cell used to hold
+                    the whole explanation and could not be read even maximised.
+                -->
+                <DataGridTemplateColumn Header="Criterion / reason" Width="*" MinWidth="200"
                                         CellTemplate="{StaticResource MetricSummaryTemplate}"/>
             </DataGrid.Columns>
         </DataGrid>
