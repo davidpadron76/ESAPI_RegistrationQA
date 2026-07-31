@@ -9,9 +9,6 @@ Brock KK, Mutic S, McNutt TR, Li H, Kessler ML. *Use of image registration and f
 algorithms and techniques in radiotherapy: Report of the AAPM Radiation Therapy Committee
 Task Group No. 132.* Med Phys. 2017;44(7):e43–e76. [doi:10.1002/mp.12256](https://doi.org/10.1002/mp.12256)
 
-Earlier versions of this project cited AAPM TG-233. That was an error: TG-233 covers
-performance evaluation of CT systems and is unrelated to image registration.
-
 ## Why each metric is here
 
 A metric earns its place by the clinical decision it supports. Appearing in TG-132 Table III
