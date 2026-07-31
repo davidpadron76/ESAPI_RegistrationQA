@@ -494,7 +494,24 @@ The Diagnostics tab now reports the Jacobian **per contoured structure**, evalua
 grid points inside each one, which is how TG-132 Table III states the criterion in the first
 place — per structure, against the volume change expected of it.
 
-**On the phantom case the answer was unambiguous:**
+> **The first run of this was wrong, and the correction matters.** The deformation field's grid
+> is built on the *registered* image's geometry — on the phantom case its slice spacing was
+> exactly the registered image's 5.000 mm and its in-plane resolution exactly twice it — while
+> the structures being rasterised onto it were read from the *source* image. The two sit in
+> different frames of reference, so every mask landed displaced by the registration's own
+> translation: the field's box spanned Z 70–260 mm against a BODY at Z 205–383 mm, overlapping by
+> 55 mm of 178. Shifting the field by the registration's Z translation of 122.75 mm brings the
+> overlap to the full 178 mm with the upper edges matching to 0.2 mm, which is what identified
+> the cause.
+>
+> The plugin now reads both images' structures and uses whichever set the field's grid actually
+> encloses, deciding by measured overlap rather than by rule, and logs the choice as
+> `jacobian per structure: frame`. Where neither overlaps meaningfully it reports nothing rather
+> than a number computed over the wrong voxels. **The figures below were produced before that
+> fix and are retained only as the record of how it was found — they describe a mask displaced
+> 123 mm from the structure it was named after.**
+
+**On the phantom case the first output read:**
 
 ```
 jacobian per structure: BODY
@@ -503,13 +520,15 @@ jacobian per structure: BODY
 |J| min 0.0280, p1 0.304, median 0.958, p99 1.627, max 2.7327
 ```
 
-**Not one folded point lies inside the patient.** All 42,273 of them are outside BODY, in the air
-the grid encloses. Inside the outline the determinant never goes negative at all — its minimum is
-0.0280 — and the median is 0.958, within 4 % of volume-preserving.
+Read at the time as "not one folded point lies inside the patient". That reading does not hold:
+the mask was not inside the patient. It was a region of the field displaced 123 mm from BODY, and
+what the numbers describe is the deformation there.
 
-So the registration is far better than the whole-field 2.979 % suggested, and the whole-field
-figure should be read as what it is: a statistic over a box, most of which is not patient. The
-per-structure line is the one to act on, and it is also the one TG-132 actually describes.
+**The question the per-structure Jacobian was added to answer is therefore still open**, and it is
+the right question: whether the whole-field 2.979 % is dominated by air the grid encloses but the
+patient does not occupy. A brain phantom has no anatomy to deform, so folding concentrated outside
+the patient would explain values that otherwise make little sense. Re-run and read the corrected
+`jacobian per structure: BODY` line against the whole-field figure.
 
 **Two things on that output still need checking, and neither is settled:**
 
@@ -679,8 +698,9 @@ Open an issue at
 | 3d | **Curl vs Eclipse's curl view** | agree | | | Eclipse showed 0–2.15 on 2026-07-30; plugin value not yet compared — needs a rebuild after b9976ec |
 | 2 | **Per-axis displacement vs Eclipse** | X=LR, Y=AP, Z=CC | | | see the reference table under test 3d; plugin value pending rebuild |
 | 3d | Jacobian departure from 1 | plausible, INFO | | | judge against expected volume change |
-| 3d | **Jacobian inside BODY vs whole field** | | | | 0.000 % vs 2.979 % on 2026-07-30 — no folding inside the patient |
-| 3d | BODY mask vs field extent | field is a sub-box | | | resolved: field 184×200×190 mm, BODY 236×264×385 mm |
+| 3d | **Jacobian inside BODY vs whole field** | | | | first run used a mask in the wrong frame — re-run after the fix |
+| 3d | **`jacobian per structure: frame`** | names which image was used | | | field grid is the registered image's geometry |
+| 3d | BODY mask vs field extent | field is a sub-box | | | field 184×200×190 mm, BODY 236×264×385 mm |
 | 3d | PTV mask non-empty | non-empty | | | empty on 2026-07-30 — send the bounding-box line |
 | 3d | Jacobian inside PTV / each organ | | | | Diagnostics; TG-132 states the criterion per structure |
 | 3d | DVF gradient (max) | plausible, INFO | | | no TG-132 tolerance |

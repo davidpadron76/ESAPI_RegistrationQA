@@ -136,7 +136,7 @@ namespace ESAPI_RegistrationQA.Services
 
             // --- Deformation / topology -------------------------------------------------
             _progress.Report(MeasurementStage.DeformationField);
-            ComputeDeformationMetrics(measurements, registration, sourceImage);
+            ComputeDeformationMetrics(measurements, registration, sourceImage, registeredImage);
 
             _progress.Report(MeasurementStage.TargetRegistrationError);
             ComputeTargetRegistrationError(registration, sourceImage, registeredImage, measurements);
@@ -515,11 +515,13 @@ namespace ESAPI_RegistrationQA.Services
         /// specific reason, which is a fault to report rather than a limitation to accept.
         /// </summary>
         private void ComputeDeformationMetrics(
-            QaMeasurements measurements, dynamic registration, dynamic sourceImage)
+            QaMeasurements measurements, dynamic registration,
+            dynamic sourceImage, dynamic registeredImage)
         {
             if (measurements.IsDeformable)
             {
-                ComputeDeformationMetricsFromField(measurements, registration, sourceImage);
+                ComputeDeformationMetricsFromField(
+                    measurements, registration, sourceImage, registeredImage);
                 return;
             }
 
@@ -594,7 +596,8 @@ namespace ESAPI_RegistrationQA.Services
         /// problems.
         /// </summary>
         private void ComputeDeformationMetricsFromField(
-            QaMeasurements measurements, dynamic registration, dynamic sourceImage)
+            QaMeasurements measurements, dynamic registration,
+            dynamic sourceImage, dynamic registeredImage)
         {
             // Hidden regardless of whether the field reads: it is a rigid-transform statement,
             // so on a deformable case it is inapplicable rather than merely missing.
@@ -716,7 +719,7 @@ namespace ESAPI_RegistrationQA.Services
                 metrics.MinDisplacementPerAxis[2], metrics.MaxDisplacementPerAxis[2]));
 
             LogFoldingEvidence(field, metrics);
-            LogPerStructureJacobian(field, metrics, sourceImage);
+            LogPerStructureJacobian(field, metrics, sourceImage, registeredImage);
 
             measurements.DvfGradientMax = MeasuredValue.Measured(
                 metrics.MaxGradientMagnitude,
@@ -818,7 +821,8 @@ namespace ESAPI_RegistrationQA.Services
         /// from 1 to what was expected of that structure, which this tool cannot know.
         /// </summary>
         private void LogPerStructureJacobian(
-            DeformationFieldReader.Result field, DeformationFieldMetrics.Result whole, dynamic sourceImage)
+            DeformationFieldReader.Result field, DeformationFieldMetrics.Result whole,
+            dynamic sourceImage, dynamic registeredImage)
         {
             if (field.Geometry == null)
             {
@@ -829,16 +833,24 @@ namespace ESAPI_RegistrationQA.Services
                 return;
             }
 
-            if (sourceImage == null) return;
-
+            // Which image's structures share the field's frame is not something the API states,
+            // and getting it wrong is silent: the mask lands in the wrong place and the Jacobian
+            // is computed over the wrong voxels while still looking like a number. On the phantom
+            // case the field's box sat 123 mm from BODY in Z — almost exactly the registration's
+            // own Z translation — because the grid is built on the registered image's geometry
+            // while the structures read were the source's.
+            //
+            // So both are read and the one whose structures actually line up with the field is
+            // used, rather than assuming either. Coverage is the test: a frame mismatch shows up
+            // as a collapse in how much of the structure the field's box contains.
             List<StructureRasterizer.NamedStructure> structures =
-                StructureRasterizer.ReadContourStructures(sourceImage, "source image", _log);
+                ChooseStructuresMatchingField(field, sourceImage, registeredImage);
 
-            if (structures.Count == 0)
+            if (structures == null || structures.Count == 0)
             {
                 _log.Info("jacobian per structure",
-                    "no contour structures on the source image, so the Jacobian could only be " +
-                    "evaluated over the whole field.");
+                    "no contour structures could be placed on the deformation field's grid, so the " +
+                    "Jacobian could only be evaluated over the whole field.");
                 return;
             }
 
@@ -904,6 +916,98 @@ namespace ESAPI_RegistrationQA.Services
                           "encloses but the patient does not occupy."
                         : string.Empty));
             }
+        }
+
+        /// <summary>
+        /// Picks whichever image's structures share the deformation field's frame of reference.
+        ///
+        /// The field's grid is its own geometry and the API does not say which image it belongs
+        /// to. On the phantom case it was the registered image's — same 5.000 mm slice spacing,
+        /// in-plane resolution exactly twice the registered image's — so rasterising the source
+        /// image's contours onto it displaced every mask by the registration's own translation,
+        /// 123 mm in Z. The Jacobian was then evaluated over air while reporting a structure's
+        /// name, which is worse than not reporting it.
+        ///
+        /// Decided by measurement rather than by rule: the candidate whose bounding boxes overlap
+        /// the field's by the greater fraction wins. A frame mismatch collapses that overlap, so
+        /// the two are easy to tell apart, and the choice is logged.
+        /// </summary>
+        private List<StructureRasterizer.NamedStructure> ChooseStructuresMatchingField(
+            DeformationFieldReader.Result field, dynamic sourceImage, dynamic registeredImage)
+        {
+            List<StructureRasterizer.NamedStructure> fromSource = sourceImage == null
+                ? new List<StructureRasterizer.NamedStructure>()
+                : StructureRasterizer.ReadContourStructures(sourceImage, "source image", _log);
+
+            List<StructureRasterizer.NamedStructure> fromRegistered = registeredImage == null
+                ? new List<StructureRasterizer.NamedStructure>()
+                : StructureRasterizer.ReadContourStructures(registeredImage, "registered image", _log);
+
+            double sourceOverlap = MeanBoxOverlapWithField(fromSource, field.Geometry);
+            double registeredOverlap = MeanBoxOverlapWithField(fromRegistered, field.Geometry);
+
+            bool useRegistered = registeredOverlap > sourceOverlap;
+
+            _log.Info("jacobian per structure: frame", string.Format(CultureInfo.InvariantCulture,
+                "the field's grid encloses {0:P0} of the source image's structures and {1:P0} of " +
+                "the registered image's, so the {2} image's are the ones sharing its frame and are " +
+                "the ones used. The API does not state which image a deformation field belongs to, " +
+                "and rasterising the wrong one displaces every mask by the registration's own " +
+                "translation while still producing a number.",
+                sourceOverlap, registeredOverlap, useRegistered ? "registered" : "source"));
+
+            if (Math.Max(sourceOverlap, registeredOverlap) < 0.05)
+            {
+                _log.Warning("jacobian per structure: frame",
+                    "neither image's structures fall meaningfully inside the deformation field's " +
+                    "grid. A per-structure Jacobian is not reported, because a mask that does not " +
+                    "overlap the field would evaluate the metric over the wrong voxels.");
+                return null;
+            }
+
+            return useRegistered ? fromRegistered : fromSource;
+        }
+
+        /// <summary>
+        /// Mean fraction of each structure's bounding box that falls inside the field's grid box.
+        /// A bounding-box test, not a rasterisation: it only has to separate "same frame" from
+        /// "displaced by a registration", and that difference is large.
+        /// </summary>
+        private static double MeanBoxOverlapWithField(
+            List<StructureRasterizer.NamedStructure> structures, ImageGeometry grid)
+        {
+            if (structures == null || structures.Count == 0) return 0.0;
+
+            Vec3 boxLo, boxHi;
+            GridBounds(grid, out boxLo, out boxHi);
+
+            double total = 0.0;
+            int counted = 0;
+
+            foreach (StructureRasterizer.NamedStructure structure in structures)
+            {
+                Vec3 lo, hi;
+                if (structure.Contours == null || !structure.Contours.TryGetBounds(out lo, out hi))
+                    continue;
+
+                double own = Span(lo.X, hi.X) * Span(lo.Y, hi.Y) * Span(lo.Z, hi.Z);
+                if (own <= 0.0) continue;
+
+                double shared =
+                    Span(Math.Max(lo.X, boxLo.X), Math.Min(hi.X, boxHi.X)) *
+                    Span(Math.Max(lo.Y, boxLo.Y), Math.Min(hi.Y, boxHi.Y)) *
+                    Span(Math.Max(lo.Z, boxLo.Z), Math.Min(hi.Z, boxHi.Z));
+
+                total += shared / own;
+                counted++;
+            }
+
+            return counted == 0 ? 0.0 : total / counted;
+        }
+
+        private static double Span(double low, double high)
+        {
+            return high > low ? high - low : 0.0;
         }
 
         /// <summary>
