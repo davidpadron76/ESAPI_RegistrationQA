@@ -164,6 +164,28 @@ namespace ESAPI_RegistrationQA.Services
         /// </summary>
         public static Result Compute(DeformationFieldReader.Result field, out string problem)
         {
+            return Compute(field, null, out problem);
+        }
+
+        /// <summary>
+        /// Same, restricted to the grid points inside <paramref name="restrictTo"/> — a mask over
+        /// the field's own grid, indexed x + XSize*(y + YSize*z), as
+        /// <see cref="StructureRasterizer.Rasterise"/> produces.
+        ///
+        /// This is what brings the Jacobian into line with how TG-132 Table III states it. The
+        /// report's criterion is per structure — "structures where volume reduction is expected",
+        /// "where expansion is expected" — while a whole-field statistic covers the entire grid,
+        /// and on a head case most of that grid is air outside the patient, where a deformable
+        /// algorithm has no image to constrain it and folds freely without saying anything about
+        /// the anatomy.
+        ///
+        /// The displacement extremes and the per-axis ranges are deliberately left whole-field
+        /// even when a mask is given: they are the quantities held against Eclipse's own views,
+        /// which cover the whole field, and restricting them would break that comparison.
+        /// </summary>
+        public static Result Compute(
+            DeformationFieldReader.Result field, bool[] restrictTo, out string problem)
+        {
             problem = null;
             if (field == null || field.Vectors == null)
             {
@@ -234,6 +256,8 @@ namespace ESAPI_RegistrationQA.Services
                 {
                     for (int x = 1; x < nx - 1; x++)
                     {
+                        if (restrictTo != null && !restrictTo[x + nx * (y + ny * z)]) continue;
+
                         // Partial derivatives of the displacement field u with respect to each
                         // grid axis, in mm of displacement per mm of distance.
                         Vec3 dudx = (field.Vectors[x + 1, y, z] - field.Vectors[x - 1, y, z]) *
@@ -309,7 +333,11 @@ namespace ESAPI_RegistrationQA.Services
 
             if (samples == 0)
             {
-                problem = "no interior grid point yielded a finite Jacobian";
+                problem = restrictTo != null
+                    ? "no interior grid point inside the structure yielded a finite Jacobian — the " +
+                      "structure may lie outside the deformation field's grid, or be thinner than " +
+                      "one grid step across"
+                    : "no interior grid point yielded a finite Jacobian";
                 return null;
             }
 

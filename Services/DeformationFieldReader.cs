@@ -47,6 +47,19 @@ namespace ESAPI_RegistrationQA.Services
             public Vec3[,,] Vectors;
 
             /// <summary>
+            /// The field's grid as a geometry in patient coordinates, or null when the API did
+            /// not expose the origin and direction cosines.
+            ///
+            /// This is what makes a per-structure Jacobian possible. TG-132 Table III states the
+            /// Jacobian criterion per structure — "structures where volume reduction is
+            /// expected", "where expansion is expected" — while a whole-field statistic covers
+            /// the entire grid, most of which is air outside the patient on a head case. A
+            /// contour can be rasterised onto this geometry and the determinant evaluated only
+            /// where it matters.
+            /// </summary>
+            public ImageGeometry Geometry;
+
+            /// <summary>
             /// Determinants of the linear part of the affine transforms the field is composed
             /// with, when the API exposes them. Null when the property was absent or unreadable.
             ///
@@ -238,6 +251,7 @@ namespace ESAPI_RegistrationQA.Services
 
             return new Result
             {
+                Geometry = TryReadGeometry(field, xSize, ySize, zSize, xRes, yRes, zRes),
                 XSize = xSize,
                 YSize = ySize,
                 ZSize = zSize,
@@ -246,6 +260,61 @@ namespace ESAPI_RegistrationQA.Services
                 ZResMm = zRes,
                 Vectors = vectors
             };
+        }
+
+        /// <summary>
+        /// Builds the field's grid geometry from its origin and direction cosines. Returns null
+        /// rather than assuming canonical axes: a geometry guessed wrong would put a structure
+        /// mask in the wrong place, and a per-structure Jacobian computed over the wrong voxels
+        /// is worse than none.
+        /// </summary>
+        private static ImageGeometry TryReadGeometry(
+            object field, int xSize, int ySize, int zSize, double xRes, double yRes, double zRes)
+        {
+            Vec3 origin, xDir, yDir, zDir;
+
+            if (!TryReadVector(field, "Origin", out origin) ||
+                !TryReadVector(field, "XDirection", out xDir) ||
+                !TryReadVector(field, "YDirection", out yDir) ||
+                !TryReadVector(field, "ZDirection", out zDir))
+            {
+                return null;
+            }
+
+            return new ImageGeometry(origin, xDir, yDir, zDir, xRes, yRes, zRes, xSize, ySize, zSize);
+        }
+
+        private static bool TryReadVector(object instance, string name, out Vec3 value)
+        {
+            value = Vec3.Zero;
+
+            object raw;
+            if (!TryReadProperty(instance, name, out raw) || raw == null) return false;
+
+            Type t = raw.GetType();
+            double x, y, z;
+            if (!TryReadComponent(t, raw, "X", "x", out x) ||
+                !TryReadComponent(t, raw, "Y", "y", out y) ||
+                !TryReadComponent(t, raw, "Z", "z", out z))
+            {
+                return false;
+            }
+
+            value = new Vec3(x, y, z);
+            return value.IsFinite;
+        }
+
+        private static bool TryReadComponent(Type t, object instance, string upper, string lower, out double value)
+        {
+            value = 0.0;
+
+            PropertyInfo p = SafeGetProperty(t, upper) ?? SafeGetProperty(t, lower);
+            if (p != null) return TryConvert(p.GetValue(instance, null), out value);
+
+            FieldInfo f = SafeGetField(t, upper) ?? SafeGetField(t, lower);
+            if (f != null) return TryConvert(f.GetValue(instance), out value);
+
+            return false;
         }
 
         private static string FormatMm(double value)

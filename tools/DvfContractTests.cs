@@ -163,6 +163,7 @@ namespace ESAPI_RegistrationQA.Tools
             JacobianDepartureFollowsTableIIISecondClause();
             DivergenceIsTheTraceOfTheGradient();
             CurlAndPerAxisRangesAreCorrect();
+            AMaskRestrictsTheJacobianToOneRegion();
 
             Console.WriteLine();
             if (Failures.Count > 0)
@@ -837,6 +838,87 @@ namespace ESAPI_RegistrationQA.Tools
                 Near(distinct.MaxDisplacementPerAxis[2], 3.0, 1e-6),
                 string.Join(" / ", distinct.MaxDisplacementPerAxis
                     .Select(v => v.ToString("F2", CultureInfo.InvariantCulture)).ToArray()));
+        }
+
+        /// <summary>
+        /// A mask must confine the Jacobian to the region given, which is what brings the metric
+        /// into line with TG-132 Table III's per-structure wording — and what separates folding
+        /// inside the patient from folding in the air the field's grid encloses.
+        ///
+        /// Built as the case that would actually mislead: a field that folds violently in one
+        /// half and is a plain translation in the other. Over the whole grid it reports heavy
+        /// folding; masked to the quiet half it must report none.
+        /// </summary>
+        private static void AMaskRestrictsTheJacobianToOneRegion()
+        {
+            const int n = 21;
+            const double sp = 1.0;
+            int half = n / 2;
+
+            var registration = Wrap(Field(n, n, n, sp, sp, sp,
+                (x, y, z) => x < half ? Vec(-2.0 * x * sp, 0, 0) : Vec(3, -1, 2)));
+
+            var log = new DiagnosticLog();
+            DeformationFieldReader.Result field = DeformationFieldReader.TryRead(registration, log);
+            if (field == null) { Check("masked field is read", false); return; }
+
+            string problem;
+            DeformationFieldMetrics.Result whole = DeformationFieldMetrics.Compute(field, out problem);
+            if (whole == null) { Check("whole-field metrics computed", false, problem); return; }
+
+            Check("the mixed field folds when taken whole", whole.NegativeJacobianPercent > 20.0,
+                whole.NegativeJacobianPercent.ToString("F1", CultureInfo.InvariantCulture) + " %");
+
+            // Mask over the translated half only, in the same layout Rasterise produces.
+            var quiet = new bool[n * n * n];
+            for (int z = 0; z < n; z++)
+                for (int y = 0; y < n; y++)
+                    for (int x = half + 1; x < n; x++)
+                        quiet[x + n * (y + n * z)] = true;
+
+            DeformationFieldMetrics.Result inQuiet =
+                DeformationFieldMetrics.Compute(field, quiet, out problem);
+            if (inQuiet == null) { Check("masked metrics computed", false, problem); return; }
+
+            Check("masked to the undeformed half, no folding is reported",
+                inQuiet.NegativeJacobianPercent == 0.0,
+                inQuiet.NegativeJacobianPercent.ToString("F3", CultureInfo.InvariantCulture) + " %");
+            Check("masked to the undeformed half, |J| is 1",
+                Near(inQuiet.MinJacobian, 1.0, 1e-6) && Near(inQuiet.MaxJacobian, 1.0, 1e-6),
+                inQuiet.MinJacobian.ToString("F6", CultureInfo.InvariantCulture));
+            Check("the mask reduces the sample count",
+                inQuiet.JacobianSampleCount > 0 &&
+                inQuiet.JacobianSampleCount < whole.JacobianSampleCount,
+                inQuiet.JacobianSampleCount + " of " + whole.JacobianSampleCount);
+
+            // The other half must show the folding the whole-field figure was reporting. Stopping
+            // at half-1 rather than half is deliberate: the layer adjacent to the boundary takes
+            // one neighbour from each region, so its central difference spans the step between
+            // them and comes out strongly positive. That transition layer genuinely does not fold
+            // — the first version of this test asserted 100 % and got 88.9 %, which was the code
+            // being right about the arithmetic and the expectation being naive about the seam.
+            var folded = new bool[n * n * n];
+            for (int z = 0; z < n; z++)
+                for (int y = 0; y < n; y++)
+                    for (int x = 1; x < half - 1; x++)
+                        folded[x + n * (y + n * z)] = true;
+
+            DeformationFieldMetrics.Result inFolded =
+                DeformationFieldMetrics.Compute(field, folded, out problem);
+            if (inFolded == null) { Check("folded-half metrics computed", false, problem); return; }
+
+            Check("masked to the deformed half, folding is total",
+                inFolded.NegativeJacobianPercent == 100.0,
+                inFolded.NegativeJacobianPercent.ToString("F1", CultureInfo.InvariantCulture) + " %");
+
+            // An empty mask must decline rather than divide by zero.
+            DeformationFieldMetrics.Result none =
+                DeformationFieldMetrics.Compute(field, new bool[n * n * n], out problem);
+
+            Check("an empty mask yields no result rather than a division by zero", none == null);
+            Check("and says the structure holds no grid point",
+                problem != null && problem.IndexOf("structure", StringComparison.OrdinalIgnoreCase) >= 0,
+                problem);
         }
 
         private struct RecordedReport

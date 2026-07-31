@@ -483,6 +483,21 @@ checking before comparing anything against them. The largest single component is
 no larger. Eclipse's 58.4 mm sits inside [44.5, 64.8]. Had it fallen outside, one of the views
 would have been misread before the plugin was ever involved.
 
+**Whether that folding is inside the patient is a separate question, and the whole-field figure
+does not answer it.** The "96 % away from the edge" statistic measures distance from the *grid*
+boundary, not from the patient. The field's grid is a box enclosing the head, and on a head case a
+large fraction of that box is air, where a deformable algorithm has no image to constrain it and
+folds freely without saying anything about the anatomy. A point sitting in air in the middle of
+the box counts as interior by that measure.
+
+The Diagnostics tab now reports the Jacobian **per contoured structure**, evaluated only at the
+grid points inside each one, which is how TG-132 Table III states the criterion in the first
+place — per structure, against the volume change expected of it. Look for
+`jacobian per structure: BODY`: it is the closest thing available to "inside the patient". If the
+folding there is far below the whole-field 2.979 %, most of what the whole-field number counts is
+in air the grid encloses but the patient does not occupy, and the registration is better than the
+headline figure suggests.
+
 **What these numbers say about the registration itself:** the field displaces the phantom by up
 to 58 mm, with per-axis excursions of 74 mm in X and 70 mm in Z. This is a rigid skull phantom
 imaged twice — there is no anatomy to deform. Together with 2.979 % folding, 96 % of it inside
@@ -636,6 +651,8 @@ Open an issue at
 | 3d | **Curl vs Eclipse's curl view** | agree | | | Eclipse showed 0–2.15 on 2026-07-30; plugin value not yet compared — needs a rebuild after b9976ec |
 | 2 | **Per-axis displacement vs Eclipse** | X=LR, Y=AP, Z=CC | | | see the reference table under test 3d; plugin value pending rebuild |
 | 3d | Jacobian departure from 1 | plausible, INFO | | | judge against expected volume change |
+| 3d | **Jacobian inside BODY vs whole field** | | | | Diagnostics; separates folding in the patient from folding in air |
+| 3d | Jacobian inside PTV / each organ | | | | Diagnostics; TG-132 states the criterion per structure |
 | 3d | DVF gradient (max) | plausible, INFO | | | no TG-132 tolerance |
 | 3d | Max displacement over the field | ≥ the old corner bound | | | true maximum now |
 | 3c | DSC on a matched structure | plausible | | | |

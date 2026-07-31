@@ -136,7 +136,7 @@ namespace ESAPI_RegistrationQA.Services
 
             // --- Deformation / topology -------------------------------------------------
             _progress.Report(MeasurementStage.DeformationField);
-            ComputeDeformationMetrics(measurements, registration);
+            ComputeDeformationMetrics(measurements, registration, sourceImage);
 
             _progress.Report(MeasurementStage.TargetRegistrationError);
             ComputeTargetRegistrationError(registration, sourceImage, registeredImage, measurements);
@@ -514,11 +514,12 @@ namespace ESAPI_RegistrationQA.Services
         /// cannot be read on a given Eclipse version they fall back to unavailable with the
         /// specific reason, which is a fault to report rather than a limitation to accept.
         /// </summary>
-        private void ComputeDeformationMetrics(QaMeasurements measurements, dynamic registration)
+        private void ComputeDeformationMetrics(
+            QaMeasurements measurements, dynamic registration, dynamic sourceImage)
         {
             if (measurements.IsDeformable)
             {
-                ComputeDeformationMetricsFromField(measurements, registration);
+                ComputeDeformationMetricsFromField(measurements, registration, sourceImage);
                 return;
             }
 
@@ -592,7 +593,8 @@ namespace ESAPI_RegistrationQA.Services
         /// the reason across them would make one API difference look like three separate
         /// problems.
         /// </summary>
-        private void ComputeDeformationMetricsFromField(QaMeasurements measurements, dynamic registration)
+        private void ComputeDeformationMetricsFromField(
+            QaMeasurements measurements, dynamic registration, dynamic sourceImage)
         {
             // Hidden regardless of whether the field reads: it is a rigid-transform statement,
             // so on a deformable case it is inapplicable rather than merely missing.
@@ -714,6 +716,7 @@ namespace ESAPI_RegistrationQA.Services
                 metrics.MinDisplacementPerAxis[2], metrics.MaxDisplacementPerAxis[2]));
 
             LogFoldingEvidence(field, metrics);
+            LogPerStructureJacobian(field, metrics, sourceImage);
 
             measurements.DvfGradientMax = MeasuredValue.Measured(
                 metrics.MaxGradientMagnitude,
@@ -797,6 +800,102 @@ namespace ESAPI_RegistrationQA.Services
                   "relying on this registration for dose accumulation or contour propagation.");
 
             _log.Warning("jacobian", text.ToString());
+        }
+
+        /// <summary>
+        /// The Jacobian inside each contoured structure, which is how TG-132 Table III states the
+        /// criterion — "structures where volume reduction is expected", "where expansion is
+        /// expected" — rather than over the whole grid.
+        ///
+        /// The distinction is not academic. The field's grid is a box around the patient, and on a
+        /// head case most of it is air. A deformable algorithm has no image to constrain it out
+        /// there and folds freely, so a whole-field folding percentage can be dominated by voxels
+        /// that say nothing about the anatomy. The existing "away from the edge" figure does not
+        /// separate these: it measures distance from the grid boundary, not from the patient, so a
+        /// point in air in the middle of the box counts as interior.
+        ///
+        /// Reported per structure and left to the physicist. TG-132 ties the acceptable departure
+        /// from 1 to what was expected of that structure, which this tool cannot know.
+        /// </summary>
+        private void LogPerStructureJacobian(
+            DeformationFieldReader.Result field, DeformationFieldMetrics.Result whole, dynamic sourceImage)
+        {
+            if (field.Geometry == null)
+            {
+                _log.Info("jacobian per structure",
+                    "the deformation field did not expose its origin and direction cosines, so a " +
+                    "structure cannot be placed on its grid. The Jacobian above covers the whole " +
+                    "field, including whatever air the grid encloses.");
+                return;
+            }
+
+            if (sourceImage == null) return;
+
+            List<StructureRasterizer.NamedStructure> structures =
+                StructureRasterizer.ReadContourStructures(sourceImage, "source image", _log);
+
+            if (structures.Count == 0)
+            {
+                _log.Info("jacobian per structure",
+                    "no contour structures on the source image, so the Jacobian could only be " +
+                    "evaluated over the whole field.");
+                return;
+            }
+
+            foreach (StructureRasterizer.NamedStructure structure in structures)
+            {
+                bool[] mask;
+                try
+                {
+                    // No mapper: the structure is drawn on the source image and the field's grid is
+                    // already in patient coordinates, so the two share a frame.
+                    mask = StructureRasterizer.Rasterise(structure.Contours, field.Geometry, null);
+                }
+                catch (Exception ex)
+                {
+                    _log.Warning("jacobian per structure: " + structure.Id,
+                        "could not be rasterised onto the field's grid — " + DiagnosticLog.Describe(ex));
+                    continue;
+                }
+
+                int inside = 0;
+                for (int i = 0; i < mask.Length; i++) if (mask[i]) inside++;
+
+                if (inside == 0)
+                {
+                    _log.Info("jacobian per structure: " + structure.Id,
+                        "no grid point of the deformation field falls inside this structure — it is " +
+                        "either outside the field's extent or thinner than one grid step across.");
+                    continue;
+                }
+
+                string problem;
+                DeformationFieldMetrics.Result within =
+                    DeformationFieldMetrics.Compute(field, mask, out problem);
+
+                if (within == null)
+                {
+                    _log.Warning("jacobian per structure: " + structure.Id,
+                        problem ?? "no Jacobian could be computed inside this structure");
+                    continue;
+                }
+
+                _log.Info("jacobian per structure: " + structure.Id, string.Format(
+                    CultureInfo.InvariantCulture,
+                    "{0:F3} % folding over {1:N0} interior points inside the structure " +
+                    "(whole field: {2:F3} % over {3:N0}). |J| min {4:F4}, p1 {5:F3}, median {6:F3}, " +
+                    "p99 {7:F3}, max {8:F4}.{9}",
+                    within.NegativeJacobianPercent, within.JacobianSampleCount,
+                    whole.NegativeJacobianPercent, whole.JacobianSampleCount,
+                    within.MinJacobian, within.JacobianP1, within.JacobianMedian,
+                    within.JacobianP99, within.MaxJacobian,
+                    structure.IsSurfaceOutline
+                        ? " This is the patient outline (" + structure.SurfaceOutlineReason +
+                          "), so it is the closest thing here to \u201Cinside the patient\u201D: folding " +
+                          "well below the whole-field figure means most of it lies in air the grid " +
+                          "encloses but the patient does not occupy."
+                        : string.Empty));
+            }
         }
 
         // ---------------------------------------------------------------- structures
