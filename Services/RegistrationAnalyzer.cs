@@ -863,9 +863,12 @@ namespace ESAPI_RegistrationQA.Services
 
                 if (inside == 0)
                 {
-                    _log.Info("jacobian per structure: " + structure.Id,
-                        "no grid point of the deformation field falls inside this structure — it is " +
-                        "either outside the field's extent or thinner than one grid step across.");
+                    // Say which of the possible causes it is rather than listing them. A structure
+                    // that sits outside the field's extent is a property of the case; one that
+                    // sits inside it and still catches nothing is a fault worth chasing.
+                    _log.Warning("jacobian per structure: " + structure.Id,
+                        "no grid point of the deformation field falls inside this structure. " +
+                        DescribeStructureAgainstGrid(structure, field.Geometry));
                     continue;
                 }
 
@@ -880,15 +883,21 @@ namespace ESAPI_RegistrationQA.Services
                     continue;
                 }
 
+                double voxelMm3 = field.XResMm * field.YResMm * field.ZResMm;
+
                 _log.Info("jacobian per structure: " + structure.Id, string.Format(
                     CultureInfo.InvariantCulture,
                     "{0:F3} % folding over {1:N0} interior points inside the structure " +
                     "(whole field: {2:F3} % over {3:N0}). |J| min {4:F4}, p1 {5:F3}, median {6:F3}, " +
-                    "p99 {7:F3}, max {8:F4}.{9}",
+                    "p99 {7:F3}, max {8:F4}. The mask holds {9:N0} grid points, {10:P1} of the grid, " +
+                    "about {11:N0} cm3 at this spacing — worth a glance against the volume you " +
+                    "expect, since a mask far too small would make the folding figure look better " +
+                    "than it is.{12}",
                     within.NegativeJacobianPercent, within.JacobianSampleCount,
                     whole.NegativeJacobianPercent, whole.JacobianSampleCount,
                     within.MinJacobian, within.JacobianP1, within.JacobianMedian,
                     within.JacobianP99, within.MaxJacobian,
+                    inside, (double)inside / mask.Length, inside * voxelMm3 / 1000.0,
                     structure.IsSurfaceOutline
                         ? " This is the patient outline (" + structure.SurfaceOutlineReason +
                           "), so it is the closest thing here to \u201Cinside the patient\u201D: folding " +
@@ -896,6 +905,49 @@ namespace ESAPI_RegistrationQA.Services
                           "encloses but the patient does not occupy."
                         : string.Empty));
             }
+        }
+
+        /// <summary>
+        /// Where a structure sits relative to the deformation field's grid, for the case where
+        /// the mask came back empty. Distinguishes a structure outside the field's extent — a
+        /// property of the case — from one inside it that still caught nothing, which is a fault.
+        /// </summary>
+        private static string DescribeStructureAgainstGrid(
+            StructureRasterizer.NamedStructure structure, ImageGeometry grid)
+        {
+            Vec3 lo, hi;
+            if (structure.Contours == null || !structure.Contours.TryGetBounds(out lo, out hi))
+                return "Its contours expose no bounds, so it cannot be placed against the grid.";
+
+            Vec3 gridLo = grid.VoxelToPatient(0, 0, 0);
+            Vec3 gridHi = grid.VoxelToPatient(grid.XSize - 1, grid.YSize - 1, grid.ZSize - 1);
+
+            // The grid's axes need not be ordered low-to-high in patient coordinates.
+            Vec3 boxLo = new Vec3(Math.Min(gridLo.X, gridHi.X), Math.Min(gridLo.Y, gridHi.Y),
+                Math.Min(gridLo.Z, gridHi.Z));
+            Vec3 boxHi = new Vec3(Math.Max(gridLo.X, gridHi.X), Math.Max(gridLo.Y, gridHi.Y),
+                Math.Max(gridLo.Z, gridHi.Z));
+
+            bool overlaps =
+                lo.X <= boxHi.X && hi.X >= boxLo.X &&
+                lo.Y <= boxHi.Y && hi.Y >= boxLo.Y &&
+                lo.Z <= boxHi.Z && hi.Z >= boxLo.Z;
+
+            string extents = string.Format(CultureInfo.InvariantCulture,
+                "Structure spans X {0:F1}..{1:F1}, Y {2:F1}..{3:F1}, Z {4:F1}..{5:F1} mm; the field's " +
+                "grid spans X {6:F1}..{7:F1}, Y {8:F1}..{9:F1}, Z {10:F1}..{11:F1} mm. ",
+                lo.X, hi.X, lo.Y, hi.Y, lo.Z, hi.Z,
+                boxLo.X, boxHi.X, boxLo.Y, boxHi.Y, boxLo.Z, boxHi.Z);
+
+            if (!overlaps)
+                return extents + "They do not overlap, so the deformation field simply does not " +
+                       "cover this structure — nothing to fix, but nothing to report either.";
+
+            return extents + "They do overlap, so the structure is not outside the field. Either it " +
+                   "is thinner than the grid's spacing along some axis — " +
+                   string.Format(CultureInfo.InvariantCulture, "{0:F2}/{1:F2}/{2:F2} mm here — ",
+                       grid.XRes, grid.YRes, grid.ZRes) +
+                   "or the rasterisation is not finding it, which would be a fault worth reporting.";
         }
 
         // ---------------------------------------------------------------- structures

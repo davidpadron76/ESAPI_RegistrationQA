@@ -492,11 +492,38 @@ the box counts as interior by that measure.
 
 The Diagnostics tab now reports the Jacobian **per contoured structure**, evaluated only at the
 grid points inside each one, which is how TG-132 Table III states the criterion in the first
-place — per structure, against the volume change expected of it. Look for
-`jacobian per structure: BODY`: it is the closest thing available to "inside the patient". If the
-folding there is far below the whole-field 2.979 %, most of what the whole-field number counts is
-in air the grid encloses but the patient does not occupy, and the registration is better than the
-headline figure suggests.
+place — per structure, against the volume change expected of it.
+
+**On the phantom case the answer was unambiguous:**
+
+```
+jacobian per structure: BODY
+0.000 % folding over 232,098 interior points inside the structure
+(whole field: 2.979 % over 1,419,024)
+|J| min 0.0280, p1 0.304, median 0.958, p99 1.627, max 2.7327
+```
+
+**Not one folded point lies inside the patient.** All 42,273 of them are outside BODY, in the air
+the grid encloses. Inside the outline the determinant never goes negative at all — its minimum is
+0.0280 — and the median is 0.958, within 4 % of volume-preserving.
+
+So the registration is far better than the whole-field 2.979 % suggested, and the whole-field
+figure should be read as what it is: a statistic over a box, most of which is not patient. The
+per-structure line is the one to act on, and it is also the one TG-132 actually describes.
+
+**Two things on that output still need checking, and neither is settled:**
+
+- **The BODY mask holds 232,098 points, 16.4 % of the grid — about 1.10 L at this spacing.** A
+  whole adult head is nearer 4–5 L. That may be legitimate if the field's grid covers only part
+  of the patient in Z, but it may also mean the mask is catching less of the structure than it
+  should, which would make the folding figure look better than it is. The per-structure line now
+  prints the point count, the grid fraction and the implied volume so this can be judged at a
+  glance.
+- **`PTV_High` returned no grid points at all.** The message now distinguishes the possible
+  causes instead of listing them: it prints the structure's bounding box against the field's, says
+  whether the two overlap, and names the grid spacing. If they overlap, the structure is not
+  outside the field and either it is thinner than a grid step — plausible at 5 mm in Z for a small
+  target — or the rasterisation is failing, which would be a fault. **Send that line.**
 
 **What these numbers say about the registration itself:** the field displaces the phantom by up
 to 58 mm, with per-axis excursions of 74 mm in X and 70 mm in Z. This is a rigid skull phantom
@@ -651,7 +678,9 @@ Open an issue at
 | 3d | **Curl vs Eclipse's curl view** | agree | | | Eclipse showed 0–2.15 on 2026-07-30; plugin value not yet compared — needs a rebuild after b9976ec |
 | 2 | **Per-axis displacement vs Eclipse** | X=LR, Y=AP, Z=CC | | | see the reference table under test 3d; plugin value pending rebuild |
 | 3d | Jacobian departure from 1 | plausible, INFO | | | judge against expected volume change |
-| 3d | **Jacobian inside BODY vs whole field** | | | | Diagnostics; separates folding in the patient from folding in air |
+| 3d | **Jacobian inside BODY vs whole field** | | | | 0.000 % vs 2.979 % on 2026-07-30 — no folding inside the patient |
+| 3d | BODY mask volume plausible? | ~head volume | | | 1.10 L measured; check against the case |
+| 3d | PTV mask non-empty | non-empty | | | empty on 2026-07-30 — send the bounding-box line |
 | 3d | Jacobian inside PTV / each organ | | | | Diagnostics; TG-132 states the criterion per structure |
 | 3d | DVF gradient (max) | plausible, INFO | | | no TG-132 tolerance |
 | 3d | Max displacement over the field | ≥ the old corner bound | | | true maximum now |
