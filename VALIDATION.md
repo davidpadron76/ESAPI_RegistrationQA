@@ -577,6 +577,33 @@ percentage beside the graded one; the diagnostics still report the Jacobian per 
 the dataset gained two columns, `JacobianDomain` and `JacobianNegPercent_WholeField`, with the
 schema bumped **6 → 7** because a v7 folding percentage is not comparable with a v6 one.
 
+#### Confirmed in Eclipse, 2026-07-31
+
+Run on the same phantom case. The `jacobian: grading domain` line reported:
+
+> graded inside the patient outline "BODY" (name match ("BODY")), not over the whole field. […]
+> Folding here **0.003 % over 770,931** interior points, against **2.979 % over 1,419,024** for
+> the whole field. The field does NOT span the whole structure — structure X −106..87, Y
+> −305..−86, Z 38..253 mm against field X −102..82, Y −290..−90, Z 70..260 mm — so this figure
+> describes only the part of it the field covers.
+
+**The verdict is still NOT COMPLIANT, and that is the correct outcome.** 0.003 % of 770,931 is
+about 23 folded points, and Table III admits none. What changed is that the red is now earned by
+23 points inside the patient rather than by 42,250 points of air. The gate discriminates.
+
+**The second clause now carries the weight the first one lost.** Measured inside BODY, the
+departure from 1 is **0.543**, with |J| p1 **0.490**, median 0.956, p99 **1.543** — 1 % of the
+tissue points are compressed past half their volume and 1 % expanded past one and a half times,
+on a rigid skull phantom scanned twice, where the true deformation is the identity. That is a
+stronger statement about this registration than any folding percentage was, and it is ungraded
+by design, since Table III ties the acceptable departure to the volume change the case leads you
+to expect.
+
+**The coverage caveat is not cosmetic.** The field's box misses the structure in Z at both ends —
+BODY runs 38..253 mm, the field 70..260 mm — so about 45 mm of patient at the inferior end is
+outside the graded region entirely. The claim the tool makes is bounded accordingly, and it says
+so on the line. A folding percentage inside BODY is a statement about BODY ∩ field, not BODY.
+
 **Two things on that output still need checking, and neither is settled:**
 
 - **The BODY mask holds 232,098 points — about 1.10 L — against a structure far larger than that.
@@ -746,14 +773,15 @@ Open an issue at
 | 3d | **Deformation field read** | grid + spacing in Diagnostics | | | must be the field's, not the image's |
 | 3d | **Jacobian on a trusted DIR** | 0 % | | | any folding is a Table III breach; graded inside the patient outline |
 | 3d | **`jacobian: grading domain`** | names the region graded | | | falls back to the whole field, and says why, when no outline can be placed |
-| 3d | **Jacobian min/max vs Eclipse's colour bar** | agree to 2 dp | | | matched −0.72/+3.04 on 2026-07-30 |
-| 3d | **Divergence vs Eclipse's divergence view** | agree | | | Diagnostics line; Eclipse showed −2.87/+1.46 |
-| 3d | **Distance vs Eclipse's distance view** | agree | | | matched 58.4 mm on 2026-07-30 |
-| 3d | **Curl vs Eclipse's curl view** | agree | | | Eclipse showed 0–2.15 on 2026-07-30; plugin value not yet compared — needs a rebuild after b9976ec |
-| 2 | **Per-axis displacement vs Eclipse** | X=LR, Y=AP, Z=CC | | | see the reference table under test 3d; plugin value pending rebuild |
-| 3d | Jacobian departure from 1 | plausible, INFO | | | judge against expected volume change |
-| 3d | **Jacobian inside BODY vs whole field** | | | | 0.003 % vs 2.979 % — 99.95 % of the folding is in air |
-| 3d | Jacobian inside the target | 0 % | | | PTV_High: 0.000 %, median \|J\| 0.991 |
+| 3d | **Jacobian min/max vs Eclipse's colour bar** | agree to 2 dp | 2026-07-30 | ✅ | matched −0.72/+3.04 |
+| 3d | **Divergence vs Eclipse's divergence view** | agree | 2026-07-30 | ✅ | matched −2.87/+1.46 |
+| 3d | **Distance vs Eclipse's distance view** | agree | 2026-07-30 | ✅ | matched 58.4 mm |
+| 3d | **Curl vs Eclipse's curl view** | agree | 2026-07-31 | ⚠ | Eclipse 0–2.15, plugin 0–1.99. Explained, not a defect — see below |
+| 2 | **Per-axis displacement vs Eclipse** | X=LR, Y=AP, Z=CC | 2026-07-30 | ✅ | all three components matched — see the reference table under test 3d. Still open on a **rigid** case: that labelling comes from other code |
+| 3d | Jacobian departure from 1 | plausible, INFO | 2026-07-31 | ⚠ | 0.543 inside BODY (p1 0.490, p99 1.543) on a rigid phantom — implausible, and that is the finding |
+| 3d | **Jacobian inside BODY vs whole field** | | 2026-07-31 | ✅ | 0.003 % vs 2.979 % — 99.95 % of the folding is in air |
+| 3d | **`jacobian: grading domain` in a live run** | names the region graded | 2026-07-31 | ✅ | reported BODY by name match, with the field/structure extents |
+| 3d | Jacobian inside the target | 0 % | 2026-07-30 | ✅ | PTV_High: 0.000 %, median \|J\| 0.991 |
 | 3d | **`jacobian per structure: frame`** | names which image was used | | | 14 % source vs 87 % registered — registered chosen |
 | 3d | BODY mask vs field extent | field is a sub-box | | | field 184×200×190 mm, BODY 236×264×385 mm |
 | 3d | PTV mask non-empty | non-empty | | | empty on 2026-07-30 — send the bounding-box line |

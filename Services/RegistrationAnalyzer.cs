@@ -737,7 +737,7 @@ namespace ESAPI_RegistrationQA.Services
                 metrics.MinDisplacementPerAxis[1], metrics.MaxDisplacementPerAxis[1],
                 metrics.MinDisplacementPerAxis[2], metrics.MaxDisplacementPerAxis[2]));
 
-            LogFoldingEvidence(field, metrics);
+            LogFoldingEvidence(field, metrics, domain);
             LogPerStructureJacobian(field, metrics, structures, domain);
 
             measurements.DvfGradientMax = MeasuredValue.Measured(
@@ -906,19 +906,36 @@ namespace ESAPI_RegistrationQA.Services
 
         /// <summary>
         /// The evidence a physicist needs to act on a folding result, which a percentage alone
-        /// does not carry: where it is, and whether the field's Jacobian is the registration's.
+        /// does not carry: how many points, where they are, and how far they sit from the edge
+        /// of the field's support, where the algorithm had no image to work from.
         ///
         /// TG-132 asks for the influence of folding on the intended use to be evaluated rather
-        /// than treating any non-zero value as disqualifying outright. That judgement needs to
-        /// know whether the folded region is in the anatomy or hard against the boundary of the
-        /// field's support, where the algorithm had no image to work from.
+        /// than treating any non-zero value as disqualifying outright, and that judgement needs
+        /// the location, not the percentage.
+        ///
+        /// It describes the <em>graded</em> region, not the whole field. Those are different
+        /// numbers now — 23 folded points inside BODY against 42,273 over the grid on the
+        /// phantom case — and a diagnostic that reported the second while the table row showed
+        /// the first would read as a contradiction. The whole-field count is still given, as
+        /// the comparison rather than as the subject.
         /// </summary>
         private void LogFoldingEvidence(
-            DeformationFieldReader.Result field, DeformationFieldMetrics.Result metrics)
+            DeformationFieldReader.Result field, DeformationFieldMetrics.Result whole,
+            JacobianDomain domain)
         {
+            DeformationFieldMetrics.Result metrics = domain.Metrics;
+            string region = domain.IsWholeField ? "the field" : "\"" + domain.StructureId + "\"";
+
             if (metrics.NegativeJacobianPercent <= 0.0)
             {
-                _log.Info("jacobian", "no folding: det(I + grad u) is positive at every interior grid point.");
+                _log.Info("jacobian", domain.IsWholeField
+                    ? "no folding: det(I + grad u) is positive at every interior grid point."
+                    : string.Format(CultureInfo.InvariantCulture,
+                        "no folding inside {0}: det(I + grad u) is positive at every one of the " +
+                        "{1:N0} interior grid points there. Over the whole field, including the air " +
+                        "the grid encloses, {2:F3} % of {3:N0} points fold.",
+                        region, metrics.JacobianSampleCount,
+                        whole.NegativeJacobianPercent, whole.JacobianSampleCount));
                 return;
             }
 
@@ -927,8 +944,8 @@ namespace ESAPI_RegistrationQA.Services
 
             var text = new System.Text.StringBuilder();
             text.AppendFormat(CultureInfo.InvariantCulture,
-                "{0:N0} of {1:N0} interior points fold (minimum determinant {2:F4}). ",
-                negative, metrics.JacobianSampleCount, metrics.MinJacobian);
+                "{0:N0} of the {1:N0} interior points inside {2} fold (minimum determinant {3:F4}). ",
+                negative, metrics.JacobianSampleCount, region, metrics.MinJacobian);
 
             if (metrics.NegativeBoundsMin != null)
             {
@@ -943,6 +960,18 @@ namespace ESAPI_RegistrationQA.Services
             text.AppendFormat(CultureInfo.InvariantCulture,
                 "{0:N0} of them ({1:P0}) lie within two grid steps of the edge of the field. ",
                 metrics.NegativeNearBoundary, metrics.NegativeBoundaryFraction);
+
+            if (!domain.IsWholeField)
+            {
+                int wholeNegative = (int)Math.Round(
+                    whole.NegativeJacobianPercent * whole.JacobianSampleCount / 100.0);
+
+                text.AppendFormat(CultureInfo.InvariantCulture,
+                    "For comparison, the whole field folds at {0:N0} of {1:N0} points; the other " +
+                    "{2:N0} are outside {3}. ",
+                    wholeNegative, whole.JacobianSampleCount,
+                    Math.Max(0, wholeNegative - negative), region);
+            }
 
             text.Append(metrics.NegativeBoundaryFraction >= 0.95
                 ? "Folding confined to the edge of the field's support is usually the algorithm " +
