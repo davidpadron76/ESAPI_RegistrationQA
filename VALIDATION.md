@@ -428,7 +428,7 @@ already confirmed; the rest await a build carrying the Diagnostics cross-check l
 | X-Component | −34.1 to 40.1 mm | −34.07 to 40.10 mm | **match** |
 | Y-Component | −24.8 to 6.9 mm | −24.80 to 6.89 mm | **match** |
 | Z-Component | −44.5 to 25.3 mm | −44.54 to 25.29 mm | **match** |
-| Curl | 0 to 2.15 | 0 to 1.99 | **differs — open** |
+| Curl | 0 to 2.15 | 0 to 1.99 | **differs — explained** |
 
 **The axis convention is settled, and it is correct.** All three components match Eclipse to the
 precision it displays, so the plugin's X is Eclipse's X, its Y is Eclipse's Y and its Z is
@@ -441,22 +441,41 @@ That confirmation covers the deformation field's components. The rigid transform
 labelling is read from a different property by different code, so **test 2 is still worth running
 on a rigid case** — but the evidence that the two now disagree is gone.
 
-**Curl is the one that does not match: Eclipse 2.15, plugin 1.99, a difference of 8 %.** The ratio
-is 1.0804, which is not a factor any alternative definition of curl would produce — not 2, not
-½, not √2 — so this is unlikely to be a convention difference. The formula itself is pinned by
-contract tests against closed-form answers, including a shear whose curl equals its shear rate
-exactly, so the arithmetic is not in doubt either.
+**Curl is the one that does not match: Eclipse 2.15, plugin 1.99, a difference of 8 %** — and the
+cause is now established. It is the evaluation domain, not the formula.
 
-The likeliest explanation is the **domain**. The plugin evaluates every derivative on the
-interior only, skipping the outermost shell in each axis, because a central difference needs a
-neighbour on both sides. If Eclipse evaluates the full grid with one-sided differences at the
-edges, and the field's largest curl happens to sit in that shell, the two would disagree exactly
-like this — while the Jacobian and divergence, whose extremes lie inside, would still agree.
+The plugin evaluates every derivative on the interior only, skipping the outermost shell in each
+axis, because a central difference needs a neighbour on both sides. The Diagnostics line reports
+where the maximum was found, and on this case it reads:
 
-The Diagnostics line now reports **where** the maximum curl is found. If it sits against the
-interior boundary, that is the answer; if it sits well inside, the explanation is something else
-and worth chasing. Either way this is a discrepancy in a quantity TG-132 does not use and no
-metric depends on.
+```
+max |curl u| 1.99 at grid (1, 151, 37) of 190x206x39, 0 step(s) from the nearest face
+```
+
+On a 190×206×39 field the evaluated interior runs x 1–188, y 1–204, z 1–37. The maximum sits at
+x = 1, the **first** evaluated layer, and simultaneously at z = 37, the **last** — against two
+faces at once, with the excluded shell directly adjacent in both directions. An implementation
+evaluating the full grid with one-sided differences there would find a larger value, which is
+what Eclipse reports. Nothing else needs to be invoked: the ratio 1.0804 matches no alternative
+definition of curl, and the formula is pinned by contract tests including a shear whose curl
+equals its shear rate exactly.
+
+That a rotational measure peaks at the boundary is expected rather than surprising — the field's
+support ends there, so the displacement falls away abruptly and the local shear is at its
+largest.
+
+**Why the Jacobian still matched, if Eclipse evaluates the full grid.** Because its extremes are
+genuinely interior, and the plugin's own folding analysis says so independently: of 42,271 folded
+points, only 1,673 — 4 % — lie within two grid steps of the edge. The most extreme determinant
+being inside is consistent with that, so the agreement is not luck.
+
+**The interior-only choice stands, and the difference is left as documented rather than
+engineered away.** Mixing one-sided derivatives at the boundary with central differences inside
+would put estimates of two different error orders into the same graded statistic, which is the
+reason the shell is excluded. Changing a metric that gates a QA verdict so it matches a display
+would be the wrong trade. Curl gates nothing and no metric derives from it, so what it needs is
+to be understood, which it now is: **expect the plugin's curl to read slightly below Eclipse's
+whenever the peak sits at the field edge.**
 
 **The three components are internally consistent with the distance view**, which is worth
 checking before comparing anything against them. The largest single component is 44.5 mm, so
