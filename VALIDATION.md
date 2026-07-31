@@ -415,6 +415,35 @@ maximum distance and the maximum curl together, precisely so they can be read ag
 views one after another. Any single disagreement points at the field read rather than at the
 registration, because all four come from the same read.
 
+### Eclipse reference values, phantom CT→CT deformable, 2026-07-30
+
+Captured from Eclipse's own views of the field, for the plugin to be held against. Two are
+already confirmed; the rest await a build carrying the Diagnostics cross-check lines.
+
+| Eclipse view | Eclipse | Plugin | Status |
+|---|---|---|---|
+| Jacobian determinant | −0.72 to +3.04 | −0.7213 to +3.0431 | **confirmed** |
+| Distance (‖u‖) | 0 to 58.4 mm | 58.399 mm | **confirmed** |
+| Divergence | −2.87 to +1.46 | — | pending |
+| Curl | 0 to 2.15 | — | pending |
+| X-Component | −34.1 to 40.1 mm | — | pending |
+| Y-Component | −24.8 to 6.9 mm | — | pending |
+| Z-Component | −44.5 to 25.3 mm | — | pending |
+
+**The three components are internally consistent with the distance view**, which is worth
+checking before comparing anything against them. The largest single component is 44.5 mm, so
+‖u‖ can be no smaller than that; the norm of the three per-axis extremes is 64.8 mm, so it can be
+no larger. Eclipse's 58.4 mm sits inside [44.5, 64.8]. Had it fallen outside, one of the views
+would have been misread before the plugin was ever involved.
+
+**What these numbers say about the registration itself:** the field displaces the phantom by up
+to 58 mm, with per-axis excursions of 74 mm in X and 70 mm in Z. This is a rigid skull phantom
+imaged twice — there is no anatomy to deform. Together with 2.979 % folding, 96 % of it inside
+the field rather than at its edge, and a determinant reaching 3.04, the deformation is not
+describing the patient. The intensity metrics saw none of this: NCC came out at 0.968 and the
+fusion looks correct on screen, which is exactly the case TG-132 §4.C.3 warns cannot be converted
+into spatial accuracy.
+
 **One comparison is worth more than the rest, and it is not on this list.** A second Diagnostics
 line, `deformation field: displacement per axis`, gives the field's range on X, Y and Z
 separately. If Eclipse displays the field per component, checking those three against it settles
@@ -558,7 +587,7 @@ Open an issue at
 | 3d | **Divergence vs Eclipse's divergence view** | agree | | | Diagnostics line; Eclipse showed −2.87/+1.46 |
 | 3d | **Distance vs Eclipse's distance view** | agree | | | matched 58.4 mm on 2026-07-30 |
 | 3d | **Curl vs Eclipse's curl view** | agree | | | Eclipse showed 0–2.15 on 2026-07-30; plugin value not yet compared — needs a rebuild after b9976ec |
-| 2 | **Per-axis displacement vs Eclipse** | X=LR, Y=AP, Z=CC | | | Eclipse X: −34.1 to 40.1 mm, Y: −24.8 to 6.9 mm (2026-07-30); Z pending, plugin value pending rebuild |
+| 2 | **Per-axis displacement vs Eclipse** | X=LR, Y=AP, Z=CC | | | see the reference table under test 3d; plugin value pending rebuild |
 | 3d | Jacobian departure from 1 | plausible, INFO | | | judge against expected volume change |
 | 3d | DVF gradient (max) | plausible, INFO | | | no TG-132 tolerance |
 | 3d | Max displacement over the field | ≥ the old corner bound | | | true maximum now |
