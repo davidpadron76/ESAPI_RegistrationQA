@@ -180,10 +180,12 @@ namespace ESAPI_RegistrationQA.Services
                 case MetricKeys.JacobianNegative:
                     return "Grid folding: an unphysical topological inversion in the deformation field. " +
                            "TG-132 Table III admits no negative Jacobian values, which is why any " +
-                           "non-zero percentage breaches. The report asks for the influence of the " +
-                           "affected regions on the intended use to be evaluated; until that is done the " +
-                           "registration is not suitable for dose accumulation or for direct contour " +
-                           "propagation.";
+                           "non-zero percentage breaches. This is measured inside the patient outline " +
+                           "where one could be placed on the field's grid — the criterion column names " +
+                           "the region — so it is not folding in the air around the patient. The report " +
+                           "asks for the influence of the affected regions on the intended use to be " +
+                           "evaluated; until that is done the registration is not suitable for dose " +
+                           "accumulation or for direct contour propagation.";
 
                 case MetricKeys.MaxDisplacement:
                     return "High vector displacement. Confirm that it corresponds to a real anatomical " +

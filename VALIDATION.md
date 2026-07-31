@@ -537,13 +537,45 @@ the field's grid enclosing **14 %** of the source image's structures against **8
 registered image's, so the choice was not marginal. And the BODY mask went from 1.10 L to
 **3.75 L**, which is a realistic head volume where the earlier figure was not.
 
-**This leaves a real question about the graded metric.** `Jacobian < 0` gates at 0 % and is
-computed over the whole field, so this registration is reported NOT COMPLIANT on 2.979 % folding
-that is almost entirely outside the patient. TG-132 states the Jacobian criterion per structure,
-and says of folding that "where it is confined to a region that does not affect the intended use,
-the influence should be evaluated" — air outside the patient does not affect the intended use by
-any reading. Grading over the whole grid is stricter than the report, and it produces a red
-verdict on a deformation that is clinically sound where it describes the patient.
+### The grading domain, decided
+
+That measurement raised a question about the graded metric, and it has now been answered.
+
+`Jacobian < 0` gated at 0 % **over the whole field**, so this registration was reported NOT
+COMPLIANT on 2.979 % folding that is 99.95 % outside the patient. TG-132 states the Jacobian
+criterion per structure — "0–1 for structures where volume reduction is expected; above 1 for
+structures where volume expansion is expected" — not over a bounding box, and says of folding
+that where it is confined to a region that does not affect the intended use, the influence should
+be evaluated. Air outside the patient does not affect the intended use by any reading.
+
+Nor was whole-field grading the conservative choice it looks like. *Every* deformable field
+extends past the anatomy into air, where the algorithm has no image to constrain it and folds
+freely, so grading the box fails almost every deformable registration — and a gate that always
+fails stops being read. That is a worse failure mode than the one it was guarding against.
+
+**The tolerance is unchanged at 0 %. What changed is the region it is applied over:**
+
+| | before | now |
+|---|---|---|
+| graded region | the whole field's grid | the patient outline (`BODY`/`EXTERNAL`), whole field when there is none |
+| value on this case | 2.979 % | **0.003 %** |
+| whole-field value | *(was the graded value)* | still reported, in the criterion column and in the dataset |
+
+The domain is chosen by `SelectJacobianDomain` in `Services/RegistrationAnalyzer.cs`, which takes
+the first structure classified as a patient outline — DICOM type `EXTERNAL`, or a
+`BODY`/`SKIN`/`EXTERNAL`-style name — from whichever image's structures share the field's frame,
+and falls back to the whole field whenever it cannot place one: no field geometry, no outline
+among the structures, rasterisation failure, or a mask that catches no interior grid point. Each
+fallback states which of those it was, in the `jacobian: grading domain` diagnostic line.
+
+Both clauses of the Table III Jacobian row move together — `Jacobian < 0` and
+`Jacobian departure from 1` — because they are one row and grading one clause on the anatomy
+while grading the other on the air would be incoherent.
+
+**Nothing is hidden by this.** The criterion column names the region and carries the whole-field
+percentage beside the graded one; the diagnostics still report the Jacobian per structure; and
+the dataset gained two columns, `JacobianDomain` and `JacobianNegPercent_WholeField`, with the
+schema bumped **6 → 7** because a v7 folding percentage is not comparable with a v6 one.
 
 **Two things on that output still need checking, and neither is settled:**
 
@@ -561,12 +593,18 @@ verdict on a deformation that is clinically sound where it describes the patient
   target — or the rasterisation is failing, which would be a fault. **Send that line.**
 
 **What these numbers say about the registration itself:** the field displaces the phantom by up
-to 58 mm, with per-axis excursions of 74 mm in X and 70 mm in Z. This is a rigid skull phantom
-imaged twice — there is no anatomy to deform. Together with 2.979 % folding, 96 % of it inside
-the field rather than at its edge, and a determinant reaching 3.04, the deformation is not
-describing the patient. The intensity metrics saw none of this: NCC came out at 0.968 and the
-fusion looks correct on screen, which is exactly the case TG-132 §4.C.3 warns cannot be converted
-into spatial accuracy.
+to 58 mm, with per-axis excursions of 74 mm in X and 70 mm in Z, and its determinant reaches
+3.04. This is a rigid skull phantom imaged twice — there is no anatomy to deform, so a
+volume-tripling determinant anywhere near it is describing the algorithm, not the patient.
+
+The folding does *not* carry that argument, and an earlier version of this paragraph said it did.
+Once the mask was in the right frame, 99.95 % of the folding turned out to be in air, and inside
+the target the median determinant is 0.991. The case against this registration rests on the
+displacement magnitudes and on the determinant range, not on the folding percentage.
+
+The intensity metrics saw none of it either way: NCC came out at 0.968 and the fusion looks
+correct on screen, which is exactly the case TG-132 §4.C.3 warns cannot be converted into spatial
+accuracy.
 
 **One comparison is worth more than the rest, and it is not on this list.** A second Diagnostics
 line, `deformation field: displacement per axis`, gives the field's range on X, Y and Z
@@ -706,7 +744,8 @@ Open an issue at
 | 3b | TRE mean under known shift | applied value | | | |
 | 3b | Inverse consistency residual | ≤ max voxel dim | | | |
 | 3d | **Deformation field read** | grid + spacing in Diagnostics | | | must be the field's, not the image's |
-| 3d | **Jacobian on a trusted DIR** | 0 % | | | any folding is a Table III breach |
+| 3d | **Jacobian on a trusted DIR** | 0 % | | | any folding is a Table III breach; graded inside the patient outline |
+| 3d | **`jacobian: grading domain`** | names the region graded | | | falls back to the whole field, and says why, when no outline can be placed |
 | 3d | **Jacobian min/max vs Eclipse's colour bar** | agree to 2 dp | | | matched −0.72/+3.04 on 2026-07-30 |
 | 3d | **Divergence vs Eclipse's divergence view** | agree | | | Diagnostics line; Eclipse showed −2.87/+1.46 |
 | 3d | **Distance vs Eclipse's distance view** | agree | | | matched 58.4 mm on 2026-07-30 |

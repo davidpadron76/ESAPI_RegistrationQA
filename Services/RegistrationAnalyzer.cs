@@ -664,18 +664,37 @@ namespace ESAPI_RegistrationQA.Services
                 return;
             }
 
+            // Which image's structures share the field's frame — needed both to grade the
+            // Jacobian on the patient outline and to report it per structure, so it is resolved
+            // once here rather than twice.
+            List<StructureRasterizer.NamedStructure> structures = field.Geometry == null
+                ? null
+                : ChooseStructuresMatchingField(field, sourceImage, registeredImage);
+
+            JacobianDomain domain = SelectJacobianDomain(field, metrics, structures);
+
+            measurements.JacobianDomain = domain.StructureId;
+            measurements.JacobianNegativePercentWholeField = metrics.NegativeJacobianPercent;
+
             measurements.JacobianNegativePercent = MeasuredValue.Measured(
-                metrics.NegativeJacobianPercent,
+                domain.Metrics.NegativeJacobianPercent,
                 string.Format(CultureInfo.InvariantCulture,
-                    "min |J| {0:F4} over {1:N0} pts{2}",
-                    metrics.MinJacobian, metrics.JacobianSampleCount,
-                    DescribeFoldingLocation(metrics)));
+                    "min |J| {0:F4} over {1:N0} pts {2}{3}",
+                    domain.Metrics.MinJacobian, domain.Metrics.JacobianSampleCount,
+                    domain.ShortLabel,
+                    domain.IsWholeField
+                        ? DescribeFoldingLocation(domain.Metrics)
+                        : string.Format(CultureInfo.InvariantCulture,
+                            "; whole field {0:F3} %", metrics.NegativeJacobianPercent)));
 
             measurements.JacobianDeparture = MeasuredValue.Measured(
-                metrics.MaxDepartureFromOne,
+                domain.Metrics.MaxDepartureFromOne,
                 string.Format(CultureInfo.InvariantCulture,
-                    "|J| p1 {0:F3}, median {1:F3}, p99 {2:F3}",
-                    metrics.JacobianP1, metrics.JacobianMedian, metrics.JacobianP99));
+                    "|J| p1 {0:F3}, median {1:F3}, p99 {2:F3} {3}",
+                    domain.Metrics.JacobianP1, domain.Metrics.JacobianMedian,
+                    domain.Metrics.JacobianP99, domain.ShortLabel));
+
+            _log.Info("jacobian: grading domain", domain.Explanation);
 
             // Diagnostics, not a table row: divergence is not a TG-132 metric and adding it to the
             // graded surface would be adding a criterion the report does not have. Its worth is as
@@ -719,7 +738,7 @@ namespace ESAPI_RegistrationQA.Services
                 metrics.MinDisplacementPerAxis[2], metrics.MaxDisplacementPerAxis[2]));
 
             LogFoldingEvidence(field, metrics);
-            LogPerStructureJacobian(field, metrics, sourceImage, registeredImage);
+            LogPerStructureJacobian(field, metrics, structures, domain);
 
             measurements.DvfGradientMax = MeasuredValue.Measured(
                 metrics.MaxGradientMagnitude,
@@ -728,6 +747,138 @@ namespace ESAPI_RegistrationQA.Services
             measurements.MaxDisplacement = MeasuredValue.Measured(
                 metrics.MaxDisplacementMm,
                 "max over every field point, not an eight-corner bound; " + gridNote);
+        }
+
+        /// <summary>
+        /// What the two graded Jacobian metrics were computed over, and why.
+        /// </summary>
+        private sealed class JacobianDomain
+        {
+            public DeformationFieldMetrics.Result Metrics { get; set; }
+
+            /// <summary>Identifier of the outline structure, or null for the whole field.</summary>
+            public string StructureId { get; set; }
+
+            /// <summary>
+            /// The rasterised outline, kept so the per-structure log does not rasterise and
+            /// re-walk the same structure a second time on the UI thread.
+            /// </summary>
+            public bool[] Mask { get; set; }
+
+            /// <summary>Four words for the criterion column: "inside BODY" / "over the whole field".</summary>
+            public string ShortLabel { get; set; }
+
+            /// <summary>The full reading, for the diagnostics.</summary>
+            public string Explanation { get; set; }
+
+            public bool IsWholeField { get { return StructureId == null; } }
+        }
+
+        /// <summary>
+        /// Chooses what the graded Jacobian metrics are computed over: the patient outline when
+        /// one can be placed on the deformation field's grid, the whole field otherwise.
+        ///
+        /// TG-132 Table III states the Jacobian criterion per structure — "structures where
+        /// volume reduction is expected", "where expansion is expected" — not over a box. The
+        /// box matters because it is mostly not patient. On the phantom case the field spans
+        /// 1,419,024 interior points, of which 770,931 are inside BODY; 42,273 points fold, and
+        /// 42,250 of them (99.95 %) are in air. Grading the box reported 2.979 % against a
+        /// tolerance of 0 % on a registration whose folding inside the patient is 0.003 %.
+        ///
+        /// That is not a conservative error. Every deformable field extends past the anatomy
+        /// into air where the algorithm has no image to constrain it, so whole-field grading
+        /// fails almost every deformable case, and a gate that always fails stops being read.
+        /// The metric's own question is whether tissue folded onto itself; air is not tissue.
+        ///
+        /// The whole-field figure is not discarded — it is carried in the criterion column, in
+        /// the diagnostics and in its own dataset column, so the effect of this choice is
+        /// visible on every case rather than buried.
+        /// </summary>
+        private JacobianDomain SelectJacobianDomain(
+            DeformationFieldReader.Result field, DeformationFieldMetrics.Result whole,
+            List<StructureRasterizer.NamedStructure> structures)
+        {
+            JacobianDomain wholeField = new JacobianDomain
+            {
+                Metrics = whole,
+                StructureId = null,
+                ShortLabel = "over the whole field",
+                Explanation =
+                    "graded over the whole deformation field, including whatever air its grid " +
+                    "encloses. TG-132 states the Jacobian criterion per structure; the patient " +
+                    "outline is what this tool grades on when it can place one on the field's " +
+                    "grid, and it could not here."
+            };
+
+            if (field.Geometry == null)
+            {
+                wholeField.Explanation =
+                    "graded over the whole deformation field: it did not expose its origin and " +
+                    "direction cosines, so no structure can be placed on its grid.";
+                return wholeField;
+            }
+
+            if (structures == null || structures.Count == 0) return wholeField;
+
+            StructureRasterizer.NamedStructure outline = null;
+            foreach (StructureRasterizer.NamedStructure candidate in structures)
+            {
+                if (candidate.IsSurfaceOutline) { outline = candidate; break; }
+            }
+
+            if (outline == null)
+            {
+                wholeField.Explanation =
+                    "graded over the whole deformation field: none of the structures sharing its " +
+                    "frame is a patient outline (no DICOM type EXTERNAL, no BODY/SKIN-style name), " +
+                    "so there is nothing here that delimits patient from air.";
+                return wholeField;
+            }
+
+            bool[] mask;
+            try
+            {
+                mask = StructureRasterizer.Rasterise(outline.Contours, field.Geometry, null);
+            }
+            catch (Exception ex)
+            {
+                wholeField.Explanation =
+                    "graded over the whole deformation field: the patient outline \"" + outline.Id +
+                    "\" could not be rasterised onto its grid — " + DiagnosticLog.Describe(ex);
+                return wholeField;
+            }
+
+            string problem;
+            DeformationFieldMetrics.Result within =
+                DeformationFieldMetrics.Compute(field, mask, out problem);
+
+            if (within == null || within.JacobianSampleCount == 0)
+            {
+                wholeField.Explanation =
+                    "graded over the whole deformation field: the patient outline \"" + outline.Id +
+                    "\" yielded no interior grid point to evaluate — " +
+                    (problem ?? "the mask and the field's grid do not meet") + ".";
+                return wholeField;
+            }
+
+            return new JacobianDomain
+            {
+                Metrics = within,
+                StructureId = outline.Id,
+                Mask = mask,
+                ShortLabel = "inside " + outline.Id,
+                Explanation = string.Format(CultureInfo.InvariantCulture,
+                    "graded inside the patient outline \"{0}\" ({1}), not over the whole field. " +
+                    "TG-132 Table III states this criterion per structure, and the field's grid is " +
+                    "a box that is mostly air on most cases — a deformable algorithm has no image " +
+                    "to constrain it out there and folds freely, so grading the box grades the air. " +
+                    "Folding here {2:F3} % over {3:N0} interior points, against {4:F3} % over " +
+                    "{5:N0} for the whole field. {6}",
+                    outline.Id, outline.SurfaceOutlineReason,
+                    within.NegativeJacobianPercent, within.JacobianSampleCount,
+                    whole.NegativeJacobianPercent, whole.JacobianSampleCount,
+                    DescribeCoverage(outline, field.Geometry))
+            };
         }
 
         /// <summary>
@@ -822,7 +973,7 @@ namespace ESAPI_RegistrationQA.Services
         /// </summary>
         private void LogPerStructureJacobian(
             DeformationFieldReader.Result field, DeformationFieldMetrics.Result whole,
-            dynamic sourceImage, dynamic registeredImage)
+            List<StructureRasterizer.NamedStructure> structures, JacobianDomain domain)
         {
             if (field.Geometry == null)
             {
@@ -832,19 +983,6 @@ namespace ESAPI_RegistrationQA.Services
                     "field, including whatever air the grid encloses.");
                 return;
             }
-
-            // Which image's structures share the field's frame is not something the API states,
-            // and getting it wrong is silent: the mask lands in the wrong place and the Jacobian
-            // is computed over the wrong voxels while still looking like a number. On the phantom
-            // case the field's box sat 123 mm from BODY in Z — almost exactly the registration's
-            // own Z translation — because the grid is built on the registered image's geometry
-            // while the structures read were the source's.
-            //
-            // So both are read and the one whose structures actually line up with the field is
-            // used, rather than assuming either. Coverage is the test: a frame mismatch shows up
-            // as a collapse in how much of the structure the field's box contains.
-            List<StructureRasterizer.NamedStructure> structures =
-                ChooseStructuresMatchingField(field, sourceImage, registeredImage);
 
             if (structures == null || structures.Count == 0)
             {
@@ -856,18 +994,33 @@ namespace ESAPI_RegistrationQA.Services
 
             foreach (StructureRasterizer.NamedStructure structure in structures)
             {
+                bool reusedFromDomain =
+                    domain != null && !domain.IsWholeField && domain.Mask != null &&
+                    string.Equals(structure.Id, domain.StructureId, StringComparison.Ordinal);
+
                 bool[] mask;
-                try
+
+                if (reusedFromDomain)
                 {
-                    // No mapper: the structure is drawn on the source image and the field's grid is
-                    // already in patient coordinates, so the two share a frame.
-                    mask = StructureRasterizer.Rasterise(structure.Contours, field.Geometry, null);
+                    // The grading domain already rasterised this one. Rasterising a structure onto
+                    // a 1.4-million-point grid and walking the field again is not free, and this
+                    // runs on the UI thread.
+                    mask = domain.Mask;
                 }
-                catch (Exception ex)
+                else
                 {
-                    _log.Warning("jacobian per structure: " + structure.Id,
-                        "could not be rasterised onto the field's grid — " + DiagnosticLog.Describe(ex));
-                    continue;
+                    try
+                    {
+                        // No mapper: the structure and the field's grid are both in patient
+                        // coordinates, in the frame chosen by ChooseStructuresMatchingField.
+                        mask = StructureRasterizer.Rasterise(structure.Contours, field.Geometry, null);
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.Warning("jacobian per structure: " + structure.Id,
+                            "could not be rasterised onto the field's grid — " + DiagnosticLog.Describe(ex));
+                        continue;
+                    }
                 }
 
                 int inside = 0;
@@ -884,15 +1037,23 @@ namespace ESAPI_RegistrationQA.Services
                     continue;
                 }
 
-                string problem;
-                DeformationFieldMetrics.Result within =
-                    DeformationFieldMetrics.Compute(field, mask, out problem);
+                DeformationFieldMetrics.Result within;
 
-                if (within == null)
+                if (reusedFromDomain)
                 {
-                    _log.Warning("jacobian per structure: " + structure.Id,
-                        problem ?? "no Jacobian could be computed inside this structure");
-                    continue;
+                    within = domain.Metrics;
+                }
+                else
+                {
+                    string problem;
+                    within = DeformationFieldMetrics.Compute(field, mask, out problem);
+
+                    if (within == null)
+                    {
+                        _log.Warning("jacobian per structure: " + structure.Id,
+                            problem ?? "no Jacobian could be computed inside this structure");
+                        continue;
+                    }
                 }
 
                 double voxelMm3 = field.XResMm * field.YResMm * field.ZResMm;

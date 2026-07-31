@@ -68,5 +68,12 @@ are not exactly representable in binary. Physically irrelevant — TG-132 asks f
 seven digits — but a test demanding more than the storage can carry would fail for a reason that
 has nothing to do with the registration.
 
+It also checks that a written dataset row has exactly one field per header column, by parsing the
+file the exporter produces rather than by reading its two arrays. That is the one failure mode of
+the exporter which produces no error at all: the file opens, every column is populated, and every
+value past the insertion point belongs to the neighbouring column. It was added with the schema
+6 → 7 bump, which inserted two columns in the middle of the row.
+
 The suite is verified to be capable of failing: replacing `det(I + grad u)` with `det(grad u)` —
-the one mistake that would make a near-rigid field read 0 instead of 1 — trips five checks.
+the one mistake that would make a near-rigid field read 0 instead of 1 — trips five checks, and
+deleting one `row.Add` from the exporter trips the column-alignment check with the two counts.

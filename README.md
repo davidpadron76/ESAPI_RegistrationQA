@@ -26,7 +26,7 @@ number.
 | **NCC** | Does the anatomy line up, same modality? | §4.C.3, admitted for assessment | **No** — no tolerance exists | Measured |
 | **NMI** | Does it line up when intensities are not linearly comparable (CT-MR, CT-PET)? | §4.C.3, admitted for assessment | **No** — no tolerance exists | Measured |
 | **SSD** | Are there local intensity differences beyond the overall alignment? | §4.C.3, admitted for assessment | **No** — no tolerance exists | Measured |
-| **Jacobian < 0** | Has the deformation folded tissue onto itself? | Table III, first clause: no negative values | Yes, at 0 % | Exact for rigid · measured from the field for DIR |
+| **Jacobian < 0** | Has the deformation folded tissue onto itself? | Table III, first clause: no negative values | Yes, at 0 %, inside the patient outline | Exact for rigid · measured from the field for DIR |
 | **Jacobian departure from 1** | Is the volume change the one the case led you to expect? | Table III, second clause: no departure from 1 beyond what the clinical scenario expects | **No** — the report ties it to the structure and the expectation, neither of which the tool knows | Exact for rigid · measured from the field for DIR |
 | **Max Displacement** | How far has the registration moved the anatomy? | Not tabulated; plausibility check | **No** — limits were invented | Exact for rigid · measured over the field for DIR |
 | **Smoothness** | Is the deformation physically plausible? | Not tabulated; related to §4.C.3 | **No** — limits were invented | Exact for rigid · hidden for DIR, see DVF gradient |
@@ -57,7 +57,7 @@ and the plugin measures it.
 | **MDA** | same | Table III, verbatim |
 | **Inverse consistency** | same | Table III, verbatim |
 | **DSC** | ≥ 0.90 green, ≥ 0.80 yellow | Table III's `~0.80–0.90` range mapped onto the two bands |
-| **Jacobian < 0** | 0 % | Table III, first clause: "no negative values" |
+| **Jacobian < 0** | 0 % inside the patient outline | Table III, first clause: "no negative values", stated per structure |
 | **Jacobian departure from 1** | *ungraded* | Table III, second clause — tied to the structure and the expected volume change, so no fixed band exists to apply |
 
 The one exception the report makes: *"stereotactic radiosurgery tolerances are 1 mm."* That is
@@ -121,9 +121,22 @@ number the report declined to give.
 **The Jacobian limit is 0 %.** Table III admits no negative values; the profiles used to admit
 between 1 % and 4 %, so the tool was more permissive than the standard it cites, on its own
 authority. It does not vary with anything: the report ties this tolerance to the physics, and a
-folded voxel is as unphysical in a lung as in a brain. Where the folding is confined to a region that does not affect the intended
-use, TG-132 asks for that influence to be evaluated — that judgement is the physicist's, and
-the tool does not pre-empt it by relaxing the limit.
+folded voxel is as unphysical in a lung as in a brain.
+
+**It is applied inside the patient, not over the whole grid.** Table III states this criterion
+per structure, and a deformation field's grid is a box that extends well past the anatomy into
+air, where the algorithm has no image to constrain it and folds freely. On a head phantom, 2.979 %
+of the whole box folded against 0.003 % inside `BODY` — 99.95 % of the folded points were in air.
+Grading the box is not the conservative choice it looks like: it fails almost every deformable
+registration on a property of air, and a gate that always fails stops being read. So the graded
+value is the one inside the patient outline (DICOM type `EXTERNAL`, or a `BODY`/`SKIN`-style name)
+wherever one can be placed on the field's grid, with the whole-field figure carried beside it in
+the criterion column and in the dataset, and a `jacobian: grading domain` diagnostic naming the
+region — including which fallback applied when no outline could be placed. Both clauses of the row
+move together, since grading one on the anatomy and the other on the air would be incoherent.
+Where folding does fall inside the patient but in a region that does not affect the intended use,
+TG-132 asks for that influence to be evaluated — that judgement is the physicist's, and the tool
+does not pre-empt it by relaxing the limit.
 
 **A value that is true by definition does not count as verification.** On a rigid transform the
 Jacobian is 0 % and the smoothness 1.0 — not because this registration is good, but because
@@ -207,7 +220,9 @@ the report so the assumption stays visible.
   choosing, carrying the measurements plus their provenance (voxel pairs, overlap, effective
   sampling). No patient identifier is written. Intended for building a local baseline
   distribution and, pooled across centres, for deriving tolerance limits from practice
-  instead of from inherited values.
+  instead of from inherited values. The header carries a schema version — currently **7** —
+  which is bumped whenever a column is added, removed or redefined, so files that must not be
+  concatenated can be told apart before they are.
 
 ## Validation status
 

@@ -224,8 +224,10 @@ namespace ESAPI_RegistrationQA.Models
                 higherIsBetter: false,
                 description:
                     "Percentage of deformation field voxels with a non-positive Jacobian determinant, " +
-                    "that is, unphysical topological folding. For a rigid transform this is 0 by " +
-                    "definition, since |J| = 1 everywhere.",
+                    "that is, unphysical topological folding. Evaluated inside the patient outline " +
+                    "when one can be placed on the field's grid, over the whole field otherwise; the " +
+                    "criterion column names which. For a rigid transform this is 0 by definition, " +
+                    "since |J| = 1 everywhere.",
                 clinicalQuestion:
                     "Has the deformation folded tissue onto itself?",
                 decisionSupported:
@@ -240,9 +242,20 @@ namespace ESAPI_RegistrationQA.Models
                     "negative determinant an erroneous physical model of the patient. The profiles apply " +
                     "it literally: the limit is 0 % in all four, so any folding at all is a breach. It is " +
                     "deliberately not varied by anatomical site, because the report ties this tolerance to " +
-                    "the physics and not to the site. Where folding is confined to a region that does not " +
-                    "affect the intended use, the report asks for that influence to be evaluated; that " +
-                    "judgement is the physicist's and the tool does not pre-empt it by relaxing the limit."));
+                    "the physics and not to the site.\n\n" +
+                    "The tolerance is not relaxed; the domain it is applied over is stated. Table III " +
+                    "states this criterion per structure, and a deformation field's grid is a box that " +
+                    "extends well past the patient into air, where the algorithm has no image to " +
+                    "constrain it and folds freely. On the commissioning phantom, 99.95 % of the folded " +
+                    "points were outside the patient outline: 2.979 % over the whole box against 0.003 % " +
+                    "inside it. Grading the box therefore fails almost every deformable registration on " +
+                    "a property of air, and a gate that always fails stops being read. So the value " +
+                    "graded is the one inside the patient outline where one exists, the whole-field " +
+                    "figure travels beside it in the criterion column and in the dataset, and the " +
+                    "diagnostics report the Jacobian per structure. Where folding does fall inside the " +
+                    "patient but in a region that does not affect the intended use, the report asks for " +
+                    "that influence to be evaluated; that judgement is the physicist's and the tool does " +
+                    "not pre-empt it."));
 
             Register(new MetricDefinition(
                 key: MetricKeys.MaxDisplacement,
@@ -309,7 +322,9 @@ namespace ESAPI_RegistrationQA.Models
                 higherIsBetter: false,
                 description:
                     "How far the Jacobian determinant departs from 1 over the central 98 % of the " +
-                    "deformation field: the larger of |p99 - 1| and |1 - p1|. A determinant of 1 " +
+                    "graded region — the patient outline where one exists, the whole field otherwise, " +
+                    "the same domain as the folding metric above, since both are clauses of one " +
+                    "Table III row. It is the larger of |p99 - 1| and |1 - p1|. A determinant of 1 " +
                     "means the deformation preserves volume at that point; below 1 it compresses, " +
                     "above 1 it expands. Percentiles rather than the extremes, because a single " +
                     "voxel at the edge of the field's support controls min and max while saying " +

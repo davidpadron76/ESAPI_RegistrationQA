@@ -145,6 +145,31 @@ namespace ESAPI_RegistrationQA.Models
         public MeasuredValue DvfGradientMax { get; set; }
         public MeasuredValue JacobianDeparture { get; set; }
 
+        /// <summary>
+        /// What the two Jacobian metrics were computed over: the identifier of the patient
+        /// outline structure when one could be placed on the deformation field's grid, or
+        /// null when they fall back to the whole field.
+        ///
+        /// TG-132 Table III states the Jacobian criterion per structure, and the field's grid
+        /// is a box that on a head case is mostly air, where a deformable algorithm has no
+        /// image to constrain it and folds freely. Grading the whole box therefore grades the
+        /// air. This records which of the two a given row is, because a folding percentage is
+        /// not comparable across the two domains and a pooled dataset that mixes them silently
+        /// is not analysable.
+        /// </summary>
+        public string JacobianDomain { get; set; }
+
+        /// <summary>
+        /// The whole-field folding percentage, kept alongside the graded value even when the
+        /// grading domain is the patient outline. Null when the field could not be read.
+        ///
+        /// It is not discarded: a large whole-field figure against a small in-patient one is
+        /// the signature of a field whose support extends well past the anatomy, which is
+        /// worth seeing, and keeping it makes the effect of the domain choice visible instead
+        /// of hiding it behind a single number.
+        /// </summary>
+        public double? JacobianNegativePercentWholeField { get; set; }
+
         // Structures
         public MeasuredValue Dsc { get; set; }
         public MeasuredValue Mda { get; set; }

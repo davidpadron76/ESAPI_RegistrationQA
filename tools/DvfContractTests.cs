@@ -164,6 +164,7 @@ namespace ESAPI_RegistrationQA.Tools
             DivergenceIsTheTraceOfTheGradient();
             CurlAndPerAxisRangesAreCorrect();
             AMaskRestrictsTheJacobianToOneRegion();
+            DatasetRowMatchesItsHeader();
 
             Console.WriteLine();
             if (Failures.Count > 0)
@@ -919,6 +920,98 @@ namespace ESAPI_RegistrationQA.Tools
             Check("and says the structure holds no grid point",
                 problem != null && problem.IndexOf("structure", StringComparison.OrdinalIgnoreCase) >= 0,
                 problem);
+        }
+
+        /// <summary>
+        /// The dataset row must have exactly as many fields as the header has columns.
+        ///
+        /// This is here because the schema just gained two columns for the Jacobian grading
+        /// domain, and a header/row mismatch is the one failure mode of this exporter that
+        /// produces no error at all: the file opens, every column is populated, and every value
+        /// past the insertion point belongs to the column before or after it. A pooled dataset
+        /// built from that is wrong in a way nobody notices until the analysis disagrees with
+        /// the reports.
+        ///
+        /// It is checked by parsing the written file rather than by reading the two arrays,
+        /// because the arrays are private and, more to the point, what matters is the file.
+        /// </summary>
+        private static void DatasetRowMatchesItsHeader()
+        {
+            string path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "esapi-regqa-schema-" + Guid.NewGuid().ToString("N") + ".csv");
+
+            try
+            {
+                var measurements = new QaMeasurements
+                {
+                    RegistrationId = "REG,with \"quotes\" and a comma",
+                    RegType = RegistrationType.NonRigid,
+                    IsDeformable = true,
+                    JacobianDomain = "BODY",
+                    JacobianNegativePercentWholeField = 2.979,
+                    JacobianNegativePercent = MeasuredValue.Measured(0.003, "inside BODY")
+                };
+
+                CsvDatasetExporter.Append(
+                    new ReportData { PatientId = "ANON", ProfileName = "Head", Measurements = measurements },
+                    path);
+
+                string[] lines = System.IO.File.ReadAllLines(path);
+                Check("the dataset file has a header and one row", lines.Length == 2,
+                    lines.Length + " line(s)");
+                if (lines.Length != 2) return;
+
+                int header = CountCsvFields(lines[0]);
+                int row = CountCsvFields(lines[1]);
+
+                Check("every dataset row has one field per header column", header == row,
+                    header + " columns against " + row + " fields");
+
+                Check("the schema version is the one the row was written under",
+                    lines[1].StartsWith(CsvDatasetExporter.SchemaVersion + ",", StringComparison.Ordinal),
+                    lines[1].Substring(0, Math.Min(24, lines[1].Length)));
+
+                Check("the header names the Jacobian grading domain",
+                    lines[0].Contains("JacobianDomain") &&
+                    lines[0].Contains("JacobianNegPercent_WholeField"));
+
+                Check("the graded value and the whole-field value are both in the row",
+                    lines[1].Contains("0.003") && lines[1].Contains("2.979") &&
+                    lines[1].Contains("BODY"),
+                    lines[1]);
+            }
+            finally
+            {
+                try { System.IO.File.Delete(path); } catch (System.IO.IOException) { }
+            }
+        }
+
+        /// <summary>
+        /// Fields separated by commas, with commas and doubled quotes allowed inside a quoted
+        /// field. Enough to count fields in what the exporter writes.
+        /// </summary>
+        private static int CountCsvFields(string line)
+        {
+            int fields = 1;
+            bool quoted = false;
+
+            for (int i = 0; i < line.Length; i++)
+            {
+                char c = line[i];
+
+                if (c == '"')
+                {
+                    if (quoted && i + 1 < line.Length && line[i + 1] == '"') i++;
+                    else quoted = !quoted;
+                }
+                else if (c == ',' && !quoted)
+                {
+                    fields++;
+                }
+            }
+
+            return fields;
         }
 
         private struct RecordedReport

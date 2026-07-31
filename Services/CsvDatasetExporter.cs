@@ -36,10 +36,15 @@ namespace ESAPI_RegistrationQA.Services
         /// Bumped whenever columns are added, removed or redefined. Pooled files with
         /// different schema versions must not be concatenated blindly.
         /// </summary>
+        // 7 redefines JacobianNegPercent: it is now measured inside the patient outline where one
+        // exists rather than over the whole field, so a v7 value is not comparable with a v6 one
+        // and the two must not be pooled. JacobianDomain names the region and
+        // JacobianNegPercent_WholeField carries what v6 reported, so v7 rows can still be
+        // compared against v6 ones by column rather than by silent assumption.
         // 6 adds JacobianDepartureFrom1, the second clause of the Table III Jacobian row.
         // 5 adds DVFGradientMax. Bumped rather than appended silently: a pooled dataset mixing
         // rows with and without the column cannot be read by column position.
-        public const string SchemaVersion = "6";
+        public const string SchemaVersion = "7";
 
         private static readonly string[] Columns =
         {
@@ -56,6 +61,11 @@ namespace ESAPI_RegistrationQA.Services
             "NMI",
             "SSD",
             "JacobianNegPercent",
+            // Which region the two Jacobian columns were measured over. Without it a pooled
+            // dataset mixes an in-patient folding percentage with a whole-box one, and the two
+            // differ by three orders of magnitude on the same registration.
+            "JacobianDomain",
+            "JacobianNegPercent_WholeField",
             "JacobianDepartureFrom1",
             "MaxDisplacement_mm",
             // Without it MaxDisplacement_mm is not analysable across a pooled dataset: within
@@ -156,6 +166,14 @@ namespace ESAPI_RegistrationQA.Services
             row.Add(Metric(m, MetricKeys.Nmi));
             row.Add(Metric(m, MetricKeys.Ssd));
             row.Add(Metric(m, MetricKeys.JacobianNegative));
+            // Left empty when no field was read — on a rigid case the 0 % is analytic, not a
+            // measurement over any region, and naming a region there would misrepresent it.
+            row.Add(m != null && m.JacobianNegativePercentWholeField.HasValue
+                ? (m.JacobianDomain ?? "whole field")
+                : string.Empty);
+            row.Add(m != null && m.JacobianNegativePercentWholeField.HasValue
+                ? m.JacobianNegativePercentWholeField.Value.ToString("G6", CultureInfo.InvariantCulture)
+                : string.Empty);
             row.Add(Metric(m, MetricKeys.JacobianDeparture));
             row.Add(Metric(m, MetricKeys.MaxDisplacement));
             row.Add(m != null && m.SharesFrameOfReference.HasValue
