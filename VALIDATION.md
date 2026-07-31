@@ -422,13 +422,41 @@ already confirmed; the rest await a build carrying the Diagnostics cross-check l
 
 | Eclipse view | Eclipse | Plugin | Status |
 |---|---|---|---|
-| Jacobian determinant | −0.72 to +3.04 | −0.7213 to +3.0431 | **confirmed** |
-| Distance (‖u‖) | 0 to 58.4 mm | 58.399 mm | **confirmed** |
-| Divergence | −2.87 to +1.46 | — | pending |
-| Curl | 0 to 2.15 | — | pending |
-| X-Component | −34.1 to 40.1 mm | — | pending |
-| Y-Component | −24.8 to 6.9 mm | — | pending |
-| Z-Component | −44.5 to 25.3 mm | — | pending |
+| Jacobian determinant | −0.72 to +3.04 | −0.7213 to +3.0431 | **match** |
+| Divergence | −2.87 to +1.46 | −2.87 to +1.46 | **match** |
+| Distance (‖u‖) | 0 to 58.4 mm | 58.399 mm | **match** |
+| X-Component | −34.1 to 40.1 mm | −34.07 to 40.10 mm | **match** |
+| Y-Component | −24.8 to 6.9 mm | −24.80 to 6.89 mm | **match** |
+| Z-Component | −44.5 to 25.3 mm | −44.54 to 25.29 mm | **match** |
+| Curl | 0 to 2.15 | 0 to 1.99 | **differs — open** |
+
+**The axis convention is settled, and it is correct.** All three components match Eclipse to the
+precision it displays, so the plugin's X is Eclipse's X, its Y is Eclipse's Y and its Z is
+Eclipse's Z. Test 2 has called this the largest open risk in the project since an earlier version
+was found to have Y and Z transposed; the correction followed the DICOM standard but had never
+been confirmed against the convention VMS.IRS actually uses. It now has been, on the deformation
+field, without needing a phantom shifted by a known amount.
+
+That confirmation covers the deformation field's components. The rigid transform's translation
+labelling is read from a different property by different code, so **test 2 is still worth running
+on a rigid case** — but the evidence that the two now disagree is gone.
+
+**Curl is the one that does not match: Eclipse 2.15, plugin 1.99, a difference of 8 %.** The ratio
+is 1.0804, which is not a factor any alternative definition of curl would produce — not 2, not
+½, not √2 — so this is unlikely to be a convention difference. The formula itself is pinned by
+contract tests against closed-form answers, including a shear whose curl equals its shear rate
+exactly, so the arithmetic is not in doubt either.
+
+The likeliest explanation is the **domain**. The plugin evaluates every derivative on the
+interior only, skipping the outermost shell in each axis, because a central difference needs a
+neighbour on both sides. If Eclipse evaluates the full grid with one-sided differences at the
+edges, and the field's largest curl happens to sit in that shell, the two would disagree exactly
+like this — while the Jacobian and divergence, whose extremes lie inside, would still agree.
+
+The Diagnostics line now reports **where** the maximum curl is found. If it sits against the
+interior boundary, that is the answer; if it sits well inside, the explanation is something else
+and worth chasing. Either way this is a discrepancy in a quantity TG-132 does not use and no
+metric depends on.
 
 **The three components are internally consistent with the distance view**, which is worth
 checking before comparing anything against them. The largest single component is 44.5 mm, so

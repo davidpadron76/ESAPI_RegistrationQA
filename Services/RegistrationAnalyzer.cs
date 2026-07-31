@@ -685,6 +685,22 @@ namespace ESAPI_RegistrationQA.Services
                 metrics.MinDivergence, metrics.MaxDivergence,
                 metrics.MaxDisplacementMm, metrics.MaxCurlMagnitude));
 
+            // Curl is the one quantity that did not match Eclipse on the phantom case (2.15
+            // against 1.99, everything else exact). This line is here to distinguish the leading
+            // explanation — that the true maximum lies in the outermost shell, which a central
+            // difference cannot evaluate — from any other.
+            if (metrics.MaxCurlAt != null)
+            {
+                _log.Info("deformation field: curl location", string.Format(CultureInfo.InvariantCulture,
+                    "max |curl u| {0:F2} at grid ({1}, {2}, {3}) of {4}x{5}x{6}, {7} step(s) from the " +
+                    "nearest face of the evaluated region. Zero would mean it sits on the first " +
+                    "evaluated layer with the excluded outer shell just beyond it, which would explain " +
+                    "a larger value from an implementation that evaluates the full grid.",
+                    metrics.MaxCurlMagnitude,
+                    metrics.MaxCurlAt[0], metrics.MaxCurlAt[1], metrics.MaxCurlAt[2],
+                    field.XSize, field.YSize, field.ZSize, metrics.MaxCurlStepsFromEdge));
+            }
+
             // Separate line because it answers a different question: not whether the field was read
             // correctly, but whether this code's X/Y/Z are Eclipse's. VALIDATION.md test 2 calls the
             // axis convention the largest open risk in the project, and an earlier version did have

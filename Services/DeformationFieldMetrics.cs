@@ -63,6 +63,23 @@ namespace ESAPI_RegistrationQA.Services
             public double MaxCurlMagnitude;
 
             /// <summary>
+            /// Grid indices where <see cref="MaxCurlMagnitude"/> was found, and how many grid
+            /// steps that sits from the nearest face of the evaluated region.
+            ///
+            /// Recorded to settle a specific disagreement. On the phantom case Eclipse reported a
+            /// maximum curl of 2.15 against this code's 1.99, while the Jacobian, divergence,
+            /// distance and all three displacement components matched exactly. The formula is
+            /// pinned by contract tests, so the likeliest remaining difference is the domain: this
+            /// code evaluates the interior only, since a central difference needs a neighbour on
+            /// both sides, and if Eclipse evaluates the full grid with one-sided differences at
+            /// the edges then a curl peaking in that outermost shell would explain the gap. A
+            /// maximum found hard against the interior boundary supports that; one found well
+            /// inside rules it out and the cause is elsewhere.
+            /// </summary>
+            public int[] MaxCurlAt;
+            public int MaxCurlStepsFromEdge;
+
+            /// <summary>
             /// Per-component displacement range, in millimetres.
             ///
             /// These settle a question the extremes of |u| cannot: whether the component this code
@@ -209,6 +226,7 @@ namespace ESAPI_RegistrationQA.Services
             double maxJacobian = double.MinValue;
             double minDivergence = double.MaxValue, maxDivergence = double.MinValue;
             double maxCurl = 0.0;
+            int curlX0 = -1, curlY0 = -1, curlZ0 = -1;
 
             for (int z = 1; z < nz - 1; z++)
             {
@@ -249,7 +267,11 @@ namespace ESAPI_RegistrationQA.Services
                         double curlY = dudz.X - dudx.Z;
                         double curlZ = dudx.Y - dudy.X;
                         double curl = Math.Sqrt(curlX * curlX + curlY * curlY + curlZ * curlZ);
-                        if (curl > maxCurl) maxCurl = curl;
+                        if (curl > maxCurl)
+                        {
+                            maxCurl = curl;
+                            curlX0 = x; curlY0 = y; curlZ0 = z;
+                        }
 
                         jacobians[samples] = j;
                         samples++;
@@ -309,6 +331,13 @@ namespace ESAPI_RegistrationQA.Services
                 MinDivergence = minDivergence,
                 MaxDivergence = maxDivergence,
                 MaxCurlMagnitude = maxCurl,
+                MaxCurlAt = curlX0 < 0 ? null : new[] { curlX0, curlY0, curlZ0 },
+                // Distance to the nearest face of the evaluated region. The interior runs from
+                // index 1 to n-2, so 0 means the maximum sits on the first evaluated layer, with
+                // the excluded shell immediately beyond it.
+                MaxCurlStepsFromEdge = curlX0 < 0 ? -1 : Math.Min(
+                    Math.Min(Math.Min(curlX0 - 1, nx - 2 - curlX0), Math.Min(curlY0 - 1, ny - 2 - curlY0)),
+                    Math.Min(curlZ0 - 1, nz - 2 - curlZ0)),
                 MinDisplacementPerAxis = minAxis,
                 MaxDisplacementPerAxis = maxAxis,
                 NegativeNearBoundary = negativeNearBoundary,
