@@ -890,14 +890,13 @@ namespace ESAPI_RegistrationQA.Services
                     "{0:F3} % folding over {1:N0} interior points inside the structure " +
                     "(whole field: {2:F3} % over {3:N0}). |J| min {4:F4}, p1 {5:F3}, median {6:F3}, " +
                     "p99 {7:F3}, max {8:F4}. The mask holds {9:N0} grid points, {10:P1} of the grid, " +
-                    "about {11:N0} cm3 at this spacing — worth a glance against the volume you " +
-                    "expect, since a mask far too small would make the folding figure look better " +
-                    "than it is.{12}",
+                    "about {11:N0} cm3 at this spacing. {12}{13}",
                     within.NegativeJacobianPercent, within.JacobianSampleCount,
                     whole.NegativeJacobianPercent, whole.JacobianSampleCount,
                     within.MinJacobian, within.JacobianP1, within.JacobianMedian,
                     within.JacobianP99, within.MaxJacobian,
                     inside, (double)inside / mask.Length, inside * voxelMm3 / 1000.0,
+                    DescribeCoverage(structure, field.Geometry),
                     structure.IsSurfaceOutline
                         ? " This is the patient outline (" + structure.SurfaceOutlineReason +
                           "), so it is the closest thing here to \u201Cinside the patient\u201D: folding " +
@@ -905,6 +904,53 @@ namespace ESAPI_RegistrationQA.Services
                           "encloses but the patient does not occupy."
                         : string.Empty));
             }
+        }
+
+        /// <summary>
+        /// How much of a structure the deformation field actually spans, for the line that
+        /// reports its Jacobian.
+        ///
+        /// The field's grid is its own box and need not cover the patient. On the phantom case it
+        /// spanned 184x200x190 mm against a BODY of 236x264x385 mm, so the mask was BODY
+        /// intersected with the field rather than BODY — and a folding percentage computed there
+        /// is a statement about that intersection, not about the whole structure. Saying so is
+        /// the difference between a bounded claim and an overreaching one.
+        /// </summary>
+        private static string DescribeCoverage(
+            StructureRasterizer.NamedStructure structure, ImageGeometry grid)
+        {
+            Vec3 lo, hi;
+            if (structure.Contours == null || !structure.Contours.TryGetBounds(out lo, out hi))
+                return string.Empty;
+
+            Vec3 boxLo, boxHi;
+            GridBounds(grid, out boxLo, out boxHi);
+
+            bool contained =
+                lo.X >= boxLo.X && hi.X <= boxHi.X &&
+                lo.Y >= boxLo.Y && hi.Y <= boxHi.Y &&
+                lo.Z >= boxLo.Z && hi.Z <= boxHi.Z;
+
+            if (contained)
+                return "The field spans the whole structure, so this covers all of it.";
+
+            return string.Format(CultureInfo.InvariantCulture,
+                "The field does NOT span the whole structure — structure X {0:F0}..{1:F0}, " +
+                "Y {2:F0}..{3:F0}, Z {4:F0}..{5:F0} mm against field X {6:F0}..{7:F0}, " +
+                "Y {8:F0}..{9:F0}, Z {10:F0}..{11:F0} mm — so this figure describes only the part " +
+                "of it the field covers, not the structure as a whole.",
+                lo.X, hi.X, lo.Y, hi.Y, lo.Z, hi.Z,
+                boxLo.X, boxHi.X, boxLo.Y, boxHi.Y, boxLo.Z, boxHi.Z);
+        }
+
+        private static void GridBounds(ImageGeometry grid, out Vec3 low, out Vec3 high)
+        {
+            Vec3 a = grid.VoxelToPatient(0, 0, 0);
+            Vec3 b = grid.VoxelToPatient(grid.XSize - 1, grid.YSize - 1, grid.ZSize - 1);
+
+            // The grid's axes need not run low-to-high in patient coordinates.
+            low = new Vec3(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y), Math.Min(a.Z, b.Z));
+            high = new Vec3(Math.Max(a.X, b.X), Math.Max(a.Y, b.Y), Math.Max(a.Z, b.Z));
         }
 
         /// <summary>
@@ -919,14 +965,8 @@ namespace ESAPI_RegistrationQA.Services
             if (structure.Contours == null || !structure.Contours.TryGetBounds(out lo, out hi))
                 return "Its contours expose no bounds, so it cannot be placed against the grid.";
 
-            Vec3 gridLo = grid.VoxelToPatient(0, 0, 0);
-            Vec3 gridHi = grid.VoxelToPatient(grid.XSize - 1, grid.YSize - 1, grid.ZSize - 1);
-
-            // The grid's axes need not be ordered low-to-high in patient coordinates.
-            Vec3 boxLo = new Vec3(Math.Min(gridLo.X, gridHi.X), Math.Min(gridLo.Y, gridHi.Y),
-                Math.Min(gridLo.Z, gridHi.Z));
-            Vec3 boxHi = new Vec3(Math.Max(gridLo.X, gridHi.X), Math.Max(gridLo.Y, gridHi.Y),
-                Math.Max(gridLo.Z, gridHi.Z));
+            Vec3 boxLo, boxHi;
+            GridBounds(grid, out boxLo, out boxHi);
 
             bool overlaps =
                 lo.X <= boxHi.X && hi.X >= boxLo.X &&

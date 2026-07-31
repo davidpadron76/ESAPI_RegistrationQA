@@ -513,12 +513,13 @@ per-structure line is the one to act on, and it is also the one TG-132 actually 
 
 **Two things on that output still need checking, and neither is settled:**
 
-- **The BODY mask holds 232,098 points, 16.4 % of the grid — about 1.10 L at this spacing.** A
-  whole adult head is nearer 4–5 L. That may be legitimate if the field's grid covers only part
-  of the patient in Z, but it may also mean the mask is catching less of the structure than it
-  should, which would make the folding figure look better than it is. The per-structure line now
-  prints the point count, the grid fraction and the implied volume so this can be judged at a
-  glance.
+- **The BODY mask holds 232,098 points — about 1.10 L — against a structure far larger than that.
+  Resolved, and it is not a fault.** The deformation field's grid spans 184×200×190 mm while BODY
+  spans 236×264×385 mm, so the field covers roughly a third of the patient's bounding box and the
+  mask is BODY *intersected with the field*, not BODY. That bounds the claim rather than
+  invalidating it: **no folding occurs inside the patient anywhere the field exists**, and the
+  field does not exist over the rest. The per-structure line now says so explicitly, printing both
+  extents whenever the field does not span the whole structure.
 - **`PTV_High` returned no grid points at all.** The message now distinguishes the possible
   causes instead of listing them: it prints the structure's bounding box against the field's, says
   whether the two overlap, and names the grid spacing. If they overlap, the structure is not
@@ -679,7 +680,7 @@ Open an issue at
 | 2 | **Per-axis displacement vs Eclipse** | X=LR, Y=AP, Z=CC | | | see the reference table under test 3d; plugin value pending rebuild |
 | 3d | Jacobian departure from 1 | plausible, INFO | | | judge against expected volume change |
 | 3d | **Jacobian inside BODY vs whole field** | | | | 0.000 % vs 2.979 % on 2026-07-30 — no folding inside the patient |
-| 3d | BODY mask volume plausible? | ~head volume | | | 1.10 L measured; check against the case |
+| 3d | BODY mask vs field extent | field is a sub-box | | | resolved: field 184×200×190 mm, BODY 236×264×385 mm |
 | 3d | PTV mask non-empty | non-empty | | | empty on 2026-07-30 — send the bounding-box line |
 | 3d | Jacobian inside PTV / each organ | | | | Diagnostics; TG-132 states the criterion per structure |
 | 3d | DVF gradient (max) | plausible, INFO | | | no TG-132 tolerance |
