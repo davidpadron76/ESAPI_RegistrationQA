@@ -520,15 +520,30 @@ jacobian per structure: BODY
 |J| min 0.0280, p1 0.304, median 0.958, p99 1.627, max 2.7327
 ```
 
-Read at the time as "not one folded point lies inside the patient". That reading does not hold:
-the mask was not inside the patient. It was a region of the field displaced 123 mm from BODY, and
-what the numbers describe is the deformation there.
+That output came from a mask in the wrong frame. **After the fix, the answer is unambiguous:**
 
-**The question the per-structure Jacobian was added to answer is therefore still open**, and it is
-the right question: whether the whole-field 2.979 % is dominated by air the grid encloses but the
-patient does not occupy. A brain phantom has no anatomy to deform, so folding concentrated outside
-the patient would explain values that otherwise make little sense. Re-run and read the corrected
-`jacobian per structure: BODY` line against the whole-field figure.
+| region | folding | points evaluated |
+|---|---|---|
+| whole field | 2.979 % | 1,419,024 |
+| inside BODY | **0.003 %** | 770,931 |
+| inside PTV_High | **0.000 %** | 7,057 |
+
+**23 of the 42,273 folded points lie inside the patient. The other 42,250 — 99.95 % — are in air.**
+Inside the target there is no folding at all and the median determinant is 0.991, within 1 % of
+volume-preserving.
+
+Two things confirm the frame fix independently. The `jacobian per structure: frame` line reports
+the field's grid enclosing **14 %** of the source image's structures against **87 %** of the
+registered image's, so the choice was not marginal. And the BODY mask went from 1.10 L to
+**3.75 L**, which is a realistic head volume where the earlier figure was not.
+
+**This leaves a real question about the graded metric.** `Jacobian < 0` gates at 0 % and is
+computed over the whole field, so this registration is reported NOT COMPLIANT on 2.979 % folding
+that is almost entirely outside the patient. TG-132 states the Jacobian criterion per structure,
+and says of folding that "where it is confined to a region that does not affect the intended use,
+the influence should be evaluated" — air outside the patient does not affect the intended use by
+any reading. Grading over the whole grid is stricter than the report, and it produces a red
+verdict on a deformation that is clinically sound where it describes the patient.
 
 **Two things on that output still need checking, and neither is settled:**
 
@@ -698,8 +713,9 @@ Open an issue at
 | 3d | **Curl vs Eclipse's curl view** | agree | | | Eclipse showed 0–2.15 on 2026-07-30; plugin value not yet compared — needs a rebuild after b9976ec |
 | 2 | **Per-axis displacement vs Eclipse** | X=LR, Y=AP, Z=CC | | | see the reference table under test 3d; plugin value pending rebuild |
 | 3d | Jacobian departure from 1 | plausible, INFO | | | judge against expected volume change |
-| 3d | **Jacobian inside BODY vs whole field** | | | | first run used a mask in the wrong frame — re-run after the fix |
-| 3d | **`jacobian per structure: frame`** | names which image was used | | | field grid is the registered image's geometry |
+| 3d | **Jacobian inside BODY vs whole field** | | | | 0.003 % vs 2.979 % — 99.95 % of the folding is in air |
+| 3d | Jacobian inside the target | 0 % | | | PTV_High: 0.000 %, median \|J\| 0.991 |
+| 3d | **`jacobian per structure: frame`** | names which image was used | | | 14 % source vs 87 % registered — registered chosen |
 | 3d | BODY mask vs field extent | field is a sub-box | | | field 184×200×190 mm, BODY 236×264×385 mm |
 | 3d | PTV mask non-empty | non-empty | | | empty on 2026-07-30 — send the bounding-box line |
 | 3d | Jacobian inside PTV / each organ | | | | Diagnostics; TG-132 states the criterion per structure |
