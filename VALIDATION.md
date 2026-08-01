@@ -199,8 +199,45 @@ but it has not been confirmed against the convention VMS.IRS actually uses. If y
 cranial shift lands in `Translation Y (AP)`, the labelling is wrong and needs reverting —
 and a QA report that names the wrong axis is worse than no report.
 
-**Please report the result of this test even if it passes.** It is the largest open risk in
+**Please report the result of this test even if it passes.** It was the largest open risk in
 the project.
+
+### Closed, 2026-08-01 — and no deliberate shift was needed
+
+Eclipse states the transform itself. **Properties → Tech (Reg) → Rigid Registration** shows the
+translation and rotation of a rigid registration numerically, which makes this a comparison
+rather than an experiment. On the head phantom's `TEST1`:
+
+| | Eclipse (`Tech (Reg)`) | plugin | |
+|---|---|---|---|
+| Translation X | −4.8 mm | −4.84 mm **(LR)** | ✅ |
+| Translation Y | 10.3 mm | 10.28 mm **(AP)** | ✅ |
+| Translation Z | −122.5 mm | −122.47 mm **(CC)** | ✅ |
+| Rotation X | 1.9° | 1.89° (pitch) | ✅ |
+| Rotation Y | 0.1° | 0.15° (roll) | see below |
+| Rotation Z | 0.2° | 0.15° (yaw) | see below |
+
+**The axis labelling is correct.** Eclipse's X, Y and Z carry the same three values the plugin
+labels LR, AP and CC, in the same order and with the same signs. The −122.5 mm settles it on its
+own: no other component is close to it, so there is no assignment of the three numbers to the
+three axes other than the one the plugin uses. The transposition that an earlier version had
+between Y and Z is not present.
+
+**The two small rotations are a display artefact, not a disagreement.** The plugin reports both
+roll and yaw as 0.15°, printed to two decimals; Eclipse prints one decimal and shows 0.1° and
+0.2°. Two underlying values either side of 0.15 — say 0.147 and 0.153 — print as "0.15" at two
+decimals and as "0.1" and "0.2" at one. The pitch, the only angle large enough for the comparison
+to bite, matches exactly.
+
+**The frame-of-reference reading is corroborated too.** The same dialog shows Source and Target
+FOR UIDs that differ, which is what the plugin reports on the Max Displacement row when it
+declines to classify that metric.
+
+**Both halves of the axis question are now closed against Eclipse**, by different code paths: the
+deformation field's per-component ranges on 2026-07-30 (test 3d) and the rigid transform's
+translation here. What remains untested is a *known applied* shift, which would additionally
+confirm the sign convention against a physical direction rather than against Eclipse's own
+labels. That is a smaller risk than the one just closed.
 
 ---
 
@@ -526,14 +563,14 @@ already confirmed; the rest await a build carrying the Diagnostics cross-check l
 
 **The axis convention is settled, and it is correct.** All three components match Eclipse to the
 precision it displays, so the plugin's X is Eclipse's X, its Y is Eclipse's Y and its Z is
-Eclipse's Z. Test 2 has called this the largest open risk in the project since an earlier version
+Eclipse's Z. Test 2 called this the largest open risk in the project since an earlier version
 was found to have Y and Z transposed; the correction followed the DICOM standard but had never
 been confirmed against the convention VMS.IRS actually uses. It now has been, on the deformation
 field, without needing a phantom shifted by a known amount.
 
-That confirmation covers the deformation field's components. The rigid transform's translation
-labelling is read from a different property by different code, so **test 2 is still worth running
-on a rigid case** — but the evidence that the two now disagree is gone.
+That confirmation covers the deformation field's components. The rigid transform's translation is
+read from a different property by different code, and it was **closed separately on 2026-08-01**
+against Eclipse's `Properties → Tech (Reg)` dialog — see test 2. Both paths agree with Eclipse.
 
 **Curl is the one that does not match: Eclipse 2.15, plugin 1.99, a difference of 8 %** — and the
 cause is now established. It is the evaluation domain, not the formula.
@@ -730,10 +767,10 @@ accuracy.
 **One comparison is worth more than the rest, and it is not on this list.** A second Diagnostics
 line, `deformation field: displacement per axis`, gives the field's range on X, Y and Z
 separately. If Eclipse displays the field per component, checking those three against it settles
-the axis convention — the question test 2 calls the largest open risk in the project, and which
-has so far needed a phantom shifted by a known amount to answer. The same goes for the rigid
-translation: Eclipse displays the registration's own translation, and holding it against the
-plugin's `Translation … (LR / AP / CC)` line answers test 2 directly, without shifting anything.
+the axis convention — the question test 2 called the largest open risk in the project, and which
+was expected to need a phantom shifted by a known amount to answer. **Both were done, and both
+agree with Eclipse:** the field's components on 2026-07-30, and the rigid translation on
+2026-08-01 against `Properties → Tech (Reg)`. Neither needed a deliberate shift.
 
 What it does *not* establish: the percentage of folded voxels (2.979 % on that case) and the
 percentiles are not visible on the colour bar, so they remain checked only against the analytic
@@ -872,7 +909,8 @@ Open an issue at
 | 3d | **Divergence vs Eclipse's divergence view** | agree | 2026-07-30 | ✅ | matched −2.87/+1.46 |
 | 3d | **Distance vs Eclipse's distance view** | agree | 2026-07-30 | ✅ | matched 58.4 mm |
 | 3d | **Curl vs Eclipse's curl view** | agree | 2026-07-31 | ⚠ | Eclipse 0–2.15, plugin 0–1.99. Explained, not a defect — see below |
-| 2 | **Per-axis displacement vs Eclipse** | X=LR, Y=AP, Z=CC | 2026-07-30 | ✅ | all three components matched — see the reference table under test 3d. Still open on a **rigid** case: that labelling comes from other code |
+| 2 | **Per-axis displacement vs Eclipse** | X=LR, Y=AP, Z=CC | 2026-07-30 | ✅ | all three components matched — see the reference table under test 3d |
+| 2 | **Rigid translation vs Eclipse `Tech (Reg)`** | X=LR, Y=AP, Z=CC | 2026-08-01 | ✅ | −4.8 / 10.3 / −122.5 mm against −4.84 / 10.28 / −122.47. Axis question closed on both paths |
 | 3d | Jacobian departure from 1 | plausible, INFO | 2026-07-31 | ⚠ | 0.543 inside BODY (p1 0.490, p99 1.543) on a rigid phantom — implausible, and that is the finding |
 | 3d | **Jacobian inside BODY vs whole field** | | 2026-07-31 | ✅ | 0.003 % vs 2.979 % — 99.95 % of the folding is in air |
 | 3d | **`jacobian: grading domain` in a live run** | names the region graded | 2026-07-31 | ✅ | reported BODY by name match, with the field/structure extents |
