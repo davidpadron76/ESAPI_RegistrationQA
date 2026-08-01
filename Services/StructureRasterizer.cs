@@ -35,6 +35,18 @@ namespace ESAPI_RegistrationQA.Services
         public int PlaneCount { get { return _planes.Count; } }
         public int PolygonCount { get; private set; }
 
+        /// <summary>
+        /// Median gap between contour planes, in mm — the Z resolution the structure actually
+        /// carries, as opposed to the grid it gets rasterised onto.
+        ///
+        /// Worth reporting because the two can differ by an order of magnitude and the
+        /// difference is not visible in any of the surface metrics. A phantom pair audited here
+        /// had the same target contoured at 0.4 mm on one series and 5.0 mm on the other: every
+        /// DSC or MDA across that pair is dominated by how the space between 5 mm planes is
+        /// filled, not by the registration.
+        /// </summary>
+        public double MedianPlaneSpacingMm { get { return _halfSpacing * 2.0; } }
+
         public void AddPolygon(double z, double[] xs, double[] ys)
         {
             if (xs == null || ys == null || xs.Length < 3) return;

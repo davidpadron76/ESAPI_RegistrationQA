@@ -1486,6 +1486,8 @@ namespace ESAPI_RegistrationQA.Services
                           "worst case, reported separately below"
                         : string.Empty));
 
+                LogStructureRasterisation(pair.Item1, pair.Item2, maskSource, maskTarget, grid);
+
                 if (isOutline)
                 {
                     evaluatedOutline++;
@@ -1593,6 +1595,51 @@ namespace ESAPI_RegistrationQA.Services
                         string.Join(", ", distinct.ToArray())));
                 }
             }
+        }
+
+        /// <summary>
+        /// What the two masks actually contain, so a DSC can be held against the TPS's own
+        /// structure statistics rather than taken on trust.
+        ///
+        /// A DSC is a ratio, and a ratio hides which of its two inputs is wrong. Eclipse states
+        /// each structure's volume in its DICOM statistics table; if the volumes here match
+        /// those and the DSC does not, the disagreement is in the overlap and therefore in the
+        /// mapping. If the volumes disagree, it is in the rasterisation, and the plane spacing
+        /// on this line says why — a structure contoured every 5 mm rasterised onto a 2 mm grid
+        /// has more than half its layers interpolated, and the two TPSs need not interpolate
+        /// alike.
+        ///
+        /// This exists because of an unresolved case: Eclipse reported DSC 0.90 on a target
+        /// where this plugin reported 0.953, on a series pair whose slice spacing differed by a
+        /// factor of twelve (0.4 mm against 5.0 mm). Resolution alone does not explain it —
+        /// rasterising at 0.5 mm instead of 2.0 mm moves DSC by under 0.002 on a structure that
+        /// size — so the volumes are the next thing to look at, and they were not being reported.
+        /// </summary>
+        private void LogStructureRasterisation(
+            StructureRasterizer.NamedStructure source, StructureRasterizer.NamedStructure target,
+            bool[] maskSource, bool[] maskTarget, ImageGeometry grid)
+        {
+            int inSource = 0, inTarget = 0;
+            for (int i = 0; i < maskSource.Length; i++) if (maskSource[i]) inSource++;
+            for (int i = 0; i < maskTarget.Length; i++) if (maskTarget[i]) inTarget++;
+
+            double voxelCm3 = grid.XRes * grid.YRes * grid.ZRes / 1000.0;
+
+            _log.Info("structures: " + source.Id + ": rasterisation", string.Format(
+                CultureInfo.InvariantCulture,
+                "source {0:F1} cm3 from {1} contour plane(s) at {2:F2} mm; registered {3:F1} cm3 " +
+                "from {4} plane(s) at {5:F2} mm; both rasterised onto a {6:F2} mm grid. Compare " +
+                "these volumes against the TPS's own structure statistics: matching volumes with a " +
+                "disagreeing DSC puts the difference in the overlap, differing volumes put it in " +
+                "the rasterisation. Where a plane spacing is much coarser than the grid, most of " +
+                "the mask's layers are interpolated between contours rather than drawn.",
+                inSource * voxelCm3,
+                source.Contours != null ? source.Contours.PlaneCount : 0,
+                source.Contours != null ? source.Contours.MedianPlaneSpacingMm : 0.0,
+                inTarget * voxelCm3,
+                target.Contours != null ? target.Contours.PlaneCount : 0,
+                target.Contours != null ? target.Contours.MedianPlaneSpacingMm : 0.0,
+                grid.CoarsestResolution));
         }
 
         /// <summary>

@@ -3,6 +3,37 @@
 A C# / WPF plugin for the **Varian Eclipse Treatment Planning System** (ESAPI and VMS.IRS
 architecture) that automates the quantitative audit of image registrations.
 
+## Intended use, and what this tool is not
+
+**This is a measurement instrument for a qualified medical physicist. It is not a medical
+device, it is not certified by any regulatory body, and it does not decide whether a
+registration may be used clinically.** That decision is the physicist's, and nothing here
+substitutes for it.
+
+Read that as a statement about what the tool does, not as boilerplate:
+
+* **It measures, and it grades only where TG-132 gives a number.** Five metrics can fail a
+  registration and they are exactly Table III. Everything else is reported without a colour and
+  cannot affect the verdict. Where the report declines to give a limit, so does this tool.
+* **A green verdict is not a released registration.** It says the metrics that carry a TG-132
+  tolerance met it on the data available. It says nothing about the metrics that could not be
+  measured, about anatomy outside the sampled region, or about whether the registration is fit
+  for the use you have in mind.
+* **A red verdict is not a rejected registration either.** TG-132 asks for the influence of a
+  breach on the intended use to be evaluated. The tool gives you the evidence — where the
+  folding is, how many landmarks the TRE rests on, what fraction of the volume overlapped — and
+  stops there.
+* **Every number carries its provenance, and you should read it.** Voxel pairs, overlap
+  fraction, effective sampling, grid spacing, which structure produced a worst case, which
+  region a metric was computed over. A DSC over 8 % overlap at 4 mm sampling is not the same
+  measurement as one over 80 % at 1 mm, and the criterion column says which you are looking at.
+* **It has been exercised on one Eclipse installation.** See [Validation
+  status](#validation-status) for exactly what has been checked against an independent answer
+  and what has not. Commission it against your own data before you rely on it, the same way you
+  would commission any other measuring device.
+
+Licensed under [MIT](LICENSE), which includes its warranty disclaimer.
+
 ## Reference
 
 Brock KK, Mutic S, McNutt TR, Li H, Kessler ML. *Use of image registration and fusion
@@ -226,22 +257,46 @@ the report so the assumption stays visible.
 
 ## Validation status
 
-The numbers are measurements; the semaphore colours are provisional.
+Everything below is recorded case by case, with dates and numbers, in
+[VALIDATION.md](VALIDATION.md). Read this section as a summary of that, not as a substitute.
 
-What has been verified: the pure mathematics, through 64 analytic checks in
-`tools/verify_math.py` — Euler extraction, matrix convention detection, voxel↔patient
-round-trips, the similarity metrics against their theoretical values, transform composition,
-TRE against known landmark displacements, the distance transform against brute force, and DSC
-against the analytic intersection volume of two spheres.
+**Checked against an independent answer — Eclipse's own displays, on one installation:**
 
-What has not: anything touching the Varian API beyond a single Eclipse installation. TRE and
-inverse consistency in particular have never run against real data. And the tolerance limits
-were inherited before the metrics were reimplemented, so they have not been recalibrated
-against the current definitions — except the DSC range, which comes from Table III.
+| what | result |
+|---|---|
+| Jacobian determinant range | −0.72 / +3.04 against −0.7213 / +3.0431 ✅ |
+| Divergence range | −2.87 / +1.46, exact ✅ |
+| Displacement (distance view) | 58.4 mm, exact ✅ |
+| Field components X, Y, Z | all three exact ✅ |
+| Rigid translation and rotation | −4.8 / 10.3 / −122.5 mm against −4.84 / 10.28 / −122.47 ✅ |
+| Curl | 2.15 against 1.99 — 8 % low, cause established, see Known limitations |
+| **DSC** | **0.90 against 0.953 — unresolved, see Known limitations** ❌ |
 
-If you are evaluating the plugin, [VALIDATION.md](VALIDATION.md) has a test protocol that
-closes the open questions in an afternoon, plus a method for building a local baseline that is
-useful today despite the uncalibrated thresholds.
+The two axis questions that were the project's largest open risk — the deformation field's
+components and the rigid transform's translation — are both closed by that table, on different
+code paths.
+
+**Checked against a control, not against Eclipse.** The same two series were registered rigidly
+and deformably and audited with identical settings. Inverse consistency came out at 0.259 mm and
+7.042 mm from the same code, the rigid case passing every graded metric and the deformable
+breaching two. A tool that failed everything would have failed the rigid one.
+
+**Checked by construction:** 80 analytic checks in `tools/verify_math.py` — Euler extraction,
+matrix convention detection, voxel↔patient round-trips, the similarity metrics against their
+theoretical values, transform composition, rigid inversion, TRE against known landmark
+displacements, the distance transform against brute force, DSC against the analytic intersection
+of two spheres, and the deformation-field Jacobian, divergence, curl and gradient against fields
+whose answer is known exactly. Plus 81 contract checks in `tools/DvfContractTests.cs`, which run
+the shipping C# against API-shaped stubs rather than re-implementing it. `tools/run_checks.sh`
+runs both and a warnings-as-errors compile.
+
+**Not checked:** TRE and the DVF gradient have no independent answer. Nothing has run on more
+than one Eclipse installation, or on any modality pair other than CT–CT. The threshold profiles
+are TG-132 Table III applied literally, but no metric has been calibrated against a multi-centre
+distribution — which is what the CSV dataset exists to build.
+
+If you are evaluating the plugin, [VALIDATION.md](VALIDATION.md) has the full protocol with a
+checklist you can fill in, and section 5 describes how to contribute to that baseline.
 
 ## Requirements
 
@@ -335,11 +390,35 @@ declines to grade. **N/A** is the missing value.
   reflection sweep of the registration object. When all of that fails, the object's type and
   member list are written to the diagnostics tab — send that and the Eclipse version, and the
   right property can be probed by name.
-* Topological metrics for deformable registrations depend on the DVF, which is not
-  accessible from the scripting API.
-* Computation runs synchronously on the UI thread. Sampling is capped at ~2·10⁶ voxel pairs
-  to keep the interface responsive, and the resulting effective resolution is reported
-  alongside the metrics.
+* **DSC does not yet agree with Eclipse's own.** On the head phantom's `PTV_High`, Eclipse's
+  DICOM statistics report a Dice of 0.90 where this plugin reports 0.953 — both applying the
+  registration, both comparing the same structure. Two candidate causes are eliminated: the
+  rasterisation grid (0.5 mm against 2.0 mm moves DSC by under 0.002 on a structure this size)
+  and the mapping direction (a reversed mapping would put the contours 245 mm apart and give a
+  DSC of 0, not 0.953). The transform itself is verified against Eclipse.
+
+  What remains is how the space between contour planes is filled — a structure is a stack of
+  planar contours, not a solid — and on this case that is not a subtlety. Eclipse's structure
+  properties show the same target stored at **0.4 mm in Z on one series and 5.0 mm on the
+  other**, a factor of twelve. Rasterised onto a common grid, most of the coarser structure's
+  layers are interpolated rather than drawn, and two implementations need not interpolate alike.
+  **DSC gates at ≥ 0.90, so an inflated value is permissive in the direction that matters.**
+  Treat the DSC row as provisional, and treat any DSC across a series pair with very different
+  slice spacing as a statement about interpolation as much as about registration. The
+  `structures: <id>: rasterisation` diagnostic reports each mask's volume and plane spacing so
+  it can be held against the TPS's own structure statistics.
+* **TRE rests on however many landmarks you place, and one is not a measurement.** On a case
+  with a single matched marker the criterion column says `1 matched landmark(s) — indicative
+  only`. Place several, spread out, or read the row as an anecdote.
+* **Curl reads about 8 % below Eclipse's**, because derivatives are evaluated on the interior
+  only and the field's rotational maximum sits at its boundary. Documented in
+  [VALIDATION.md](VALIDATION.md) test 3d and deliberately not engineered away — curl gates
+  nothing, and mixing one-sided boundary derivatives into a graded statistic would be the wrong
+  trade.
+* Computation runs synchronously on the UI thread. It is visible rather than instantaneous: the
+  window appears immediately and reports ten named stages on a progress bar. Sampling is capped
+  at ~2·10⁶ voxel pairs to keep the interface responsive, and the resulting effective resolution
+  is reported alongside the metrics.
 * Similarity is computed on subsampled volumes; the report states the effective resolution
   used.
 
