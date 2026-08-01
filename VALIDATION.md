@@ -20,9 +20,11 @@ it rather than to a table of invented numbers. Everything else is reported witho
 That is what this protocol is for. Tests 1 to 4 take an afternoon and close the open
 questions that cannot be answered without an Eclipse in front of you. Tests 3b and 3d cover the
 newest code — the TG-132 Table III spatial metrics, and the deformation-field metrics that
-became possible once the vector field turned out to be readable. Of those, only the Jacobian has
-been held against an independent answer; TRE, inverse consistency and the DVF gradient have not.
-Section 5 is the part that turns a group of testers into a dataset.
+became possible once the vector field turned out to be readable. Of those, the Jacobian has been
+held against an independent answer — Eclipse's own display of the same field — and inverse
+consistency has been exercised against a control: the same two series registered rigidly and
+deformably, giving 0.259 mm and 7.042 mm from the same code. TRE and the DVF gradient have
+neither. Section 5 is the part that turns a group of testers into a dataset.
 
 ---
 
@@ -260,6 +262,61 @@ of similar magnitude. One that looks like the active registration's own translat
 and similar size, is the round trip applying the same direction twice — which is what the
 identical operation names above cannot show by themselves, since both registrations resolving
 through the same method name is expected and not itself a fault.
+
+### Both were run, 2026-08-01 — and the rigid case is the control this project needed
+
+Reverse registrations were created for both the rigid and the deformable registration on the head
+phantom, and the plugin was run on each. **Same patient, same two CT series, same profile, same
+structures, same single landmark. The only thing that differs between the two runs is the
+transform.**
+
+| metric | rigid `TEST1` | deformable | tolerance | ratio |
+|---|---|---|---|---|
+| **Inverse consistency** | **0.259 mm** ✅ | **7.042 mm** ❌ | ≤ 5 mm | **27×** |
+| TRE (mean and max) | 0.090 mm ✅ | 0.560 mm ✅ | ≤ 5 mm | 6× |
+| DSC | 0.953 ✅ | 0.929 ✅ | ≥ 0.90 | — |
+| MDA | 0.630 mm ✅ | 0.975 mm ✅ | ≤ 5 mm | 1.5× |
+| HD95 | 2.000 mm | 2.828 mm | *ungraded* | 1.4× |
+| Jacobian < 0 | 0.000 % (analytic) | 0.003 % ❌ | 0 % | — |
+| **Verdict** | **COMPLIANT** | **NOT COMPLIANT**, 2 breaches | | |
+
+**This is the strongest validation result the project has.** It answers the objection that most
+threatens a QA tool — that it paints everything red — with a case where nothing changed except
+the object under audit and the verdict flipped. A tool that fails every registration would have
+failed the rigid one too.
+
+**It also validates the inverse-consistency path itself.** 0.259 mm on the rigid case is not zero
+because the two rigid registrations were fitted independently rather than derived from one
+another, so the residual measures how reproducibly the rigid registration can be re-established —
+which is a real quantity, and a plausible one at sub-voxel size. A broken round trip does not
+produce 0.259 mm on one transform and 7.042 mm on another; it produces the signature described
+above, roughly twice the maximum displacement, which is what v2.13.0 did (266 mm) before it was
+fixed. Both numbers being sane in different ways is the check.
+
+**The prediction made before the run held.** With |J| p1 0.490 inside BODY, the deformation was
+expected to fail its own round trip, and it did: 7.042 mm against a 5 mm tolerance. Two metrics
+that share no code — one topological, computed from the field's derivatives; one spatial, computed
+by composing two registrations over 125 sampled points — agree that this deformation is not
+self-consistent.
+
+**The commissioning finding, which is about the algorithm and not about the plugin: the DIR is
+worse than rigid on every spatial metric of Table III.** TRE, inverse consistency, DSC, MDA and
+HD95 all degrade, by factors from 1.4 to 27. On a rigid skull phantom the true deformation is the
+identity, so a DIR that is working should converge to approximately the rigid answer and be no
+worse than it. This one is worse on all five while adding 58 mm of displacement, folding inside
+the patient, and a determinant range of −0.72 to 3.04. **This is precisely what phantom
+commissioning exists to detect, and the intensity metrics saw none of it** — NCC 0.968 on the
+deformable against 0.976 on the rigid, a difference of 0.008 on a registration that is 27× worse
+by consistency. TG-132 §4.C.3, demonstrated on a real case.
+
+**One thing left to check, and it is cheap.** The rigid run reports
+`Translation −4.84 / 10.28 / −122.47 mm (LR / AP / CC)`. Negated, that is +4.84 / −10.28 /
++122.47 against the deformable's linear part of +4.48 / −6.20 / +122.75 — LR agrees to 0.36 mm
+and CC to 0.28 mm, but **AP differs by 4.08 mm**. The two registrations were fitted separately, so
+they need not agree exactly, and this compares a rigid fit against a deformable's linear
+component. But an AP-only discrepancy an order of magnitude larger than the other two axes, on a
+rigid phantom, is worth one look before it is dismissed. It is also the last piece of test 2:
+compare that translation line against Eclipse's own display of `TEST1`'s translation.
 
 ## 3c. Structures and hidden metrics
 
@@ -769,7 +826,7 @@ Open an issue at
 | 4 | CT–MR — multimodal advisory | present | | | |
 | 3b | TRE — landmarks matched | ≥ 2 | | | |
 | 3b | TRE mean under known shift | applied value | | | |
-| 3b | Inverse consistency residual | ≤ max voxel dim | | | |
+| 3b | Inverse consistency residual | ≤ max voxel dim | 2026-08-01 | ✅ | rigid 0.259 mm (green), deformable 7.042 mm (red). Both sane, in opposite directions — see 3b |
 | 3d | **Deformation field read** | grid + spacing in Diagnostics | | | must be the field's, not the image's |
 | 3d | **Jacobian on a trusted DIR** | 0 % | | | any folding is a Table III breach; graded inside the patient outline |
 | 3d | **`jacobian: grading domain`** | names the region graded | | | falls back to the whole field, and says why, when no outline can be placed |
