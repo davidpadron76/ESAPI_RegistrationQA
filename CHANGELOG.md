@@ -9,7 +9,10 @@ different schema versions must not be concatenated.**
 
 ---
 
-## Unreleased
+## 3.0.0 — 2026-08-01
+
+A major version because two things stopped being comparable with 2.15, not because the
+feature list is long. Anyone pooling data across the two needs to know before they do it.
 
 ### Breaking
 
