@@ -257,11 +257,21 @@ the "reverse" registration found in the workspace is not a genuine inverse of th
 
 Diagnostics also logs `reverse: transform: translation`, the reverse registration's own
 translation and rotation in the same form the report's Rigid Transform table uses for the active
-one. Hold the two up against each other: a genuine inverse should read approximately opposite and
-of similar magnitude. One that looks like the active registration's own translation, same sign
-and similar size, is the round trip applying the same direction twice — which is what the
-identical operation names above cannot show by themselves, since both registrations resolving
-through the same method name is expected and not itself a fault.
+one — and, beside it, `inverse consistency: inverse check`, which states the residual between the
+reverse registration and the active one's analytic inverse.
+
+**Read that residual rather than comparing the two translations by eye.** The obvious test — "a
+genuine inverse should read approximately opposite" — holds only for a pure translation, and
+following it cost this project a false alarm: negation is not inversion once a rotation is
+involved, and a 1.89° pitch over a 122 mm translation moved 4 mm into another axis, which read as
+a 40 % disagreement between two registrations that agree to 0.33 mm. The correct inverse
+translation is −Rᵀ·t, and that is what the tool now computes and prints.
+
+A genuine inverse lands well under a millimetre. A residual near **twice** the translation's
+magnitude means the "reverse" registration is a second copy of the same direction — the round
+trip applying the same direction twice, which is what the identical operation names above cannot
+show by themselves, since both registrations resolving through the same method name is expected
+and not itself a fault.
 
 ### Both were run, 2026-08-01 — and the rigid case is the control this project needed
 
@@ -309,14 +319,41 @@ commissioning exists to detect, and the intensity metrics saw none of it** — N
 deformable against 0.976 on the rigid, a difference of 0.008 on a registration that is 27× worse
 by consistency. TG-132 §4.C.3, demonstrated on a real case.
 
-**One thing left to check, and it is cheap.** The rigid run reports
-`Translation −4.84 / 10.28 / −122.47 mm (LR / AP / CC)`. Negated, that is +4.84 / −10.28 /
-+122.47 against the deformable's linear part of +4.48 / −6.20 / +122.75 — LR agrees to 0.36 mm
-and CC to 0.28 mm, but **AP differs by 4.08 mm**. The two registrations were fitted separately, so
-they need not agree exactly, and this compares a rigid fit against a deformable's linear
-component. But an AP-only discrepancy an order of magnitude larger than the other two axes, on a
-rigid phantom, is worth one look before it is dismissed. It is also the last piece of test 2:
-compare that translation line against Eclipse's own display of `TEST1`'s translation.
+#### The AP discrepancy was an error in this document, not in the registration
+
+An earlier version of this section flagged a 4.08 mm AP disagreement as something to look at. It
+does not exist. The comparison was made by **negating** the active translation, and negation is
+the inverse of a *pure* translation only. With a rotation the inverse translation is **−Rᵀ·t**.
+
+`TEST1` translates by (−4.84, 10.28, −122.47) mm with a 1.89° pitch, and the diagnostics report
+`TEST2` — found as its reverse — at (4.30, −6.40, 122.54) mm:
+
+| | LR | AP | CC | distance from `TEST2` |
+|---|---|---|---|---|
+| negating `TEST1` | 4.84 | −10.28 | 122.47 | **3.92 mm** |
+| inverting it properly, −Rᵀ·t | 4.49 | −6.25 | 122.76 | **0.33 mm** |
+
+The whole of the apparent AP disagreement is the pitch acting on the CC translation:
+122.47 × sin(1.89°) = **4.04 mm**. `TEST1` and `TEST2` are a genuine inverse pair agreeing to a
+third of a millimetre, and the rotations agree too (1.89/0.15/0.15° against −1.94/−0.14/−0.11°).
+
+**That 0.33 mm is also an independent corroboration of the inverse-consistency measurement.** It
+comes from the two translation vectors alone; the reported 0.259 mm comes from composing the two
+registrations over 125 sampled points. Two routes, no shared code, the same answer to a tenth of
+a millimetre.
+
+**The tool now prints this comparison instead of leaving it to the reader.** The guidance in this
+document — "a genuine inverse should read approximately opposite and of similar magnitude" — is
+what produced the error, and it is wrong for any registration combining a rotation with a large
+translation, which is most of them. `LogInverseAgreement` logs the active transform's analytic
+inverse beside the reverse registration's own reading and states the residual between them, under
+`inverse consistency: inverse check`. Four checks in `tools/verify_math.py` pin the arithmetic,
+using these phantom numbers, including that the naive comparison is off by more than 3 mm.
+
+**What is still open is test 2, and it is cheap.** Compare the rigid run's
+`Translation −4.84 / 10.28 / −122.47 mm (LR / AP / CC)` against **Eclipse's own display** of
+`TEST1`'s translation. The diagnostics line above is the plugin reading a second registration, not
+an independent answer; only Eclipse's own number closes the axis labelling on the rigid path.
 
 ## 3c. Structures and hidden metrics
 
@@ -827,6 +864,7 @@ Open an issue at
 | 3b | TRE — landmarks matched | ≥ 2 | | | |
 | 3b | TRE mean under known shift | applied value | | | |
 | 3b | Inverse consistency residual | ≤ max voxel dim | 2026-08-01 | ✅ | rigid 0.259 mm (green), deformable 7.042 mm (red). Both sane, in opposite directions — see 3b |
+| 3b | **Reverse registration really is the inverse** | residual ≪ 1 mm | 2026-08-01 | ✅ | `TEST2` sits 0.33 mm from `TEST1`'s analytic inverse. Now printed by the tool — do not compare by negating |
 | 3d | **Deformation field read** | grid + spacing in Diagnostics | | | must be the field's, not the image's |
 | 3d | **Jacobian on a trusted DIR** | 0 % | | | any folding is a Table III breach; graded inside the patient outline |
 | 3d | **`jacobian: grading domain`** | names the region graded | | | falls back to the whole field, and says why, when no outline can be placed |

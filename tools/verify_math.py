@@ -411,6 +411,38 @@ check("rotational inconsistency is invisible at the centre but not at the periph
       residual_centre < residual_edge - 1.0,
       f"centre {residual_centre:.4f} mm vs periphery {residual_edge:.4f} mm")
 
+# Negating the translation is NOT the inverse once a rotation is involved, and the gap is large
+# enough to be mistaken for a fault. Pinned with the head phantom's own numbers: TEST1 translates
+# by (-4.84, 10.28, -122.47) mm with a 1.89 deg pitch, and Eclipse's TEST2 reads
+# (4.30, -6.40, 122.54). Negation puts AP 3.88 mm out; -R^T t puts the whole vector 0.33 mm out.
+# This is the comparison LogInverseAgreement prints, and the reason it prints it.
+t1 = (-4.84, 10.28, -122.47)
+R1 = matmul(rot_z(math.radians(0.15)), matmul(rot_y(math.radians(0.15)), rot_x(math.radians(1.89))))
+t2 = (4.30, -6.40, 122.54)
+
+proper = inv_rigid(mat4(R1, t1))
+proper_t = (proper[0][3], proper[1][3], proper[2][3])
+naive_t = (-t1[0], -t1[1], -t1[2])
+
+gap_proper = math.dist(proper_t, t2)
+gap_naive = math.dist(naive_t, t2)
+
+check("the analytic inverse recovers the reverse registration's translation",
+      gap_proper < 0.5, f"{gap_proper:.3f} mm from Eclipse's TEST2")
+check("negating the translation does not, once a rotation is present",
+      gap_naive > 3.0, f"{gap_naive:.3f} mm — mistakable for a fault")
+check("the discrepancy is the rotation acting on the large CC translation",
+      abs(abs(naive_t[1] - proper_t[1]) - abs(t1[2]) * math.sin(math.radians(1.89))) < 0.1,
+      f"AP gap {abs(naive_t[1]-proper_t[1]):.2f} mm vs "
+      f"|t_CC|*sin(pitch) = {abs(t1[2])*math.sin(math.radians(1.89)):.2f} mm")
+
+# And the failure the check exists to catch: a "reverse" that is a second copy of the same
+# direction leaves a residual near twice the translation, not near zero.
+same_direction = math.dist(proper_t, t1)
+check("a reverse pointing the same way is ~2x the translation away from the true inverse",
+      abs(same_direction - 2 * math.dist(t1, (0, 0, 0))) < 1.0,
+      f"{same_direction:.2f} mm against 2|t| = {2*math.dist(t1,(0,0,0)):.2f} mm")
+
 print("\n=== Target Registration Error ===")
 
 def tre(mapper_matrix, source_points, target_points):

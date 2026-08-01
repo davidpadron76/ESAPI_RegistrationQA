@@ -1866,11 +1866,17 @@ namespace ESAPI_RegistrationQA.Services
             IPointMapper reverseMapper = BuildPointMapper(reverse, reverseMeasurements, reverseLog);
 
             // The active registration's translation is already in the report's Rigid Transform
-            // table. This is the number to hold up against it: a genuine inverse should show an
-            // approximately opposite translation of similar magnitude. One that instead looks
-            // like the active registration's own is the round trip applying the same direction
-            // twice, and would explain a residual roughly double the active transform's
-            // displacement rather than the near-zero a true inverse would leave.
+            // table. This is the number to hold up against it — but not by negating it, which is
+            // the trap this line used to set. Negation is the inverse of a *pure translation*.
+            // With a rotation the inverse translation is −Rᵀ·t, and the difference between the
+            // two is not small: on the head phantom a 1.89° pitch over a 122.47 mm CC
+            // translation moved 4.04 mm into AP, so the naive comparison showed the AP component
+            // disagreeing by 40 % on a pair of registrations that agree to 0.33 mm. A reader
+            // following the old advice would have gone looking for a fault that was not there.
+            //
+            // So the comparison is computed rather than left to the reader: the active
+            // transform's analytic inverse is printed beside the reverse registration's own
+            // reading, and the residual between them stated.
             if (reverseMeasurements.Transform != null)
             {
                 Vec3 t = reverseMeasurements.Transform.Translation;
@@ -1883,6 +1889,8 @@ namespace ESAPI_RegistrationQA.Services
                             angles.Value.PitchX, angles.Value.RollY, angles.Value.YawZ)
                         : string.Empty),
                     t.X, t.Y, t.Z, t.Length));
+
+                LogInverseAgreement(measurements.Transform, reverseMeasurements.Transform);
             }
 
             if (reverseMapper == null)
@@ -1909,6 +1917,58 @@ namespace ESAPI_RegistrationQA.Services
 
             _log.Info("inverse consistency", string.Format(
                 CultureInfo.InvariantCulture, "{0:F3} mm over {1} points", residual, evaluated));
+        }
+
+        /// <summary>
+        /// States, as a number, whether the registration found as the reverse really is the
+        /// active one's inverse — rather than leaving the reader to compare two translation
+        /// vectors by eye.
+        ///
+        /// Eye comparison is what failed here. The obvious test, "the inverse should read
+        /// approximately opposite", holds only for a pure translation. Composed with a rotation
+        /// the inverse translation is −Rᵀ·t, and a small angle over a large translation moves a
+        /// lot: 1.89° over 122.47 mm put 4.04 mm into the AP component on the head phantom, which
+        /// read as a 40 % disagreement on that axis between two registrations agreeing to
+        /// 0.33 mm overall.
+        ///
+        /// A genuine inverse gives a residual of a fraction of a millimetre. The failure this
+        /// catches is the one the round-trip residual alone cannot explain: a "reverse"
+        /// registration that is actually a second copy of the same direction, which shows up
+        /// here as a residual near twice the translation's magnitude.
+        /// </summary>
+        private void LogInverseAgreement(RigidTransform active, RigidTransform reverse)
+        {
+            if (active == null || reverse == null) return;
+
+            RigidTransform inverse;
+            if (!active.TryInvert(out inverse))
+            {
+                _log.Info("inverse consistency: inverse check",
+                    "the active registration's rotation is not orthonormal, so its analytic " +
+                    "inverse is not defined and the reverse registration cannot be checked " +
+                    "against it. The round-trip residual below does not depend on this.");
+                return;
+            }
+
+            Vec3 expected = inverse.Translation;
+            Vec3 found = reverse.Translation;
+            Vec3 difference = new Vec3(expected.X - found.X, expected.Y - found.Y, expected.Z - found.Z);
+
+            _log.Info("inverse consistency: inverse check", string.Format(CultureInfo.InvariantCulture,
+                "the active registration inverted analytically translates by ({0:F2}, {1:F2}, {2:F2}) mm; " +
+                "the registration found as its reverse translates by ({3:F2}, {4:F2}, {5:F2}) mm — they " +
+                "differ by {6:F2} mm. Compare these two, not the reverse against the negated active " +
+                "translation: negation is the inverse of a pure translation only, and with a rotation the " +
+                "inverse is −Rᵀ·t. On this case the two differ by {7:F2} mm, which is what a reader " +
+                "negating by eye would mistake for a fault. A genuine inverse lands well under a " +
+                "millimetre here; a residual near twice the translation's magnitude means the same " +
+                "direction was applied twice.",
+                expected.X, expected.Y, expected.Z,
+                found.X, found.Y, found.Z,
+                difference.Length,
+                new Vec3(-active.Translation.X - found.X,
+                         -active.Translation.Y - found.Y,
+                         -active.Translation.Z - found.Z).Length));
         }
 
         private static bool EvaluateRoundTripResidual(
