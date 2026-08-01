@@ -238,34 +238,10 @@ for _ in range(5000):
     worst = max(worst, abs(bi-i), abs(bj-j), abs(bk-k))
 check("exact round-trip on oblique geometry", worst < 1e-9, f"max error {worst:.2e} voxels")
 
-print("\n=== FromFrames: relative transform between frames ===")
-def from_frames(fr, to):
-    """Replica of RigidTransform.FromFrames: R = R_to * R_from^T, t = O_to - R*O_from."""
-    fa = [fr.xd, fr.yd, fr.zd]
-    ta = [to.xd, to.yd, to.zd]
-    R = [[sum(ta[x][r]*fa[x][c] for x in range(3)) for c in range(3)] for r in range(3)]
-    rot_o = [sum(R[r][c]*fr.o[c] for c in range(3)) for r in range(3)]
-    t = [to.o[r] - rot_o[r] for r in range(3)]
-    return R, t
-
-# One frame rotated 12deg relative to the other and shifted: the relative transform must
-# map the origin of the first exactly onto the origin of the second.
-g2 = Geom((-240.0, -180.0, -395.0), (1,0,0), (0,1,0), (0,0,1),
-          0.9765625, 0.9765625, 2.5, 512, 512, 160)
-R, t = from_frames(g, g2)
-mapped = apply(R, t, g.o)
-check("maps the source frame origin onto the target one",
-      all(abs(mapped[i]-g2.o[i]) < 1e-9 for i in range(3)),
-      f"{mapped} vs {g2.o}")
-good, det = is_orthonormal(R)
-check("the relative rotation is orthonormal", good, f"det={det}")
-
-# The bug this fixes: subtracting components of the direction vectors.
-old_rx = (g2.yd[1] - g.yd[1]) * 57.2958     # XDirection.y in the original
-true_angle = math.degrees(a)
-check("the previous formula (component subtraction) gave a wrong angle",
-      abs(old_rx - true_angle) > 1.0,
-      f"old={old_rx:.3f}deg vs true={true_angle:.3f}deg")
+# The relative transform between the two image frames used to be computed here, as a
+# fallback for when the API exposed no registration matrix. Both the method and its checks
+# were removed with the fallback: the quantity is real but it is not the registration, and
+# a tested implementation sitting in the tree is an invitation to wire it back in.
 
 # ---------------------------------------------------------------- Similitud
 
@@ -375,6 +351,428 @@ def choose_bins(n):
 check("64 bins for a large sample", choose_bins(2000000) == 64, str(choose_bins(2000000)))
 check("54 bins at the deformable budget (60k)", choose_bins(60000) == 54, str(choose_bins(60000)))
 check("floor of 16 bins for a small sample", choose_bins(1000) == 16, str(choose_bins(1000)))
+
+print("\n=== Transform composition and inverse consistency ===")
+
+def mat4(R, t):
+    return [[R[0][0],R[0][1],R[0][2],t[0]],
+            [R[1][0],R[1][1],R[1][2],t[1]],
+            [R[2][0],R[2][1],R[2][2],t[2]],
+            [0,0,0,1]]
+
+def mm4(a, b):
+    """Replica of RigidTransform.ComposeAfter: result = a * b, i.e. apply b then a."""
+    return [[sum(a[i][k]*b[k][j] for k in range(4)) for j in range(4)] for i in range(4)]
+
+def apply4(m, p):
+    return tuple(m[i][0]*p[0] + m[i][1]*p[1] + m[i][2]*p[2] + m[i][3] for i in range(3))
+
+def inv_rigid(m):
+    """R^-1 = R^T, t^-1 = -R^T t  (RigidTransform.TryInvert)."""
+    Rt = [[m[c][r] for c in range(3)] for r in range(3)]
+    t = [m[0][3], m[1][3], m[2][3]]
+    ti = [-sum(Rt[r][c]*t[c] for c in range(3)) for r in range(3)]
+    return mat4(Rt, ti)
+
+Rf = matmul(rot_z(0.21), matmul(rot_y(-0.08), rot_x(0.13)))
+tf = (7.5, -3.25, 11.0)
+F = mat4(Rf, tf)
+Rv = inv_rigid(F)
+
+# A perfectly inverse-consistent pair composes to the identity.
+C = mm4(Rv, F)
+ident_err = max(abs(C[i][j] - (1.0 if i == j else 0.0)) for i in range(4) for j in range(4))
+check("forward composed with its exact inverse gives the identity", ident_err < 1e-12,
+      f"max deviation {ident_err:.2e}")
+
+# Residual over a grid: zero for the exact inverse.
+corners = [(x,y,z) for x in (-250,250) for y in (-250,250) for z in (-150,150)]
+residual = max(math.dist(apply4(C, p), p) for p in corners)
+check("round-trip residual is zero for an exactly inverse pair", residual < 1e-9,
+      f"{residual:.2e} mm")
+
+# Introduce a known 1.4 mm error in the reverse transform: the residual must recover it.
+known = 1.4
+Rv_bad = [row[:] for row in Rv]
+Rv_bad[0][3] += known
+C_bad = mm4(Rv_bad, F)
+residual_bad = max(math.dist(apply4(C_bad, p), p) for p in corners)
+check("a known reverse translation error appears as that residual",
+      abs(residual_bad - known) < 1e-9, f"{residual_bad:.6f} vs {known}")
+
+# A rotational inconsistency grows with distance from the centre, so the grid must include
+# the periphery: sampling only the centre would report zero.
+ang = math.radians(0.5)
+Rv_rot = mm4(mat4(rot_z(ang), (0,0,0)), Rv)
+C_rot = mm4(Rv_rot, F)
+residual_centre = math.dist(apply4(C_rot, (0,0,0)), (0,0,0))
+residual_edge = max(math.dist(apply4(C_rot, p), p) for p in corners)
+check("rotational inconsistency is invisible at the centre but not at the periphery",
+      residual_centre < residual_edge - 1.0,
+      f"centre {residual_centre:.4f} mm vs periphery {residual_edge:.4f} mm")
+
+# Negating the translation is NOT the inverse once a rotation is involved, and the gap is large
+# enough to be mistaken for a fault. Pinned with the head phantom's own numbers: TEST1 translates
+# by (-4.84, 10.28, -122.47) mm with a 1.89 deg pitch, and Eclipse's TEST2 reads
+# (4.30, -6.40, 122.54). Negation puts AP 3.88 mm out; -R^T t puts the whole vector 0.33 mm out.
+# This is the comparison LogInverseAgreement prints, and the reason it prints it.
+t1 = (-4.84, 10.28, -122.47)
+R1 = matmul(rot_z(math.radians(0.15)), matmul(rot_y(math.radians(0.15)), rot_x(math.radians(1.89))))
+t2 = (4.30, -6.40, 122.54)
+
+proper = inv_rigid(mat4(R1, t1))
+proper_t = (proper[0][3], proper[1][3], proper[2][3])
+naive_t = (-t1[0], -t1[1], -t1[2])
+
+gap_proper = math.dist(proper_t, t2)
+gap_naive = math.dist(naive_t, t2)
+
+check("the analytic inverse recovers the reverse registration's translation",
+      gap_proper < 0.5, f"{gap_proper:.3f} mm from Eclipse's TEST2")
+check("negating the translation does not, once a rotation is present",
+      gap_naive > 3.0, f"{gap_naive:.3f} mm — mistakable for a fault")
+check("the discrepancy is the rotation acting on the large CC translation",
+      abs(abs(naive_t[1] - proper_t[1]) - abs(t1[2]) * math.sin(math.radians(1.89))) < 0.1,
+      f"AP gap {abs(naive_t[1]-proper_t[1]):.2f} mm vs "
+      f"|t_CC|*sin(pitch) = {abs(t1[2])*math.sin(math.radians(1.89)):.2f} mm")
+
+# And the failure the check exists to catch: a "reverse" that is a second copy of the same
+# direction leaves a residual near twice the translation, not near zero.
+same_direction = math.dist(proper_t, t1)
+check("a reverse pointing the same way is ~2x the translation away from the true inverse",
+      abs(same_direction - 2 * math.dist(t1, (0, 0, 0))) < 1.0,
+      f"{same_direction:.2f} mm against 2|t| = {2*math.dist(t1,(0,0,0)):.2f} mm")
+
+print("\n=== Target Registration Error ===")
+
+def tre(mapper_matrix, source_points, target_points):
+    errs = [math.dist(apply4(mapper_matrix, s), t) for s, t in zip(source_points, target_points)]
+    return sum(errs)/len(errs), max(errs)
+
+landmarks = [(-80,-40,-100), (60,20,-30), (0,90,45), (110,-70,80)]
+# Perfect registration: every landmark maps exactly onto its counterpart.
+mapped = [apply4(F, p) for p in landmarks]
+mean_e, max_e = tre(F, landmarks, mapped)
+check("TRE is zero for a registration that maps landmarks exactly",
+      mean_e < 1e-9 and max_e < 1e-9, f"mean {mean_e:.2e}, max {max_e:.2e}")
+
+# Displace one landmark by a known 3 mm: the max must catch it, the mean must dilute it.
+perturbed = list(mapped)
+perturbed[2] = (mapped[2][0] + 3.0, mapped[2][1], mapped[2][2])
+mean_e, max_e = tre(F, landmarks, perturbed)
+check("TRE max recovers a single 3 mm landmark displacement",
+      abs(max_e - 3.0) < 1e-9, f"{max_e:.6f}")
+check("TRE mean dilutes it across the landmarks",
+      abs(mean_e - 3.0/len(landmarks)) < 1e-9, f"{mean_e:.6f} vs {3.0/len(landmarks):.6f}")
+check("reporting both mean and max is what exposes the outlier", max_e > 4*mean_e - 1e-9,
+      f"mean {mean_e:.4f}, max {max_e:.4f}")
+
+print("\n=== Distance transform and surface metrics ===")
+
+INF = 1e20
+
+def edt_1d(f, spacing):
+    """Replica of DistanceTransform.LowerEnvelope."""
+    n = len(f)
+    sp2 = spacing*spacing
+    v = [0]*n
+    z = [0.0]*(n+1)
+    k = 0
+    v[0] = 0
+    z[0] = -INF
+    z[1] = INF
+    for q in range(1, n):
+        def isect(p, q):
+            return ((f[q] + q*q*sp2) - (f[p] + p*p*sp2)) / (2.0*sp2*(q-p))
+        s = isect(v[k], q)
+        while s <= z[k]:
+            k -= 1
+            s = isect(v[k], q)
+        k += 1
+        v[k] = q
+        z[k] = s
+        z[k+1] = INF
+    out = [0.0]*n
+    k = 0
+    for q in range(n):
+        while z[k+1] < q:
+            k += 1
+        d = (q - v[k]) * spacing
+        out[q] = d*d + f[v[k]]
+    return out
+
+def edt3(mask, nx, ny, nz, sx, sy, sz):
+    """Replica of DistanceTransform.SquaredDistanceMm: three separable passes."""
+    idx = lambda i,j,k: i + nx*(j + ny*k)
+    d = [0.0 if mask[i] else INF for i in range(len(mask))]
+    for k in range(nz):
+        for j in range(ny):
+            line = [d[idx(i,j,k)] for i in range(nx)]
+            out = edt_1d(line, sx)
+            for i in range(nx): d[idx(i,j,k)] = out[i]
+    for k in range(nz):
+        for i in range(nx):
+            line = [d[idx(i,j,k)] for j in range(ny)]
+            out = edt_1d(line, sy)
+            for j in range(ny): d[idx(i,j,k)] = out[j]
+    for j in range(ny):
+        for i in range(nx):
+            line = [d[idx(i,j,k)] for k in range(nz)]
+            out = edt_1d(line, sz)
+            for k in range(nz): d[idx(i,j,k)] = out[k]
+    return d
+
+# --- EDT against brute force on a small anisotropic grid --------------------------------
+nx, ny, nz = 9, 8, 7
+sx, sy, sz = 1.0, 1.5, 2.5
+idx = lambda i,j,k: i + nx*(j + ny*k)
+mask = [False]*(nx*ny*nz)
+seeds = [(1,1,1), (7,6,5), (4,0,3)]
+for (a,b,c) in seeds: mask[idx(a,b,c)] = True
+
+fast = edt3(mask, nx, ny, nz, sx, sy, sz)
+worst = 0.0
+for k in range(nz):
+    for j in range(ny):
+        for i in range(nx):
+            brute = min(((i-a)*sx)**2 + ((j-b)*sy)**2 + ((k-c)*sz)**2 for (a,b,c) in seeds)
+            worst = max(worst, abs(fast[idx(i,j,k)] - brute))
+check("distance transform matches brute force on an anisotropic grid", worst < 1e-9,
+      f"max deviation {worst:.2e} mm^2")
+
+# --- Sphere helpers ---------------------------------------------------------------------
+GN, GS = 48, 1.0          # 48^3 grid at 1 mm
+gidx = lambda i,j,k: i + GN*(j + GN*k)
+centre = (GN-1)/2.0
+
+def sphere(radius, offset=(0.0,0.0,0.0)):
+    m = [False]*(GN**3)
+    for k in range(GN):
+        for j in range(GN):
+            for i in range(GN):
+                dx = (i-centre)*GS - offset[0]
+                dy = (j-centre)*GS - offset[1]
+                dz = (k-centre)*GS - offset[2]
+                if dx*dx + dy*dy + dz*dz <= radius*radius:
+                    m[gidx(i,j,k)] = True
+    return m
+
+def surface(mask):
+    """Replica of SurfaceMetrics.ExtractSurface, 6-connectivity."""
+    s = [False]*len(mask)
+    for k in range(GN):
+        for j in range(GN):
+            for i in range(GN):
+                p = gidx(i,j,k)
+                if not mask[p]: continue
+                s[p] = (i==0 or i==GN-1 or j==0 or j==GN-1 or k==0 or k==GN-1
+                        or not mask[p-1] or not mask[p+1]
+                        or not mask[p-GN] or not mask[p+GN]
+                        or not mask[p-GN*GN] or not mask[p+GN*GN])
+    return s
+
+def percentile(sorted_vals, frac):
+    if not sorted_vals: return 0.0
+    if len(sorted_vals) == 1: return sorted_vals[0]
+    pos = frac*(len(sorted_vals)-1)
+    lo = int(math.floor(pos)); hi = min(lo+1, len(sorted_vals)-1)
+    w = pos - lo
+    return sorted_vals[lo]*(1-w) + sorted_vals[hi]*w
+
+def compare(a, b):
+    """Replica of SurfaceMetrics.Compare."""
+    ca = sum(a); cb = sum(b)
+    inter = sum(1 for i in range(len(a)) if a[i] and b[i])
+    dsc = 2.0*inter/(ca+cb) if (ca+cb) else None
+    sa, sb = surface(a), surface(b)
+    d_to_b = edt3(sb, GN, GN, GN, GS, GS, GS)
+    d_to_a = edt3(sa, GN, GN, GN, GS, GS, GS)
+    dists = []
+    for i in range(len(a)):
+        if sa[i]: dists.append(math.sqrt(d_to_b[i]))
+        if sb[i]: dists.append(math.sqrt(d_to_a[i]))
+    dists.sort()
+    return dsc, (sum(dists)/len(dists) if dists else None), percentile(dists, 0.95)
+
+# --- DSC --------------------------------------------------------------------------------
+s10 = sphere(10.0)
+dsc, mda, hd95 = compare(s10, s10)
+check("DSC of two identical spheres is 1", abs(dsc-1.0) < 1e-12, f"{dsc:.6f}")
+check("MDA and HD95 of identical spheres are 0", mda < 1e-12 and hd95 < 1e-12,
+      f"MDA={mda:.2e}, HD95={hd95:.2e}")
+
+far_a = sphere(6.0, (-14.0,0,0))
+far_b = sphere(6.0, ( 14.0,0,0))
+dsc_far, _, _ = compare(far_a, far_b)
+check("DSC of two disjoint spheres is 0", dsc_far == 0.0, f"{dsc_far:.6f}")
+
+# Analytic intersection of two equal spheres of radius r whose centres are d apart:
+#   V_lens = pi/12 * (2r - d)^2 * (d + 4r)
+# and since both volumes are equal, DSC = 2*V_lens / (2*V_sphere) = V_lens / V_sphere.
+r, d = 12.0, 8.0
+v_sphere = 4.0/3.0*math.pi*r**3
+v_lens = math.pi/12.0*(2*r-d)**2*(d+4*r)
+dsc_theory = v_lens/v_sphere
+dsc_meas, _, _ = compare(sphere(r, (-d/2,0,0)), sphere(r, (d/2,0,0)))
+check("DSC of two spheres with known analytic overlap",
+      abs(dsc_meas - dsc_theory) < 0.02,
+      f"measured {dsc_meas:.4f} vs theory {dsc_theory:.4f}")
+
+# --- MDA vs HD95: concentric versus displaced -------------------------------------------
+gap = 4.0
+inner, outer = sphere(10.0), sphere(10.0+gap)
+_, mda_c, hd95_c = compare(inner, outer)
+check("MDA of concentric spheres recovers the radial gap", abs(mda_c - gap) < 0.7,
+      f"{mda_c:.3f} vs {gap}")
+check("HD95 of concentric spheres recovers the radial gap", abs(hd95_c - gap) < 0.7,
+      f"{hd95_c:.3f} vs {gap}")
+check("on concentric spheres MDA and HD95 agree (distance is uniform)",
+      abs(mda_c - hd95_c) < 0.5, f"MDA={mda_c:.3f}, HD95={hd95_c:.3f}")
+
+shift = 5.0
+_, mda_s, hd95_s = compare(sphere(10.0), sphere(10.0, (shift,0,0)))
+check("on displaced spheres MDA sits well below HD95 (distance varies)",
+      mda_s < hd95_s - 1.0, f"MDA={mda_s:.3f}, HD95={hd95_s:.3f}")
+check("MDA <= HD95 in every case tested",
+      mda <= hd95 + 1e-12 and mda_c <= hd95_c + 1e-12 and mda_s <= hd95_s + 1e-12)
+
+# --- Point in polygon: concavity and holes ----------------------------------------------
+def crossings(xs, ys, x, y):
+    """Replica of ContourSet.RayCrossings."""
+    c = 0
+    n = len(xs)
+    j = n-1
+    for i in range(n):
+        if (ys[i] > y) != (ys[j] > y):
+            t = (y - ys[i]) / (ys[j] - ys[i])
+            if xs[i] + t*(xs[j] - xs[i]) > x:
+                c += 1
+        j = i
+    return c
+
+# U shape: concave, the notch must read as outside
+ux = [0,10,10, 7,7, 3,3, 0]
+uy = [0, 0,10,10,3, 3,10,10]
+check("point inside the arm of a concave polygon is inside",
+      crossings(ux,uy,1.5,5.0) % 2 == 1)
+check("point in the notch of a concave polygon is outside",
+      crossings(ux,uy,5.0,7.0) % 2 == 0)
+
+# Outer square with an inner square: even-odd over both polygons handles the hole
+ox, oy = [0,20,20,0], [0,0,20,20]
+hx, hy = [8,12,12,8], [8,8,12,12]
+total = lambda x,y: crossings(ox,oy,x,y) + crossings(hx,hy,x,y)
+check("point in the ring is inside", total(3.0,10.0) % 2 == 1)
+check("point in the hole is outside", total(10.0,10.0) % 2 == 0)
+check("point outside everything is outside", total(25.0,10.0) % 2 == 0)
+
+# --- Deformation vector field: Jacobian and gradient ------------------------------------
+# Replica of DeformationFieldMetrics.Compute. The field is a displacement u sampled on its
+# own grid, and the transform is x + u(x), so the Jacobian is det(I + grad u) -- not
+# det(grad u), which would sit near 0 for a near-rigid field instead of near 1.
+
+def dvf_metrics(u, nx, ny, nz, sx, sy, sz):
+    """u[(x,y,z)] -> (ux,uy,uz) in mm. Central differences over the interior only."""
+    negative = 0
+    samples = 0
+    min_j = float("inf")
+    max_grad = 0.0
+    max_disp = 0.0
+
+    for z in range(nz):
+        for y in range(ny):
+            for x in range(nx):
+                v = u[(x, y, z)]
+                max_disp = max(max_disp, math.sqrt(v[0]**2 + v[1]**2 + v[2]**2))
+
+    for z in range(1, nz-1):
+        for y in range(1, ny-1):
+            for x in range(1, nx-1):
+                a, b = u[(x+1,y,z)], u[(x-1,y,z)]
+                dudx = [(a[i]-b[i])/(2.0*sx) for i in range(3)]
+                a, b = u[(x,y+1,z)], u[(x,y-1,z)]
+                dudy = [(a[i]-b[i])/(2.0*sy) for i in range(3)]
+                a, b = u[(x,y,z+1)], u[(x,y,z-1)]
+                dudz = [(a[i]-b[i])/(2.0*sz) for i in range(3)]
+
+                m = [[1.0+dudx[0], dudy[0],      dudz[0]],
+                     [dudx[1],     1.0+dudy[1],  dudz[1]],
+                     [dudx[2],     dudy[2],      1.0+dudz[2]]]
+
+                j = (m[0][0]*(m[1][1]*m[2][2] - m[1][2]*m[2][1])
+                     - m[0][1]*(m[1][0]*m[2][2] - m[1][2]*m[2][0])
+                     + m[0][2]*(m[1][0]*m[2][1] - m[1][1]*m[2][0]))
+
+                samples += 1
+                if j <= 0.0: negative += 1
+                min_j = min(min_j, j)
+
+                grad = math.sqrt(sum(c*c for c in dudx) + sum(c*c for c in dudy)
+                                 + sum(c*c for c in dudz))
+                max_grad = max(max_grad, grad)
+
+    return dict(neg_pct=100.0*negative/samples, min_j=min_j, samples=samples,
+                max_grad=max_grad, max_disp=max_disp)
+
+N, SP = 7, 2.0
+
+# A pure translation: every vector identical, so the field has no gradient at all and the
+# Jacobian is exactly 1 everywhere. This is the case that would break if the code took
+# det(grad u) rather than det(I + grad u).
+shift = {(x,y,z): (3.0, -1.0, 2.0) for x in range(N) for y in range(N) for z in range(N)}
+r = dvf_metrics(shift, N, N, N, SP, SP, SP)
+check("uniform translation field: Jacobian is 1 everywhere",
+      abs(r["min_j"] - 1.0) < 1e-12, f"min|J|={r['min_j']:.15f}")
+check("uniform translation field: no folding", r["neg_pct"] == 0.0)
+check("uniform translation field: gradient is 0", r["max_grad"] < 1e-12,
+      f"max|grad u|={r['max_grad']:.3e}")
+check("uniform translation field: max displacement is the shift magnitude",
+      abs(r["max_disp"] - math.sqrt(9.0+1.0+4.0)) < 1e-12,
+      f"{r['max_disp']:.6f} vs {math.sqrt(14.0):.6f}")
+
+# Interior-only sampling: a 7x7x7 grid has 5x5x5 interior points.
+check("Jacobian is evaluated on the interior only",
+      r["samples"] == (N-2)**3, f"{r['samples']} vs {(N-2)**3}")
+
+# Uniform expansion u = k*x. The transform is (1+k)x, so det J = (1+k)^3 exactly.
+K = 0.10
+expand = {(x,y,z): (K*x*SP, K*y*SP, K*z*SP)
+          for x in range(N) for y in range(N) for z in range(N)}
+r = dvf_metrics(expand, N, N, N, SP, SP, SP)
+check("uniform expansion: det J = (1+k)^3",
+      abs(r["min_j"] - (1.0+K)**3) < 1e-12,
+      f"min|J|={r['min_j']:.12f} vs {(1.0+K)**3:.12f}")
+check("uniform expansion: no folding", r["neg_pct"] == 0.0)
+check("uniform expansion: gradient is k*sqrt(3)",
+      abs(r["max_grad"] - K*math.sqrt(3.0)) < 1e-12,
+      f"{r['max_grad']:.12f} vs {K*math.sqrt(3.0):.12f}")
+
+# A fold: compressing x faster than the grid itself advances inverts the mapping. With
+# u_x = -2*x, the transform is x - 2x = -x, so det J = -1 everywhere.
+fold = {(x,y,z): (-2.0*x*SP, 0.0, 0.0)
+        for x in range(N) for y in range(N) for z in range(N)}
+r = dvf_metrics(fold, N, N, N, SP, SP, SP)
+check("folding field is detected as negative Jacobian",
+      r["neg_pct"] == 100.0, f"{r['neg_pct']:.1f}% negative")
+check("folding field: det J = -1", abs(r["min_j"] + 1.0) < 1e-12,
+      f"min|J|={r['min_j']:.12f}")
+
+# Anisotropic spacing must be honoured per axis. The same displacement pattern read with
+# the wrong spacing scales the gradient by the ratio between the two, which is the bug
+# that would appear if the image resolution were substituted for the field's own.
+aniso = {(x,y,z): (0.0, 0.0, 0.5*z) for x in range(N) for y in range(N) for z in range(N)}
+r_fine = dvf_metrics(aniso, N, N, N, 1.0, 1.0, 1.0)
+r_coarse = dvf_metrics(aniso, N, N, N, 1.0, 1.0, 5.0)
+check("gradient scales with the axis spacing actually used",
+      abs(r_fine["max_grad"] - 5.0*r_coarse["max_grad"]) < 1e-12,
+      f"fine={r_fine['max_grad']:.6f}, coarse={r_coarse['max_grad']:.6f}")
+
+# Max displacement needs no derivative, so it must be reported even where the grid is too
+# thin for a central difference. Verified against a 2-deep axis.
+thin = {(x,y,z): (0.0, 0.0, 4.0) for x in range(N) for y in range(N) for z in range(2)}
+max_disp_thin = max(math.sqrt(sum(c*c for c in thin[k])) for k in thin)
+check("max displacement is well defined on a grid too thin for a Jacobian",
+      abs(max_disp_thin - 4.0) < 1e-12)
 
 print()
 if FAILS:

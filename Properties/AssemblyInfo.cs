@@ -5,12 +5,12 @@ using System.Runtime.InteropServices;
 // traceable to the exact version of the code that produced it, so this number should be
 // bumped on every change that alters how a metric is computed or classified.
 [assembly: AssemblyTitle("ESAPI_RegistrationQA")]
-[assembly: AssemblyDescription("Quantitative audit of image registrations for Varian Eclipse (AAPM TG-132 / TG-233)")]
+[assembly: AssemblyDescription("Quantitative audit of image registrations for Varian Eclipse (AAPM TG-132)")]
 [assembly: AssemblyProduct("ESAPI_RegistrationQA")]
 [assembly: AssemblyCulture("")]
 
 [assembly: ComVisible(false)]
 
-[assembly: AssemblyVersion("2.0.0.0")]
-[assembly: AssemblyFileVersion("2.0.0.0")]
-[assembly: AssemblyInformationalVersion("2.0.0")]
+[assembly: AssemblyVersion("3.0.0.0")]
+[assembly: AssemblyFileVersion("3.0.0.0")]
+[assembly: AssemblyInformationalVersion("3.0.0")]

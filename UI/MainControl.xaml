@@ -8,6 +8,9 @@
 
     <UserControl.Resources>
 
+        <!-- Drives the progress panel's visibility off MainViewModel.IsMeasuring. -->
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+
         <!-- Semaphore palette. A single point of definition for all three tables. -->
         <SolidColorBrush x:Key="StatusGreenBg"  Color="#C8E6C9"/>
         <SolidColorBrush x:Key="StatusGreenFg"  Color="#2E7D32"/>
@@ -118,12 +121,46 @@
             <Setter Property="RowHeight" Value="30"/>
             <Setter Property="Margin" Value="5"/>
             <Setter Property="CanUserAddRows" Value="False"/>
+
+            <!--
+                Hidden while measuring, so the grid and the progress panel are never both in the
+                layout. They share a Grid cell, and leaving the grid present but empty underneath
+                the panel collapsed its columns: the 220/110/80 px widths came out a few pixels
+                wide once the rows arrived, with the headers reduced to single letters.
+
+                The precise mechanism is not worth chasing, because the condition is avoidable.
+                Before the progress panel existed the grid was measured exactly once — with its
+                data, at full width — because the window was only created after the pass finished.
+                Collapsing it here restores that: it is laid out once, when it has something to
+                lay out.
+            -->
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsMeasuring}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
 
-        <Style TargetType="GroupBox">
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Foreground" Value="{StaticResource Accent}"/>
-        </Style>
+        <!--
+            One line of context per metric: the tolerance it was held to, why it was held to
+            none, or why there is no number. It replaces the criterion and reason columns,
+            which between them never had the width to show either.
+        -->
+        <DataTemplate x:Key="MetricSummaryTemplate">
+            <TextBlock Text="{Binding Summary}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                       Foreground="#546E7A" FontSize="11.5" ToolTip="{Binding Tooltip}"/>
+        </DataTemplate>
+
+        <!--
+            The four metric sections rendered as one table with group headers. Four tabs meant
+            four clicks to learn what had been measured, on a screen whose whole purpose is to
+            be taken in at a glance.
+        -->
+        <CollectionViewSource x:Key="GroupedMetrics" Source="{Binding AllMetrics}">
+            <CollectionViewSource.GroupDescriptions>
+                <PropertyGroupDescription PropertyName="Group"/>
+            </CollectionViewSource.GroupDescriptions>
+        </CollectionViewSource>
 
     </UserControl.Resources>
 
@@ -132,6 +169,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
@@ -144,7 +182,7 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBlock Text="REGISTRATION QUANTITATIVE AUDIT (AAPM TG-132 / TG-233)"
+                    <TextBlock Text="REGISTRATION QUANTITATIVE AUDIT (AAPM TG-132)"
                                Foreground="White" FontSize="14" FontWeight="Bold"/>
                     <TextBlock Foreground="#DDE7F0" FontSize="11.5" Margin="0,3,0,0">
                         <Run Text="Patient:"/>
@@ -192,173 +230,139 @@
                     </Style.Triggers>
                 </Style>
             </Border.Style>
-            <StackPanel>
-                <TextBlock Text="{Binding GlobalStatusMessage}" FontSize="12.5" FontWeight="SemiBold"
-                           TextWrapping="Wrap" Foreground="#37474F"/>
-                <TextBlock Text="{Binding MeasurementSummary}" FontSize="10.5" Foreground="#607D8B"
-                           TextWrapping="Wrap" Margin="0,5,0,0"/>
+            <TextBlock Text="{Binding GlobalStatusMessage}" FontSize="12.5" FontWeight="SemiBold"
+                       TextWrapping="Wrap" Foreground="#37474F"
+                       ToolTip="{Binding MeasurementSummary}"/>
+        </Border>
+
+        <!--
+            Everything that was measured, in one table.
+
+            Advisories, diagnostics and the rigid transform used to be tabs. All three are
+            reference material: needed when a number has to be explained, in the way and not
+            read the rest of the time. They are a line of text and two buttons now.
+        -->
+        <!--
+            HorizontalScrollBarVisibility="Disabled" is what keeps the columns their declared
+            widths, and it is not a cosmetic choice.
+
+            With the default of Auto, the ScrollViewer measures its content against infinite
+            width. A star column cannot take a share of infinity, so it falls back to the width
+            its content wants — the full untrimmed criterion text, thousands of pixels — and the
+            grid ends up wider than the window with every other column squeezed against it. The
+            symptom was a horizontal scrollbar present even maximised, and headers reduced to
+            single letters.
+
+            Disabled makes the measure finite, so the star column resolves against the space that
+            actually exists. MinWidth on the other three is the belt to that braces: no matter
+            what the grid decides, no column can collapse below something readable.
+        -->
+        <DataGrid Grid.Row="2" ItemsSource="{Binding Source={StaticResource GroupedMetrics}}"
+                  Style="{StaticResource MetricGridStyle}" Margin="0"
+                  ScrollViewer.VerticalScrollBarVisibility="Auto"
+                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <DataGrid.GroupStyle>
+                <GroupStyle>
+                    <GroupStyle.HeaderTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="12"
+                                       Foreground="{StaticResource Accent}" Margin="4,10,0,4"/>
+                        </DataTemplate>
+                    </GroupStyle.HeaderTemplate>
+                </GroupStyle>
+            </DataGrid.GroupStyle>
+            <DataGrid.Columns>
+                <DataGridTemplateColumn Header="Metric" Width="220" MinWidth="150"
+                                        CellTemplate="{StaticResource MetricNameTemplate}"/>
+                <DataGridTemplateColumn Header="Value" Width="110" MinWidth="90"
+                                        CellTemplate="{StaticResource MetricValueTemplate}"/>
+                <DataGridTemplateColumn Header="Status" Width="80" MinWidth="70"
+                                        CellTemplate="{StaticResource StatusBadgeTemplate}"/>
+                <!--
+                    The criterion the value was held to, and a short note on what it was measured
+                    on. Anything longer belongs in the tooltip, which carries the metric's full
+                    definition and its TG-132 basis, or in the diagnostics. This cell used to hold
+                    the whole explanation and could not be read even maximised.
+                -->
+                <DataGridTemplateColumn Header="Criterion / reason" Width="*" MinWidth="200"
+                                        CellTemplate="{StaticResource MetricSummaryTemplate}"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!--
+            Progress panel, over the table area because that is the region that is empty until
+            the pass finishes.
+
+            It replaces nothing on screen: before this existed, the window itself did not appear
+            until every metric had been computed, so Eclipse looked frozen for the duration. The
+            measurement now starts after the first render and reports the stage it is in, which
+            is the part a physicist needs when a case stops moving — the stage names the API read
+            that is blocking.
+
+            Collapsed rather than hidden so it stops participating in layout once done.
+        -->
+        <Border Grid.Row="2" Background="#F4F6F9"
+                Visibility="{Binding IsMeasuring, Converter={StaticResource BoolToVisibility}}">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="420">
+                <TextBlock Text="Measuring registration" FontSize="14" FontWeight="SemiBold"
+                           Foreground="{StaticResource Accent}" HorizontalAlignment="Center"/>
+
+                <TextBlock Text="{Binding StageDescription}" FontSize="12" Foreground="#546E7A"
+                           Margin="0,10,0,0" HorizontalAlignment="Center"
+                           TextWrapping="Wrap" TextAlignment="Center"/>
+
+                <!--
+                    Mode=OneWay on Value is required, not stylistic. RangeBase.Value is registered
+                    with BindsTwoWayByDefault, so an unqualified binding tries to write the value
+                    back into StageCompleted, whose setter is private — and WPF throws
+                    InvalidOperationException while building the visual tree, before the window is
+                    ever shown. It compiles cleanly either way; the failure is at run time only.
+                    Maximum carries it too, for the same reason it would if the default ever changed.
+                -->
+                <ProgressBar Minimum="0"
+                             Maximum="{Binding StageTotal, Mode=OneWay}"
+                             Value="{Binding StageCompleted, Mode=OneWay}"
+                             Height="6" Width="380" Margin="0,12,0,0"
+                             Foreground="{StaticResource Accent}" Background="#DDE3EA"
+                             BorderThickness="0"/>
+
+                <TextBlock FontSize="10.5" Foreground="#78909C" Margin="0,6,0,0"
+                           HorizontalAlignment="Center">
+                    <Run Text="Stage"/>
+                    <Run Text="{Binding StageCompleted, Mode=OneWay}"/>
+                    <Run Text="of"/>
+                    <Run Text="{Binding StageTotal, Mode=OneWay}"/>
+                </TextBlock>
+
+                <!--
+                    Says plainly that the window will not answer clicks. The measurement runs on
+                    the UI thread on purpose — the Varian API cannot be assumed safe to touch
+                    from another one — so between stages the window repaints but does not accept
+                    input. Stating that is better than letting the reader conclude it crashed.
+                -->
+                <TextBlock Text="The window will not respond to clicks until this finishes."
+                           FontSize="10" Foreground="#90A4AE" Margin="0,14,0,0"
+                           HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
             </StackPanel>
         </Border>
 
-        <TabControl Grid.Row="2" Background="Transparent" BorderThickness="0">
-            <TabControl.Resources>
-                <Style TargetType="TabItem">
-                    <Setter Property="Padding" Value="12,6"/>
-                    <Setter Property="Margin" Value="0,0,5,0"/>
-                    <Setter Property="FontWeight" Value="SemiBold"/>
-                </Style>
-            </TabControl.Resources>
+        <TextBlock Grid.Row="3" Text="{Binding TransformSummary}" FontSize="11" Foreground="#546E7A"
+                   Margin="2,10,0,0" TextWrapping="Wrap"
+                   ToolTip="DICOM patient coordinates: X = left-right, Y = anterior-posterior, Z = cranio-caudal. Euler angles in the intrinsic Rz-Ry-Rx convention."/>
 
-            <!-- Similarity and topology -->
-            <TabItem Header="QA Metrics">
-                <Grid Margin="0,10,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="15"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-
-                    <GroupBox Grid.Column="0" Header="Intensity similarity">
-                        <DataGrid ItemsSource="{Binding IntensityMetrics}" Style="{StaticResource MetricGridStyle}">
-                            <DataGrid.Columns>
-                                <DataGridTemplateColumn Header="Metric" Width="*"
-                                                        CellTemplate="{StaticResource MetricNameTemplate}"/>
-                                <DataGridTemplateColumn Header="Value" Width="80"
-                                                        CellTemplate="{StaticResource MetricValueTemplate}"/>
-                                <DataGridTextColumn Header="Criterion" Binding="{Binding ThresholdCriteria}" Width="130"/>
-                                <DataGridTemplateColumn Header="Status" Width="80"
-                                                        CellTemplate="{StaticResource StatusBadgeTemplate}"/>
-                            </DataGrid.Columns>
-                        </DataGrid>
-                    </GroupBox>
-
-                    <GroupBox Grid.Column="2" Header="Deformation and topology">
-                        <DataGrid ItemsSource="{Binding DeformationMetrics}" Style="{StaticResource MetricGridStyle}">
-                            <DataGrid.Columns>
-                                <DataGridTemplateColumn Header="Metric" Width="*"
-                                                        CellTemplate="{StaticResource MetricNameTemplate}"/>
-                                <DataGridTemplateColumn Header="Value" Width="80"
-                                                        CellTemplate="{StaticResource MetricValueTemplate}"/>
-                                <DataGridTextColumn Header="Criterion" Binding="{Binding ThresholdCriteria}" Width="130"/>
-                                <DataGridTemplateColumn Header="Status" Width="80"
-                                                        CellTemplate="{StaticResource StatusBadgeTemplate}"/>
-                            </DataGrid.Columns>
-                        </DataGrid>
-                    </GroupBox>
-                </Grid>
-            </TabItem>
-
-            <!-- Structures -->
-            <TabItem Header="Structures &amp; Surface">
-                <GroupBox Header="Anatomical alignment (DSC / HD95)" Margin="0,10,0,0">
-                    <DataGrid ItemsSource="{Binding StructureQAMetrics}" Style="{StaticResource MetricGridStyle}">
-                        <DataGrid.Columns>
-                            <DataGridTemplateColumn Header="Anatomical index" Width="2*"
-                                                    CellTemplate="{StaticResource MetricNameTemplate}"/>
-                            <DataGridTemplateColumn Header="Value" Width="100"
-                                                    CellTemplate="{StaticResource MetricValueTemplate}"/>
-                            <DataGridTextColumn Header="Criterion" Binding="{Binding ThresholdCriteria}" Width="160"/>
-                            <DataGridTemplateColumn Header="Status" Width="80"
-                                                    CellTemplate="{StaticResource StatusBadgeTemplate}"/>
-                            <DataGridTextColumn Header="Reason" Binding="{Binding UnavailableReason}" Width="3*">
-                                <DataGridTextColumn.ElementStyle>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="TextWrapping" Value="Wrap"/>
-                                        <Setter Property="Foreground" Value="#777777"/>
-                                        <Setter Property="FontSize" Value="10.5"/>
-                                        <Setter Property="Margin" Value="0,4"/>
-                                    </Style>
-                                </DataGridTextColumn.ElementStyle>
-                            </DataGridTextColumn>
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </GroupBox>
-            </TabItem>
-
-            <!-- Rigid transform -->
-            <TabItem Header="Rigid Transform">
-                <GroupBox Header="Spatial parameters (DICOM patient coordinates)" Margin="0,10,0,0">
-                    <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Margin="10,6,10,0" TextWrapping="Wrap"
-                                   FontWeight="Normal" FontSize="10.5" Foreground="#607D8B"
-                                   Text="X = left-right (LR) · Y = anterior-posterior (AP) · Z = cranio-caudal (CC). Euler angles in the intrinsic Rz·Ry·Rx convention."/>
-                        <DataGrid ItemsSource="{Binding RigidTransformData}" Style="{StaticResource MetricGridStyle}">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Parameter" Binding="{Binding Parameter}" Width="2*"/>
-                                <DataGridTextColumn Header="Value" Binding="{Binding DisplayValue}" Width="1*"/>
-                                <DataGridTextColumn Header="Unit" Binding="{Binding Unit}" Width="80"/>
-                                <DataGridTextColumn Header="Provenance" Binding="{Binding Note}" Width="3*">
-                                    <DataGridTextColumn.ElementStyle>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="TextWrapping" Value="Wrap"/>
-                                            <Setter Property="Foreground" Value="#777777"/>
-                                            <Setter Property="FontSize" Value="10.5"/>
-                                            <Setter Property="Margin" Value="0,4"/>
-                                        </Style>
-                                    </DataGridTextColumn.ElementStyle>
-                                </DataGridTextColumn>
-                            </DataGrid.Columns>
-                        </DataGrid>
-                    </DockPanel>
-                </GroupBox>
-            </TabItem>
-
-            <!-- Clinical advisories -->
-            <TabItem Header="Advisories">
-                <GroupBox Header="Clinical advisories for the active profile" Margin="0,10,0,0">
-                    <DataGrid ItemsSource="{Binding Advisories}" Style="{StaticResource MetricGridStyle}"
-                              RowHeight="NaN">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Level" Binding="{Binding SeverityText}" Width="90"/>
-                            <DataGridTextColumn Header="Scope" Binding="{Binding Category}" Width="180"/>
-                            <DataGridTextColumn Header="Observation" Binding="{Binding Message}" Width="*">
-                                <DataGridTextColumn.ElementStyle>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="TextWrapping" Value="Wrap"/>
-                                        <Setter Property="Margin" Value="0,4"/>
-                                    </Style>
-                                </DataGridTextColumn.ElementStyle>
-                            </DataGridTextColumn>
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </GroupBox>
-            </TabItem>
-
-            <!--
-                Diagnostics.
-
-                A new tab: it surfaces everything the previous version swallowed in empty
-                catch blocks. This is what lets the user find out why a metric came out
-                unavailable.
-            -->
-            <TabItem Header="Diagnostics">
-                <GroupBox Header="Varian API access" Margin="0,10,0,0">
-                    <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Text="{Binding DiagnosticsSummary}"
-                                   Margin="10,6,10,0" FontWeight="SemiBold" FontSize="11"
-                                   Foreground="#607D8B" TextWrapping="Wrap"/>
-                        <DataGrid ItemsSource="{Binding Diagnostics}" Style="{StaticResource MetricGridStyle}"
-                                  RowHeight="NaN">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Level" Binding="{Binding LevelText}" Width="80"/>
-                                <DataGridTextColumn Header="Operation" Binding="{Binding Operation}" Width="2*"/>
-                                <DataGridTextColumn Header="Detail" Binding="{Binding Detail}" Width="3*">
-                                    <DataGridTextColumn.ElementStyle>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="TextWrapping" Value="Wrap"/>
-                                            <Setter Property="Margin" Value="0,4"/>
-                                        </Style>
-                                    </DataGridTextColumn.ElementStyle>
-                                </DataGridTextColumn>
-                            </DataGrid.Columns>
-                        </DataGrid>
-                    </DockPanel>
-                </GroupBox>
-            </TabItem>
-
-        </TabControl>
-
-        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="{Binding AdvisoriesButtonText}" Command="{Binding ShowAdvisoriesCommand}"
+                    MinWidth="150" Height="35" Background="White" Foreground="#546E7A"
+                    BorderBrush="#B0BEC5" BorderThickness="1" Margin="0,0,10,0" Padding="12,0"/>
+            <Button Content="{Binding DiagnosticsButtonText}" Command="{Binding ShowDiagnosticsCommand}"
+                    MinWidth="150" Height="35" Background="White" Foreground="#546E7A"
+                    BorderBrush="#B0BEC5" BorderThickness="1" Margin="0,0,25,0" Padding="12,0"
+                    ToolTip="Every property the plugin could not read from the API, with the operation and the exception."/>
+            <Button Content="Add to dataset (CSV)" Command="{Binding ExportCsvCommand}"
+                    Width="180" Height="35" Background="White" Foreground="{StaticResource Accent}"
+                    FontWeight="Bold" BorderBrush="{StaticResource Accent}" BorderThickness="1.5"
+                    Margin="0,0,10,0"
+                    ToolTip="Appends this case to a cumulative CSV file. No patient identifier is written. Point every audit at the same file to build a local baseline."/>
             <Button Content="Export technical report (HTML)" Command="{Binding ExportReportCommand}"
                     Width="240" Height="35" Background="{StaticResource Accent}" Foreground="White"
                     FontWeight="Bold" BorderThickness="0"/>

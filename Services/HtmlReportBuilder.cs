@@ -18,9 +18,11 @@ namespace ESAPI_RegistrationQA.Services
         public AdvisorySet Advisories { get; set; }
         public IList<MetricResult> IntensityMetrics { get; set; }
         public IList<MetricResult> DeformationMetrics { get; set; }
+        public IList<MetricResult> SpatialAccuracyMetrics { get; set; }
         public IList<MetricResult> StructureMetrics { get; set; }
         public IList<RigidTransformItem> RigidTransform { get; set; }
         public IList<DiagnosticEntry> Diagnostics { get; set; }
+        public IList<MetricResult> NotApplicableMetrics { get; set; }
     }
 
     /// <summary>
@@ -50,12 +52,16 @@ namespace ESAPI_RegistrationQA.Services
             AppendHeader(sb, data);
             AppendVerdict(sb, data);
             AppendAdvisories(sb, data);
-            AppendMetricsTable(sb, "1. Intensity similarity and topological metrics",
+            int section = 0;
+            AppendMetricsTable(sb, ref section, "Intensity similarity and topological metrics",
                 data.IntensityMetrics, data.DeformationMetrics);
-            AppendStructureTable(sb, data);
-            AppendRigidTable(sb, data);
-            AppendProvenance(sb, data);
-            AppendDiagnostics(sb, data);
+            AppendSpatialAccuracyTable(sb, ref section, data);
+            AppendStructureTable(sb, ref section, data);
+            AppendRigidTable(sb, ref section, data);
+            AppendProvenance(sb, ref section, data);
+            AppendNotApplicable(sb, ref section, data);
+            AppendDiagnostics(sb, ref section, data);
+            AppendMetricRationale(sb);
             AppendSignatures(sb);
             AppendFooter(sb, data);
 
@@ -105,7 +111,7 @@ namespace ESAPI_RegistrationQA.Services
         {
             if (data.Advisories == null || data.Advisories.Advisories.Count == 0) return;
 
-            sb.Append("<h2>Clinical advisories (AAPM TG-132 / TG-233)</h2>");
+            sb.Append("<h2>Clinical advisories (AAPM TG-132)</h2>");
             sb.Append("<table class='advisories'><tr><th>Level</th><th>Scope</th><th>Observation</th></tr>");
 
             foreach (Advisory advisory in data.Advisories.Advisories
@@ -120,11 +126,27 @@ namespace ESAPI_RegistrationQA.Services
             sb.Append("</table>");
         }
 
+        /// <summary>
+        /// Section headings are numbered as they are emitted rather than hard-coded, because
+        /// a section with nothing in it is skipped entirely. A table whose every row would
+        /// read N/A tells the reader nothing and, in a document meant to be signed, suggests
+        /// data is missing when in fact the metric never applied.
+        /// </summary>
+        private static void Heading(StringBuilder sb, ref int section, string title)
+        {
+            section++;
+            sb.Append("<h2>").Append(section.ToString(CultureInfo.InvariantCulture))
+              .Append(". ").Append(E(title)).Append("</h2>");
+        }
+
         private static void AppendMetricsTable(
-            StringBuilder sb, string title,
+            StringBuilder sb, ref int section, string title,
             IList<MetricResult> first, IList<MetricResult> second)
         {
-            sb.Append("<h2>").Append(E(title)).Append("</h2>");
+            int count = (first != null ? first.Count : 0) + (second != null ? second.Count : 0);
+            if (count == 0) return;
+
+            Heading(sb, ref section, title);
             sb.Append("<table><tr><th>Metric</th><th>Value</th><th>Acceptance criterion</th><th>Status</th></tr>");
 
             foreach (MetricResult metric in Concat(first, second))
@@ -133,9 +155,27 @@ namespace ESAPI_RegistrationQA.Services
             sb.Append("</table>");
         }
 
-        private static void AppendStructureTable(StringBuilder sb, ReportData data)
+        private static void AppendSpatialAccuracyTable(StringBuilder sb, ref int section, ReportData data)
         {
-            sb.Append("<h2>2. Structure and surface alignment</h2>");
+            if (data.SpatialAccuracyMetrics == null || data.SpatialAccuracyMetrics.Count == 0) return;
+
+            Heading(sb, ref section, "Spatial accuracy (TG-132 Table III)");
+            sb.Append("<p class='note'>These are the metrics TG-132 recommends for quantifying ");
+            sb.Append("registration accuracy. The tolerance in Table III is the maximum voxel ");
+            sb.Append("dimension (~2-3 mm) rather than a fixed value.</p>");
+            sb.Append("<table><tr><th>Metric</th><th>Value</th><th>Acceptance criterion</th><th>Status</th></tr>");
+
+            foreach (MetricResult metric in data.SpatialAccuracyMetrics ?? new List<MetricResult>())
+                AppendMetricRow(sb, metric);
+
+            sb.Append("</table>");
+        }
+
+        private static void AppendStructureTable(StringBuilder sb, ref int section, ReportData data)
+        {
+            if (data.StructureMetrics == null || data.StructureMetrics.Count == 0) return;
+
+            Heading(sb, ref section, "Structure and surface alignment");
             sb.Append("<table><tr><th>Anatomical index</th><th>Value</th><th>Acceptance criterion</th><th>Status</th></tr>");
 
             foreach (MetricResult metric in data.StructureMetrics ?? new List<MetricResult>())
@@ -166,9 +206,11 @@ namespace ESAPI_RegistrationQA.Services
             }
         }
 
-        private static void AppendRigidTable(StringBuilder sb, ReportData data)
+        private static void AppendRigidTable(StringBuilder sb, ref int section, ReportData data)
         {
-            sb.Append("<h2>3. Rigid transformation parameters</h2>");
+            if (data.RigidTransform == null || data.RigidTransform.Count == 0) return;
+
+            Heading(sb, ref section, "Rigid transformation parameters");
             sb.Append("<p class='note'>DICOM patient coordinates: X = left-right (LR), ");
             sb.Append("Y = anterior-posterior (AP), Z = cranio-caudal (CC). ");
             sb.Append("Euler angles in the intrinsic Rz·Ry·Rx convention.</p>");
@@ -187,12 +229,12 @@ namespace ESAPI_RegistrationQA.Services
             sb.Append("</table>");
         }
 
-        private static void AppendProvenance(StringBuilder sb, ReportData data)
+        private static void AppendProvenance(StringBuilder sb, ref int section, ReportData data)
         {
             QaMeasurements m = data.Measurements;
             if (m == null) return;
 
-            sb.Append("<h2>4. Measurement provenance and traceability</h2>");
+            Heading(sb, ref section, "Measurement provenance and traceability");
             sb.Append("<table class='provenance'>");
 
             AppendProvenanceRow(sb, "Transform source", m.TransformSource);
@@ -216,6 +258,18 @@ namespace ESAPI_RegistrationQA.Services
                     m.EffectiveSamplingMm.Value.ToString("F2", CultureInfo.InvariantCulture) + " mm");
             }
 
+            if (m.NativeVoxelSizeMm.HasValue)
+            {
+                AppendProvenanceRow(sb, "Maximum native voxel dimension (TG-132 tolerance basis)",
+                    m.NativeVoxelSizeMm.Value.ToString("F2", CultureInfo.InvariantCulture) + " mm");
+            }
+
+            if (m.TreLandmarkCount > 0)
+            {
+                AppendProvenanceRow(sb, "Landmarks matched for TRE",
+                    m.TreLandmarkCount.ToString(CultureInfo.InvariantCulture));
+            }
+
             sb.Append("</table>");
         }
 
@@ -225,7 +279,33 @@ namespace ESAPI_RegistrationQA.Services
               .Append(E(string.IsNullOrEmpty(value) ? "—" : value)).Append("</td></tr>");
         }
 
-        private static void AppendDiagnostics(StringBuilder sb, ReportData data)
+        /// <summary>
+        /// Accounts for the metrics that did not apply to this case.
+        ///
+        /// They are absent from the tables above by design, but a signed audit has to say
+        /// what was not evaluated and why. Omitting them from the report as well would turn a
+        /// deliberate exclusion into an untraceable gap.
+        /// </summary>
+        private static void AppendNotApplicable(StringBuilder sb, ref int section, ReportData data)
+        {
+            if (data.NotApplicableMetrics == null || data.NotApplicableMetrics.Count == 0) return;
+
+            Heading(sb, ref section, "Metrics not applicable to this case");
+            sb.Append("<p class='note'>These are omitted from the tables above rather than shown as ");
+            sb.Append("N/A. They could not apply to this registration, so a row for them would carry ");
+            sb.Append("no information; the reason is recorded here instead.</p>");
+            sb.Append("<table><tr><th>Metric</th><th>Why it does not apply</th></tr>");
+
+            foreach (MetricResult metric in data.NotApplicableMetrics)
+            {
+                sb.Append("<tr class='na-row'><td><b>").Append(E(metric.MetricName)).Append("</b></td><td>")
+                  .Append(E(metric.UnavailableReason)).Append("</td></tr>");
+            }
+
+            sb.Append("</table>");
+        }
+
+        private static void AppendDiagnostics(StringBuilder sb, ref int section, ReportData data)
         {
             if (data.Diagnostics == null || data.Diagnostics.Count == 0) return;
 
@@ -235,7 +315,7 @@ namespace ESAPI_RegistrationQA.Services
 
             if (relevant.Count == 0) return;
 
-            sb.Append("<h2>5. API access diagnostics</h2>");
+            Heading(sb, ref section, "API access diagnostics");
             sb.Append("<p class='note'>Issues recorded while reading the data. ");
             sb.Append("They are included so that every unevaluated metric has a traceable cause.</p>");
             sb.Append("<table class='diagnostics'><tr><th>Level</th><th>Operation</th><th>Detail</th></tr>");
@@ -247,6 +327,41 @@ namespace ESAPI_RegistrationQA.Services
                   .Append(E(entry.LevelText)).Append("</span></td><td>")
                   .Append(E(entry.Operation)).Append("</td><td>")
                   .Append(E(entry.Detail)).Append("</td></tr>");
+            }
+
+            sb.Append("</table>");
+        }
+
+        /// <summary>
+        /// Appendix stating, for every metric, the question it answers and where it stands
+        /// relative to TG-132.
+        ///
+        /// It belongs in a signed report rather than only in the source: whoever countersigns
+        /// this document is accountable for the interpretation, and that is not possible if
+        /// the basis for including each number lives somewhere they cannot see.
+        /// </summary>
+        private static void AppendMetricRationale(StringBuilder sb)
+        {
+            sb.Append("<h2>Appendix — basis for each metric</h2>");
+            sb.Append("<p class='note'>Metrics are included for the clinical decision they support. ");
+            sb.Append("Those not named in TG-132 are marked as such together with the reason for ");
+            sb.Append("retaining them; membership of the report is not by itself the criterion.</p>");
+            sb.Append("<p class='note'>The last column states whether the metric may drive the verdict. ");
+            sb.Append("Measuring a quantity and being entitled to fail a registration on it are ");
+            sb.Append("different claims: a metric with no defensible tolerance is reported as ");
+            sb.Append("<b>INFO</b> and counts neither for nor against compliance.</p>");
+            sb.Append("<table class='rationale'><tr><th>Metric</th><th>Question it answers</th>");
+            sb.Append("<th>What it supports</th><th>Relation to TG-132</th>");
+            sb.Append("<th>Drives the verdict?</th></tr>");
+
+            foreach (MetricDefinition definition in MetricCatalog.All)
+            {
+                sb.Append("<tr><td><b>").Append(E(definition.DisplayName)).Append("</b></td><td>")
+                  .Append(E(definition.ClinicalQuestion)).Append("</td><td>")
+                  .Append(E(definition.DecisionSupported)).Append("</td><td>")
+                  .Append(E(definition.StandardBasis)).Append("</td><td>")
+                  .Append(definition.Gating ? "<b>Yes</b>. " : "<b>No</b>. ")
+                  .Append(E(definition.GatingBasis)).Append("</td></tr>");
             }
 
             sb.Append("</table>");
@@ -368,6 +483,8 @@ tr.na-row td { color: #777; background: #fafafa !important; }
 tr.annotation td { font-size: 9.5px; color: #666; background: #fbfbfb !important;
                    border-top: none; font-style: italic; }
 table.provenance td.label { width: 40%; font-weight: 600; color: #005a9c; }
+table.rationale { font-size: 9.5px; }
+table.rationale td { line-height: 1.35; }
 .badge { padding: 2px 7px; border-radius: 3px; font-weight: bold; text-align: center;
          display: inline-block; min-width: 46px; font-size: 9.5px; }
 .badge-green { background: #c8e6c9 !important; color: #2e7d32 !important; }

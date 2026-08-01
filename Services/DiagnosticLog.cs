@@ -57,7 +57,20 @@ namespace ESAPI_RegistrationQA.Services
     /// </summary>
     public sealed class DiagnosticLog
     {
-        private readonly List<DiagnosticEntry> _entries = new List<DiagnosticEntry>();
+        private readonly List<DiagnosticEntry> _entries;
+        private readonly string _prefix;
+
+        public DiagnosticLog()
+        {
+            _entries = new List<DiagnosticEntry>();
+            _prefix = null;
+        }
+
+        private DiagnosticLog(List<DiagnosticEntry> entries, string prefix)
+        {
+            _entries = entries;
+            _prefix = prefix;
+        }
 
         public ReadOnlyCollection<DiagnosticEntry> Entries
         {
@@ -69,24 +82,42 @@ namespace ESAPI_RegistrationQA.Services
             get { return _entries.Exists(e => e.Level == DiagnosticLevel.Failure); }
         }
 
+        /// <summary>
+        /// A logger that writes into the same entry list but prefixes every operation label.
+        /// Two reads of the same shape — a forward registration and its reverse, source image
+        /// and target image — otherwise log under identical operation strings, and nothing in
+        /// Diagnostics says which one an entry belongs to. This is how the inverse-consistency
+        /// check tells its two registrations apart without touching MatrixReader or
+        /// PointMapperReader, which log under those shared names for every caller.
+        /// </summary>
+        public DiagnosticLog Scoped(string prefix)
+        {
+            return new DiagnosticLog(_entries, prefix);
+        }
+
+        private string Tag(string operation)
+        {
+            return _prefix == null ? operation : _prefix + operation;
+        }
+
         public void Info(string operation, string detail)
         {
-            _entries.Add(new DiagnosticEntry(DiagnosticLevel.Info, operation, detail));
+            _entries.Add(new DiagnosticEntry(DiagnosticLevel.Info, Tag(operation), detail));
         }
 
         public void Warning(string operation, string detail)
         {
-            _entries.Add(new DiagnosticEntry(DiagnosticLevel.Warning, operation, detail));
+            _entries.Add(new DiagnosticEntry(DiagnosticLevel.Warning, Tag(operation), detail));
         }
 
         public void Failure(string operation, string detail)
         {
-            _entries.Add(new DiagnosticEntry(DiagnosticLevel.Failure, operation, detail));
+            _entries.Add(new DiagnosticEntry(DiagnosticLevel.Failure, Tag(operation), detail));
         }
 
         public void Failure(string operation, Exception exception)
         {
-            _entries.Add(new DiagnosticEntry(DiagnosticLevel.Failure, operation, Describe(exception)));
+            _entries.Add(new DiagnosticEntry(DiagnosticLevel.Failure, Tag(operation), Describe(exception)));
         }
 
         public static string Describe(Exception exception)

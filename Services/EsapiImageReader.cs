@@ -27,6 +27,14 @@ namespace ESAPI_RegistrationQA.Services
             public ImageModality Modality { get; set; }
             public string Problem { get; set; }
             public bool Success { get { return Volume != null; } }
+
+            /// <summary>
+            /// Largest native voxel dimension in mm, before subsampling. TG-132 expresses the
+            /// tolerance for TRE and consistency as "maximum voxel dimension", so this is the
+            /// number those metrics have to be judged against — not the coarser sampling
+            /// resolution used for the intensity metrics.
+            /// </summary>
+            public double? NativeVoxelSizeMm { get; set; }
         }
 
         public static LoadResult Load(dynamic imageLike, string label, DiagnosticLog log)
@@ -71,19 +79,105 @@ namespace ESAPI_RegistrationQA.Services
             }
 
             result.Modality = ReadModality(imageLike, frame, label, log);
+            result.NativeVoxelSizeMm = geometry.CoarsestResolution;
 
             IntensityScale scale = ProbeIntensityScale(frame, label, log);
 
             string voxelProblem;
-            SampledVolume volume = ReadVoxels(frame, geometry, scale, label, log, out voxelProblem);
+            SampledVolume volume = ReadVoxels(frame, imageLike, geometry, scale, label, log, out voxelProblem);
             if (volume == null)
             {
                 result.Problem = label + ": " + voxelProblem;
                 return result;
             }
 
+            string intensityProblem = DescribeIntensities(volume, label, log);
+            if (intensityProblem != null)
+            {
+                result.Problem = label + ": " + intensityProblem;
+                return result;
+            }
+
             result.Volume = volume;
             return result;
+        }
+
+        /// <summary>
+        /// Records what the volume actually contains and rejects it if the content is
+        /// degenerate.
+        ///
+        /// This exists because <c>GetVoxels</c> succeeding is not the same as
+        /// <c>GetVoxels</c> having filled the buffer. When it returns without writing — a
+        /// plane index the API rejects silently, a frame whose pixel data has not been paged
+        /// in — every voxel stays at zero. The volume then sails through every later stage:
+        /// the pairing reports a full two million voxel pairs at 100 % overlap, and only the
+        /// correlation fails, with "zero variance", four steps away from the actual cause.
+        ///
+        /// Catching it here means the diagnostics name the operation that failed rather than
+        /// its distant symptom. Returns null when the volume is usable, otherwise the reason
+        /// it is not.
+        /// </summary>
+        private static string DescribeIntensities(SampledVolume volume, string label, DiagnosticLog log)
+        {
+            double min = double.MaxValue, max = double.MinValue, sum = 0.0;
+            long count = 0, nonFinite = 0;
+
+            for (int k = 0; k < volume.Geometry.ZSize; k++)
+            {
+                for (int j = 0; j < volume.Geometry.YSize; j++)
+                {
+                    for (int i = 0; i < volume.Geometry.XSize; i++)
+                    {
+                        float value = volume[i, j, k];
+
+                        if (float.IsNaN(value) || float.IsInfinity(value))
+                        {
+                            nonFinite++;
+                            continue;
+                        }
+
+                        if (value < min) min = value;
+                        if (value > max) max = value;
+                        sum += value;
+                        count++;
+                    }
+                }
+            }
+
+            if (count == 0)
+                return "every voxel read back non-finite; the intensity values cannot be used";
+
+            log.Info(label + ": intensity range", string.Format(CultureInfo.InvariantCulture,
+                "min {0:F1}, max {1:F1}, mean {2:F1} over {3:N0} voxels{4}",
+                min, max, sum / count, count,
+                nonFinite > 0 ? string.Format(CultureInfo.InvariantCulture,
+                    ", {0:N0} non-finite (excluded)", nonFinite) : string.Empty));
+
+            if (nonFinite > 0)
+            {
+                // Left as a warning rather than a rejection: a handful of non-finite voxels
+                // is survivable, but they must not reach the accumulators, where a single NaN
+                // silently poisons every sum.
+                log.Warning(label + ": intensity values", string.Format(CultureInfo.InvariantCulture,
+                    "{0:N0} voxel(s) read back as NaN or infinity and are excluded from the metrics",
+                    nonFinite));
+            }
+
+            if (min >= max)
+            {
+                string constant = string.Format(CultureInfo.InvariantCulture,
+                    "every voxel holds the same value ({0:F1}), so there is no image content to " +
+                    "compare. This is an API read failure, not a property of the image.", min);
+
+                // Logged, not merely returned. The caller puts this text into the metric's
+                // unavailability reason, but a physicist opening the diagnostics tab to find
+                // out why nothing was measured has to see it there too — and at the severity
+                // it deserves, since this single fault takes every metric down with it.
+                log.Failure(label + ": voxel content", constant);
+                return constant;
+            }
+
+            return null;
         }
 
         // ------------------------------------------------------------------ geometry
@@ -278,7 +372,7 @@ namespace ESAPI_RegistrationQA.Services
         // ------------------------------------------------------------------ voxels
 
         private static SampledVolume ReadVoxels(
-            dynamic frame, ImageGeometry geometry, IntensityScale scale,
+            dynamic frame, dynamic imageLike, ImageGeometry geometry, IntensityScale scale,
             string label, DiagnosticLog log, out string problem)
         {
             problem = null;
@@ -303,51 +397,25 @@ namespace ESAPI_RegistrationQA.Services
 
             var data = new float[(long)newX * newY * newZ];
 
-            // GetVoxels expects a full-size plane buffer. The buffer type varies between API
-            // versions (int[,] in ESAPI, ushort[,] in some VMS.IRS builds), so both are
-            // tried once.
-            var intBuffer = new int[geometry.XSize, geometry.YSize];
-            var ushortBuffer = new ushort[geometry.XSize, geometry.YSize];
-
-            bool useIntBuffer = true;
-            bool bufferKindResolved = false;
+            // Which object carries the pixel data, and in what buffer shape, is settled once
+            // here against probe planes that must come back with real content. The previous
+            // version settled it on the first call that did not throw, and on this Eclipse
+            // that call wrote nothing at all.
+            VoxelPlaneReader reader = VoxelPlaneReader.Resolve(frame, imageLike, geometry, label, log);
+            if (reader == null)
+            {
+                problem = "no way of reading voxels produced any data; see the GetVoxels entry in " +
+                          "the diagnostics for every combination that was tried";
+                return null;
+            }
 
             int outK = 0;
             for (int k = 0; k < geometry.ZSize; k += stepZ, outK++)
             {
-                int plane = k;
-
-                if (!bufferKindResolved)
+                if (!reader.TryReadPlane(k, label + ": GetVoxels plane " + k, log))
                 {
-                    if (Dyn.TryInvoke(label + ": GetVoxels(int[,])", () => frame.GetVoxels(plane, intBuffer), log))
-                    {
-                        useIntBuffer = true;
-                        bufferKindResolved = true;
-                        log.Info(label + ": GetVoxels", "the accepted buffer type is int[,]");
-                    }
-                    else if (Dyn.TryInvoke(label + ": GetVoxels(ushort[,])", () => frame.GetVoxels(plane, ushortBuffer), log))
-                    {
-                        useIntBuffer = false;
-                        bufferKindResolved = true;
-                        log.Info(label + ": GetVoxels", "the accepted buffer type is ushort[,]");
-                    }
-                    else
-                    {
-                        problem = "GetVoxels accepted neither int[,] nor ushort[,]; voxels cannot be read";
-                        return null;
-                    }
-                }
-                else
-                {
-                    bool ok = useIntBuffer
-                        ? Dyn.TryInvoke(label + ": GetVoxels plane " + plane, () => frame.GetVoxels(plane, intBuffer), log)
-                        : Dyn.TryInvoke(label + ": GetVoxels plane " + plane, () => frame.GetVoxels(plane, ushortBuffer), log);
-
-                    if (!ok)
-                    {
-                        problem = "failed to read plane " + plane;
-                        return null;
-                    }
+                    problem = "failed to read plane " + k + " through " + reader.Description;
+                    return null;
                 }
 
                 int outJ = 0;
@@ -355,10 +423,7 @@ namespace ESAPI_RegistrationQA.Services
                 {
                     int outI = 0;
                     for (int i = 0; i < geometry.XSize; i += stepX, outI++)
-                    {
-                        int raw = useIntBuffer ? intBuffer[i, j] : ushortBuffer[i, j];
-                        data[outI + newX * (outJ + newY * outK)] = scale.Apply(raw);
-                    }
+                        data[outI + newX * (outJ + newY * outK)] = scale.Apply(reader[i, j]);
                 }
             }
 

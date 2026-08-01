@@ -22,22 +22,71 @@ namespace ESAPI_RegistrationQA.Services
 
         public static readonly string[] DeformationKeys =
         {
-            MetricKeys.JacobianNegative, MetricKeys.MaxDisplacement, MetricKeys.Smoothness
+            MetricKeys.JacobianNegative, MetricKeys.JacobianDeparture,
+            MetricKeys.MaxDisplacement, MetricKeys.Smoothness, MetricKeys.DvfGradientMax
+        };
+
+        /// <summary>
+        /// The quantitative metrics of TG-132 Table III, grouped together because that is how
+        /// the report presents them and because they are the ones expressed in millimetres of
+        /// spatial error. DSC belongs to the same table.
+        /// </summary>
+        public static readonly string[] SpatialAccuracyKeys =
+        {
+            MetricKeys.TreMean, MetricKeys.TreMax, MetricKeys.InverseConsistency
         };
 
         public static readonly string[] StructureKeys =
         {
-            MetricKeys.Dsc, MetricKeys.Hd95
+            MetricKeys.Dsc, MetricKeys.Mda, MetricKeys.Hd95
         };
 
+        /// <summary>
+        /// Evaluates a group of metrics, omitting those that do not apply to this case.
+        ///
+        /// A metric that could never be filled here — a deformation metric on a rigid
+        /// registration, a landmark metric with no landmarks — would show the same N/A on
+        /// every case for ever. It is dropped from the table and recorded in the diagnostics
+        /// instead, so the omission stays traceable without occupying a row.
+        ///
+        /// A metric that was attempted and failed is kept. That one points at something to
+        /// fix, and hiding it would bury the fault.
+        /// </summary>
         public static List<MetricResult> Evaluate(
-            QaMeasurements measurements, ThresholdProfile profile, IEnumerable<string> keys)
+            QaMeasurements measurements, ThresholdProfile profile, IEnumerable<string> keys,
+            string group = null)
         {
             var results = new List<MetricResult>();
             if (keys == null) return results;
 
             foreach (string key in keys)
-                results.Add(EvaluateOne(measurements, profile, key));
+            {
+                if (measurements != null && measurements.ForKey(key).IsNotApplicable) continue;
+
+                MetricResult result = EvaluateOne(measurements, profile, key);
+                result.Group = group;
+                results.Add(result);
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// The metrics that did not apply to this case, with the reason. Feeds the
+        /// diagnostics view and the report, which is where the omissions are accounted for.
+        /// </summary>
+        public static List<MetricResult> NotApplicable(QaMeasurements measurements)
+        {
+            var results = new List<MetricResult>();
+            if (measurements == null) return results;
+
+            foreach (MetricDefinition definition in MetricCatalog.All)
+            {
+                MeasuredValue measured = measurements.ForKey(definition.Key);
+                if (!measured.IsNotApplicable) continue;
+
+                results.Add(MetricResult.Unavailable(definition.Key, measured.UnavailableReason));
+            }
 
             return results;
         }
@@ -67,6 +116,29 @@ namespace ESAPI_RegistrationQA.Services
 
             double value = measured.Value.Value;
 
+            string ungatedReason = WhyNotGated(key, measurements);
+
+            if (ungatedReason != null)
+            {
+                // Measured, shown, exported — but with no classification, so it cannot move
+                // the verdict in either direction. The reason goes in the criterion column,
+                // where the reader is looking for the tolerance it would otherwise have been
+                // held to.
+                return new MetricResult
+                {
+                    MetricKey = key,
+                    MetricName = displayName,
+                    Unit = unit,
+                    Value = value,
+                    Status = QASemaphore.Informational,
+                    ThresholdCriteria = ungatedReason,
+                    MeasurementNote = measured.Note,
+                    // Smoothness arrives here and is also a tautology on a rigid transform.
+                    // Without this the verdict would count it as a metric that was measured.
+                    IsAnalytic = measured.IsAnalytic
+                };
+            }
+
             return new MetricResult
             {
                 MetricKey = key,
@@ -76,10 +148,65 @@ namespace ESAPI_RegistrationQA.Services
                 Status = profile != null ? profile.Evaluate(key, value) : QASemaphore.NotAvailable,
                 ThresholdCriteria = profile != null ? profile.DescribeCriteria(key) : "—",
                 MeasurementNote = measured.Note,
+                IsAnalytic = measured.IsAnalytic,
                 UnavailableReason = profile != null && profile.TryGetLimits(key, out _)
                     ? null
                     : "the active profile defines no threshold for this metric"
             };
+        }
+
+        /// <summary>
+        /// Why a measured metric is not classified, or null when it is.
+        ///
+        /// Three reasons, and they are different in kind. The first is permanent and belongs
+        /// to the metric: NCC, NMI and SSD have no tolerance in TG-132 and no route from their
+        /// value to a distance, so any limit would be invented. The second is a property of
+        /// this particular image pair: the maximum displacement is only the correction the
+        /// registration applies when both series share a frame of reference. Across two frames
+        /// the transform must also span the offset between the coordinate systems, and a
+        /// correct registration can exceed any profile limit with nothing wrong. The third is a
+        /// property of which structure produced the value: DSC/MDA/HD95 measured on the patient
+        /// surface outline are a gross overlap check, not the organ-level comparison Table III
+        /// describes.
+        /// </summary>
+        private static string WhyNotGated(string key, QaMeasurements measurements)
+        {
+            // Kept short: this text lands in a narrow column. The full reasoning is in the
+            // metric tooltip and in the report appendix, both fed from MetricCatalog.
+            if (!MetricCatalog.IsGating(key))
+            {
+                // Maximum displacement keeps the more specific wording where it applies: that
+                // the number spans two coordinate systems is the thing worth saying about it.
+                if (key == MetricKeys.MaxDisplacement)
+                {
+                    bool? shares = measurements != null ? measurements.SharesFrameOfReference : null;
+
+                    if (shares.HasValue && !shares.Value) return "not in TG-132; different frames of reference";
+                    if (!shares.HasValue) return "not in TG-132; frame of reference unknown";
+                }
+
+                return "no TG-132 tolerance";
+            }
+
+            // A tolerance the report ties to the image cannot be applied without the image.
+            if (ThresholdProfile.IsVoxelDerived(key) &&
+                (measurements == null || !measurements.NativeVoxelSizeMm.HasValue))
+            {
+                return "not graded — voxel size unknown";
+            }
+
+            // The value is real, but it came from the patient surface outline rather than an
+            // organ or target — TG-132's DSC and MDA rows are not about the skin, and a
+            // registration can be flawless while the outline still disagrees wherever the two
+            // scans differ in length. Listed explicitly even though HD95 never gates on its
+            // own, so the reason is consistent regardless of which of the three is asked about.
+            if ((key == MetricKeys.Dsc || key == MetricKeys.Mda || key == MetricKeys.Hd95) &&
+                measurements != null && measurements.StructureMetricsAreSurfaceOutlineOnly)
+            {
+                return "not graded — measured on the patient surface outline only, not an organ";
+            }
+
+            return null;
         }
 
         /// <summary>
