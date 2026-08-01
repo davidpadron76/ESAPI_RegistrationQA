@@ -78,12 +78,27 @@ feature list is long. Anyone pooling data across the two needs to know before th
   this project had recorded as its largest open risk, on both the deformable and the rigid path.
 - Curl reads 8 % low for an established reason (interior-only derivatives, boundary maximum) and
   is deliberately left that way.
-- **DSC does not agree: Eclipse 0.90 against 0.953.** Open. The grid and the mapping direction
-  are eliminated and the transform is verified; what remains is interpolation between contour
-  planes, which on this case is severe — Eclipse's structure properties show the same target
-  stored at 0.4 mm in Z on one series and 5.0 mm on the other. A new
-  `structures: <id>: rasterisation` diagnostic reports each mask's volume and plane spacing so
-  it can be compared against the TPS's own structure statistics.
+- **DSC does not agree: Eclipse 0.90 against 0.953.** Open, and narrowed. The rasterised volumes
+  match Eclipse's own to 0.6 % and 2.5 %, while the intersections implied by the two Dice values
+  differ by 6.1 %, so the disagreement is in the overlap rather than in either mask. Grid
+  resolution is eliminated in the opposite direction to the obvious guess — a coarser grid reads
+  *lower*, and this plugin reads higher. What the same simulation does show is a ceiling: the Z
+  contouring mismatch alone (99 planes at 0.4 mm against 8 at 5.0 mm for the same target)
+  accounts for DSC ≈ 0.95 with no registration error at all, which is where the plugin sits. A
+  new `structures: <id>: rasterisation` diagnostic reports each mask's volume, plane count and
+  plane spacing so this can be reproduced elsewhere.
+
+### Known, not yet fixed
+
+- **The structure comparison grid is sized from unmapped contour bounds.** It is built from the
+  union of both structures' extents *before* the registration is applied, so on a case with a
+  large translation it spans the separation between them as well as the anatomy: on the head
+  phantom, 207 mm in Z where each structure is 40 mm deep and both land in the same place once
+  mapped. DSC, MDA and HD95 are computed from the masks, so the empty space does not change
+  them — but the grid is capped at 160 samples per axis, and on a large structure the inflated
+  span reaches that cap and coarsens the spacing. `BODY` on that case gets 3.42 mm instead of
+  the 2.66 mm it would get from mapped bounds. Since a coarser grid reads a lower DSC, this
+  makes large structures look slightly worse than they are.
 
 ---
 

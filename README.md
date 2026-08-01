@@ -397,16 +397,24 @@ declines to grade. **N/A** is the missing value.
   and the mapping direction (a reversed mapping would put the contours 245 mm apart and give a
   DSC of 0, not 0.953). The transform itself is verified against Eclipse.
 
-  What remains is how the space between contour planes is filled — a structure is a stack of
-  planar contours, not a solid — and on this case that is not a subtlety. Eclipse's structure
-  properties show the same target stored at **0.4 mm in Z on one series and 5.0 mm on the
-  other**, a factor of twelve. Rasterised onto a common grid, most of the coarser structure's
-  layers are interpolated rather than drawn, and two implementations need not interpolate alike.
-  **DSC gates at ≥ 0.90, so an inflated value is permissive in the direction that matters.**
-  Treat the DSC row as provisional, and treat any DSC across a series pair with very different
-  slice spacing as a statement about interpolation as much as about registration. The
-  `structures: <id>: rasterisation` diagnostic reports each mask's volume and plane spacing so
-  it can be held against the TPS's own structure statistics.
+  The `structures: <id>: rasterisation` diagnostic then narrowed it further. The rasterised
+  volumes agree with Eclipse's own to 0.6 % and 2.5 % (33.3 against 33.5 cm³, 33.4 against
+  32.6 cm³), while the intersections implied by the two Dice values differ by 6.1 % — so the
+  disagreement is in the overlap, not in either mask. Grid resolution is eliminated a second
+  time and in the opposite direction to the obvious guess: comparing a structure contoured at
+  5 mm against the same anatomy contoured at 0.4 mm gives DSC 0.951 on a 0.5 mm grid and 0.940
+  on a 2 mm one, so a coarser grid reads *lower*, and this plugin reads higher.
+
+  That same simulation puts a ceiling on what any DSC across this pair can be: **the Z
+  contouring mismatch alone — 99 planes at 0.4 mm against 8 planes at 5.0 mm for the same
+  target — accounts for a DSC of about 0.95 with no registration error at all.** The plugin's
+  0.953 sits exactly there. It is Eclipse's 0.90 that now needs explaining, which is the
+  reverse of where this investigation started.
+
+  **DSC gates at ≥ 0.90, so if the plugin is the one that is wrong, it is wrong in the
+  permissive direction.** Until a case with matched slice spacing settles it, treat the DSC row
+  as provisional, and treat any DSC across a series pair with very different slice spacing as a
+  statement about contouring resolution as much as about registration.
 * **TRE rests on however many landmarks you place, and one is not a measurement.** On a case
   with a single matched marker the criterion column says `1 matched landmark(s) — indicative
   only`. Place several, spread out, or read the row as an anecdote.
