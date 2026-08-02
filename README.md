@@ -291,7 +291,9 @@ the shipping C# against API-shaped stubs rather than re-implementing it. `tools/
 runs both and a warnings-as-errors compile.
 
 **Not checked:** TRE and the DVF gradient have no independent answer. Nothing has run on more
-than one Eclipse installation, or on any modality pair other than CT–CT. The threshold profiles
+than one Eclipse installation. A clinical MR→CT rigid registration has now been audited — the
+intensity metrics behaved as §4.C.3 predicts, NCC dropping to 0.631 where NMI stayed usable —
+but nothing on that pair has been held against an independent answer. The threshold profiles
 are TG-132 Table III applied literally, but no metric has been calibrated against a multi-centre
 distribution — which is what the CSV dataset exists to build.
 
