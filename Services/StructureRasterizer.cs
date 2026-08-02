@@ -47,6 +47,58 @@ namespace ESAPI_RegistrationQA.Services
         /// </summary>
         public double MedianPlaneSpacingMm { get { return _halfSpacing * 2.0; } }
 
+        /// <summary>
+        /// Where the contour planes actually sit, and the gaps between them — the raw evidence
+        /// behind <see cref="MedianPlaneSpacingMm"/>, which every rasterised volume scales with.
+        ///
+        /// It exists because that estimate was caught being wrong by a factor of exactly two.
+        /// On a clinical MR↔CT pair, the same structure on the same image read as 4 planes at
+        /// 2.90 mm in one run and 4 planes at 5.78 mm in another, and the rasterised volumes came
+        /// out at 0.9 cm3 and 2.2 cm3 against Eclipse's 1.8 cm3 — exactly half, and 1.22 times.
+        /// A median is a summary, and summarising was how a doubled gap hid; the positions
+        /// themselves cannot hide it.
+        /// </summary>
+        public string DescribePlanes()
+        {
+            if (_planes.Count == 0) return "no contour planes";
+
+            var text = new System.Text.StringBuilder();
+            text.AppendFormat(CultureInfo.InvariantCulture,
+                "{0} plane(s), z {1:F2} to {2:F2} mm",
+                _planes.Count, _planes[0].Z, _planes[_planes.Count - 1].Z);
+
+            if (_planes.Count < 2) return text.ToString();
+
+            var gaps = new List<double>();
+            for (int i = 1; i < _planes.Count; i++)
+                gaps.Add(Math.Abs(_planes[i].Z - _planes[i - 1].Z));
+
+            double smallest = gaps[0], largest = gaps[0];
+            foreach (double g in gaps)
+            {
+                if (g < smallest) smallest = g;
+                if (g > largest) largest = g;
+            }
+
+            text.AppendFormat(CultureInfo.InvariantCulture,
+                "; gaps {0:F2} to {1:F2} mm, median {2:F2} mm",
+                smallest, largest, MedianPlaneSpacingMm);
+
+            // The failure mode this was built to catch: an irregular plane set, where the median
+            // lands on a doubled gap and every volume derived from it doubles with it.
+            if (largest > 1.5 * smallest)
+            {
+                text.AppendFormat(CultureInfo.InvariantCulture,
+                    ". The planes are NOT evenly spaced — the largest gap is {0:F1}x the smallest, " +
+                    "so the median is a poor description of this structure and the volume derived " +
+                    "from it is unreliable. Gaps: {1}",
+                    largest / smallest, string.Join(", ", gaps.ConvertAll(
+                        g => g.ToString("F2", CultureInfo.InvariantCulture)).ToArray()));
+            }
+
+            return text.ToString();
+        }
+
         public void AddPolygon(double z, double[] xs, double[] ys)
         {
             if (xs == null || ys == null || xs.Length < 3) return;

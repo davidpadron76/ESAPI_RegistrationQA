@@ -417,6 +417,15 @@ declines to grade. **N/A** is the missing value.
   permissive direction.** Until a case with matched slice spacing settles it, treat the DSC row
   as provisional, and treat any DSC across a series pair with very different slice spacing as a
   statement about contouring resolution as much as about registration.
+* **The rasterised volume of a coarsely-contoured structure is wrong, so DSC, MDA and HD95 are
+  unreliable on one.** Held against Eclipse's own structure statistics on a clinical MR↔CT pair,
+  a structure contoured at 1.00 mm came out within 4–10 %, while the same structure copied onto
+  the much coarser MR planes came out at **exactly half** its true volume in one run and 1.22×
+  in another. The volume scales with an estimate of the contour plane spacing, and that estimate
+  is unstable on an unevenly spaced plane set. A `structures: <id>: source planes` diagnostic now
+  prints the plane positions and gaps and warns when they are uneven. **Until this is fixed,
+  treat those three rows as unreliable whenever a structure's contours are sparse relative to its
+  image planes** — the normal state of a structure propagated onto a coarser-sliced series.
 * **TRE rests on however many landmarks you place, and one is not a measurement.** On a case
   with a single matched marker the criterion column says `1 matched landmark(s) — indicative
   only`. Place several, spread out, or read the row as an anecdote.

@@ -1676,6 +1676,21 @@ namespace ESAPI_RegistrationQA.Services
 
             _log.Info("structures: " + source.Id + ": rasterisation", text.ToString());
 
+            // Separate line, and unsummarised. The median spacing above is what every rasterised
+            // volume scales with, and it was caught being wrong by a factor of exactly two on a
+            // clinical case; the plane positions are the evidence that settles which run is right.
+            if (source.Contours != null)
+            {
+                _log.Info("structures: " + source.Id + ": source planes",
+                    source.Contours.DescribePlanes());
+            }
+
+            if (target.Contours != null)
+            {
+                _log.Info("structures: " + source.Id + ": registered planes",
+                    target.Contours.DescribePlanes());
+            }
+
             return ceiling;
         }
 

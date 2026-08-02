@@ -110,6 +110,45 @@ feature list is long. Anyone pooling data across the two needs to know before th
 
 ### Known, not yet fixed
 
+- **The rasterised volume of a coarsely-contoured structure is wrong, and unstable between
+  runs.** Found by auditing a clinical MR↔CT pair in both directions and holding both against
+  Eclipse's own DICOM structure statistics.
+
+  | structure / image | Eclipse | plugin, forward run | plugin, reverse run |
+  |---|---|---|---|
+  | `PTV_High` / CT_1 — 1.00 mm planes | 2.5 cm³ | 2.6 cm³ (+4 %) | 2.6 cm³ (+4 %) |
+  | `PTV_High` / MR1 — coarse planes | 1.8 cm³ | **0.9 cm³ (×0.500)** | 2.2 cm³ (×1.22) |
+  | `PTV_High1` / CT_1 — 1.00 mm planes | 2.1 cm³ | 2.3 cm³ (+10 %) | 2.3 cm³ (+10 %) |
+  | `PTV_High1` / MR1 — coarse planes | 1.4 cm³ | **0.7 cm³ (×0.500)** | 1.1 cm³ (×0.79) |
+
+  The finely-contoured structure is accurate in both runs. The coarsely-contoured one is out by
+  a factor of exactly **0.500** on both structures in the forward run — too exact to be noise —
+  and by different factors in the reverse run, where the same structure on the same image read
+  as 4 planes at 5.78 mm instead of 4 at 2.90 mm. Contour geometry cannot depend on which
+  registration is open, and 5.78 is 1.99× 2.90.
+
+  The volume tracks the plane-spacing estimate, which localises it to the median gap computed in
+  `ContourSet.Finalise()` and the slab thickness `Contains` derives from it. A median over an
+  unevenly spaced plane set can land on a doubled gap, and every volume derived from it doubles
+  with it. `ContourSet.DescribePlanes()` now logs the plane positions, the full gap list and a
+  warning when the spacing is uneven — unsummarised, because summarising is how this hid.
+
+  **Two earlier conclusions in these notes were wrong and are withdrawn.** The 2.9× volume
+  difference on the MR→CT case was recorded first as a contouring difference between two readers,
+  then as something that could not happen because a rigid registration preserves volume. Neither
+  holds. Eclipse's own table reports a real +0.7 cm³ change on both structures — its resampling of
+  a 1 mm-sliced contour onto the MR's much coarser planes — and on top of that this tool's own
+  volume estimate was out by a factor of two.
+
+  **The DSC ceiling stands but is milder than recorded.** From Eclipse's volumes it is 0.837 and
+  0.800, not the 0.51 computed from the wrong ones — still below the 0.90 gate, so the row is
+  still unreachable, but by less. Eclipse's own Dice of 0.46 and 0.47 is about 57 % of that
+  ceiling, so there is real spatial disagreement here as well as a volume mismatch.
+
+  **DSC, MDA and HD95 are unreliable on any structure whose contours are sparse relative to its
+  image planes** — the normal state of a structure copied onto a coarser-sliced series — until
+  this is fixed.
+
 - **The structure comparison grid is sized from unmapped contour bounds.** It is built from the
   union of both structures' extents *before* the registration is applied, so on a case with a
   large translation it spans the separation between them as well as the anatomy: on the head
