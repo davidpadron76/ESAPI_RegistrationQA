@@ -127,9 +127,25 @@ feature list is long. Anyone pooling data across the two needs to know before th
   measured rather than absorbed: `ContourSet.WidestPolygonZSpreadMm` reports how far a single
   polygon spans in z, and the plane description says outright that the series is not axial.
 
-  Sixteen contract checks cover it, including that taking z from the first vertex splits each
-  tilted slice in two and corrupts the derived spacing, while the mean recovers it exactly. Both
-  halves were confirmed to bite by reverting them.
+  **A contour plane is now identified by its acquisition slice index, not by its z.** That is the
+  root of it, and the mean-z fix above only got halfway. On a tilted slice a polygon's z depends
+  on where it sits in x, so two disjoint contours on the *same* slice — a two-lobed structure, or
+  a target with a satellite — land at different mean z and split into separate planes no matter
+  how the tolerance is set. The clinical MR showed exactly that after the first fix: six planes
+  at gaps of 5.17, 0.30, 0.56, 4.73 and 5.11 mm, which are four slices with two of them counted
+  three times. `GetContoursOnImagePlane` is already called with the slice index; it is now kept.
+  A plane's z is the vertex-weighted mean over every polygon on it, so a slice carrying two
+  contours sits between them rather than on whichever arrived first.
+
+  Twenty-two contract checks cover it, including that taking z from the first vertex splits each
+  tilted slice in two, that z proximity splits a two-lobed tilted slice however the tolerance is
+  chosen, and that the slice index keeps both lobes on one plane with the spacing exact. Every
+  part was confirmed to bite by reverting it — the reverted index check reproduces the field
+  failure's shape exactly, 16 planes from 8 slices with gaps alternating 0.52 and 1.48 mm.
+
+  Measured against Eclipse's own volumes on the clinical case, the first fix already moved the
+  oblique structure from **×0.500** to +33 % and −14 %; the axial one was within 4–10 %
+  throughout.
 
   **This supersedes what the previous entry recorded as an unexplained instability.** The volumes
   were not unstable — they were wrong in a way that depended on which structure was read.

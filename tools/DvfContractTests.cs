@@ -1133,6 +1133,63 @@ namespace ESAPI_RegistrationQA.Tools
             Check("and recovers the true spacing",
                 Near(byMean.MedianPlaneSpacingMm, spacing, 1e-9),
                 byMean.MedianPlaneSpacingMm.ToString("F4", CultureInfo.InvariantCulture));
+
+            // What the mean alone still could not fix, and why the slice index is what identifies
+            // a plane. Two disjoint contours on the SAME tilted slice — a structure with two
+            // lobes, or a target plus a satellite — sit at different x, so the tilt gives them
+            // different mean z and z-proximity splits one slice into two. The clinical MR showed
+            // this after the first fix: six planes at gaps 5.17, 0.30, 0.56, 4.73, 5.11 mm, which
+            // are four slices with two of them counted three times.
+            var byProximity = new ContourSet();
+            var byIndex = new ContourSet();
+
+            for (int s = 0; s < slices; s++)
+            {
+                double centre = s * spacing;
+
+                foreach (double lobeX in new[] { -18.0, 18.0 })
+                {
+                    var xs = new List<double>();
+                    var ys = new List<double>();
+                    var zs = new List<double>();
+
+                    for (int i = 0; i < 16; i++)
+                    {
+                        double angle = 2 * Math.PI * i / 16;
+                        double x = lobeX + 4.0 * Math.Cos(angle);
+                        xs.Add(x);
+                        ys.Add(4.0 * Math.Sin(angle));
+                        zs.Add(centre + narrowTilt * x);
+                    }
+
+                    double spread = zs.Max() - zs.Min();
+                    byProximity.AddPolygon(zs.Average(), xs.ToArray(), ys.ToArray(), spread);
+                    byIndex.AddPolygon(s, zs.Average(), xs.ToArray(), ys.ToArray(), spread);
+                }
+            }
+
+            byProximity.Finalise();
+            byIndex.Finalise();
+
+            // The two lobes are 36 mm apart in x, so the tilt separates their mean z by
+            // 36 * 0.07 = 2.52 mm — far beyond any merge tolerance that is safe to use.
+            Check("z proximity splits a two-lobed tilted slice into two planes",
+                byProximity.PlaneCount > slices,
+                byProximity.PlaneCount + " plane(s) from " + slices + " slices");
+            Check("and the spacing it derives is then wrong",
+                !Near(byProximity.MedianPlaneSpacingMm, spacing, 0.01),
+                byProximity.MedianPlaneSpacingMm.ToString("F4", CultureInfo.InvariantCulture));
+
+            Check("the slice index keeps both lobes on one plane",
+                byIndex.PlaneCount == slices, byIndex.PlaneCount + " plane(s)");
+            Check("the spacing is exact regardless of the tilt",
+                Near(byIndex.MedianPlaneSpacingMm, spacing, 1e-9),
+                byIndex.MedianPlaneSpacingMm.ToString("F4", CultureInfo.InvariantCulture));
+            Check("and both lobes are kept, not one discarded",
+                byIndex.PolygonCount == 2 * slices, byIndex.PolygonCount + " polygon(s)");
+            Check("the plane sits between its two lobes, not on whichever arrived first",
+                byIndex.DescribePlanes().IndexOf("NOT evenly", StringComparison.Ordinal) < 0,
+                byIndex.DescribePlanes());
         }
 
         /// <summary>
