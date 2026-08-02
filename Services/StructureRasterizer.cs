@@ -24,16 +24,47 @@ namespace ESAPI_RegistrationQA.Services
     {
         private sealed class Plane
         {
+            /// <summary>
+            /// Acquisition slice this plane came from, or -1 when the caller did not know it and
+            /// the plane was identified by z proximity instead.
+            /// </summary>
+            public int Index = -1;
+
             public double Z;
             public List<double[]> PolygonsX = new List<double[]>();
             public List<double[]> PolygonsY = new List<double[]>();
+
+            /// <summary>Running mean of every vertex z on this plane.</summary>
+            public double ZSum;
+            public int ZCount;
         }
 
         private readonly List<Plane> _planes = new List<Plane>();
         private double _halfSpacing = 1.0;
+        private double _widestPolygonZSpread;
+
+        /// <summary>
+        /// How far apart two polygons' z may be and still count as the same contour plane.
+        ///
+        /// This was 1e-4 mm, which asks a contour to be planar in patient coordinates to within
+        /// a tenth of a micron. It is, on an axial series. On an oblique one — a routine brain
+        /// MR — it is not, and every polygon became its own "plane", producing gaps of a fifth of
+        /// a millimetre on a structure sliced in millimetres. A fifth of a millimetre is far
+        /// below any slice spacing in clinical use and far above the numerical noise this is
+        /// meant to absorb.
+        /// </summary>
+        private const double PlaneMergeToleranceMm = 0.2;
 
         public int PlaneCount { get { return _planes.Count; } }
         public int PolygonCount { get; private set; }
+
+        /// <summary>
+        /// The largest z range spanned by a single polygon's own vertices, in mm. Zero for a
+        /// perfectly axial series; non-zero means the contours are tilted with respect to the
+        /// patient z axis, so no single z fully describes a plane and every quantity derived
+        /// from the plane spacing carries that approximation.
+        /// </summary>
+        public double WidestPolygonZSpreadMm { get { return _widestPolygonZSpread; } }
 
         /// <summary>
         /// Median gap between contour planes, in mm — the Z resolution the structure actually
@@ -47,20 +78,123 @@ namespace ESAPI_RegistrationQA.Services
         /// </summary>
         public double MedianPlaneSpacingMm { get { return _halfSpacing * 2.0; } }
 
-        public void AddPolygon(double z, double[] xs, double[] ys)
+        /// <summary>
+        /// Where the contour planes actually sit, and the gaps between them — the raw evidence
+        /// behind <see cref="MedianPlaneSpacingMm"/>, which every rasterised volume scales with.
+        ///
+        /// It exists because that estimate was caught being wrong by a factor of exactly two.
+        /// On a clinical MR↔CT pair, the same structure on the same image read as 4 planes at
+        /// 2.90 mm in one run and 4 planes at 5.78 mm in another, and the rasterised volumes came
+        /// out at 0.9 cm3 and 2.2 cm3 against Eclipse's 1.8 cm3 — exactly half, and 1.22 times.
+        /// A median is a summary, and summarising was how a doubled gap hid; the positions
+        /// themselves cannot hide it.
+        /// </summary>
+        public string DescribePlanes()
+        {
+            if (_planes.Count == 0) return "no contour planes";
+
+            var text = new System.Text.StringBuilder();
+            text.AppendFormat(CultureInfo.InvariantCulture,
+                "{0} plane(s), z {1:F2} to {2:F2} mm",
+                _planes.Count, _planes[0].Z, _planes[_planes.Count - 1].Z);
+
+            // The obliquity measurement. A polygon whose own vertices span z is not planar in
+            // patient coordinates, so "plane spacing" is an approximation for this structure and
+            // the reader should know by how much.
+            if (_widestPolygonZSpread > 1e-6)
+            {
+                text.AppendFormat(CultureInfo.InvariantCulture,
+                    "; contours are tilted — a single polygon spans {0:F2} mm in z, so this series " +
+                    "is not axial and each plane's z is the mean of its own vertices",
+                    _widestPolygonZSpread);
+            }
+
+            if (_planes.Count < 2) return text.ToString();
+
+            var gaps = new List<double>();
+            for (int i = 1; i < _planes.Count; i++)
+                gaps.Add(Math.Abs(_planes[i].Z - _planes[i - 1].Z));
+
+            double smallest = gaps[0], largest = gaps[0];
+            foreach (double g in gaps)
+            {
+                if (g < smallest) smallest = g;
+                if (g > largest) largest = g;
+            }
+
+            text.AppendFormat(CultureInfo.InvariantCulture,
+                "; gaps {0:F2} to {1:F2} mm, median {2:F2} mm",
+                smallest, largest, MedianPlaneSpacingMm);
+
+            // The failure mode this was built to catch: an irregular plane set, where the median
+            // lands on a doubled gap and every volume derived from it doubles with it.
+            if (largest > 1.5 * smallest)
+            {
+                text.AppendFormat(CultureInfo.InvariantCulture,
+                    ". The planes are NOT evenly spaced — the largest gap is {0:F1}x the smallest, " +
+                    "so the median is a poor description of this structure and the volume derived " +
+                    "from it is unreliable. Gaps: {1}",
+                    largest / smallest, string.Join(", ", gaps.ConvertAll(
+                        g => g.ToString("F2", CultureInfo.InvariantCulture)).ToArray()));
+            }
+
+            return text.ToString();
+        }
+
+        /// <summary>
+        /// Adds one contour polygon.
+        /// </summary>
+        /// <param name="planeIndex">
+        /// The acquisition slice the polygon was read from, or -1 when unknown.
+        ///
+        /// **This is what identifies a contour plane, not the z.** Grouping by z was the wrong
+        /// model and it survived only because axial series make the two agree. On an oblique
+        /// series a polygon's z depends on where it sits in x — the tilt gives one polygon a
+        /// 3 mm spread here — so two disjoint contours on the *same* slice get different mean z
+        /// and split into separate planes. That is exactly what a clinical MR showed after the
+        /// first fix: six "planes" at gaps of 5.17, 0.30, 0.56, 4.73, 5.11 mm, which are four
+        /// slices with two of them counted three times. The slice index has none of that
+        /// ambiguity, and the API hands it over with every call.
+        /// </param>
+        public void AddPolygon(
+            int planeIndex, double z, double[] xs, double[] ys, double zSpreadMm = 0.0)
         {
             if (xs == null || ys == null || xs.Length < 3) return;
 
-            Plane plane = _planes.FirstOrDefault(p => Math.Abs(p.Z - z) < 1e-4);
+            if (zSpreadMm > _widestPolygonZSpread) _widestPolygonZSpread = zSpreadMm;
+
+            Plane plane = planeIndex >= 0
+                ? _planes.FirstOrDefault(p => p.Index == planeIndex)
+                // No index available: fall back to z proximity, at a tolerance well under any
+                // clinical slice spacing and well over the numerical noise it absorbs.
+                : _planes.FirstOrDefault(p => p.Index < 0 && Math.Abs(p.Z - z) < PlaneMergeToleranceMm);
+
             if (plane == null)
             {
-                plane = new Plane { Z = z };
+                plane = new Plane { Index = planeIndex, Z = z };
                 _planes.Add(plane);
             }
 
             plane.PolygonsX.Add(xs);
             plane.PolygonsY.Add(ys);
+
+            // The plane's z is the mean over every polygon on it, weighted by vertex count, so a
+            // slice carrying two contours sits between them rather than on whichever arrived
+            // first.
+            plane.ZSum += z * xs.Length;
+            plane.ZCount += xs.Length;
+            plane.Z = plane.ZSum / plane.ZCount;
+
             PolygonCount++;
+        }
+
+        /// <summary>
+        /// Kept for callers that have no slice index — the contract tests, and any API shape
+        /// that turns out not to expose one.
+        /// </summary>
+        public void AddPolygon(double z, double[] xs, double[] ys, double zSpreadMm = 0.0)
+        {
+            AddPolygon(-1, z, xs, ys, zSpreadMm);
         }
 
         /// <summary>
@@ -502,8 +636,20 @@ namespace ESAPI_RegistrationQA.Services
 
                         var xs = new List<double>();
                         var ys = new List<double>();
-                        double z = 0.0;
-                        bool first = true;
+
+                        // The polygon's own z, taken as the mean of its vertices rather than
+                        // from the first one.
+                        //
+                        // The first vertex is only the polygon's z when the contour is planar in
+                        // patient coordinates, which holds for an axial acquisition and fails for
+                        // an oblique one — and an oblique brain MR is routine. On a clinical
+                        // MR↔CT pair this produced contour "planes" 0.22 mm apart on a structure
+                        // whose slices are millimetres apart, a median plane spacing that was
+                        // meaningless, and a rasterised volume out by a factor of two against
+                        // Eclipse's own figure. The mean is the best single z for a tilted
+                        // polygon and is exact whenever the old reading was right.
+                        double zSum = 0.0;
+                        double zMin = double.MaxValue, zMax = double.MinValue;
 
                         foreach (dynamic vertex in polygon)
                         {
@@ -512,11 +658,18 @@ namespace ESAPI_RegistrationQA.Services
 
                             xs.Add(x);
                             ys.Add(y);
-                            if (first) { z = vz; first = false; }
+                            zSum += vz;
+                            if (vz < zMin) zMin = vz;
+                            if (vz > zMax) zMax = vz;
                         }
 
                         if (xs.Count >= 3)
-                            contours.AddPolygon(z, xs.ToArray(), ys.ToArray());
+                        {
+                            // The slice index, not the z, is what makes two polygons the same
+                            // plane. GetContoursOnImagePlane was already called with it.
+                            contours.AddPolygon(captured, zSum / xs.Count,
+                                xs.ToArray(), ys.ToArray(), zMax - zMin);
+                        }
                     }
                 }, null);
             }

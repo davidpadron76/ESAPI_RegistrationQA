@@ -165,6 +165,7 @@ namespace ESAPI_RegistrationQA.Tools
             CurlAndPerAxisRangesAreCorrect();
             AMaskRestrictsTheJacobianToOneRegion();
             DatasetRowMatchesItsHeader();
+            ObliqueContoursDoNotShatterIntoPlanes();
 
             Console.WriteLine();
             if (Failures.Count > 0)
@@ -985,6 +986,210 @@ namespace ESAPI_RegistrationQA.Tools
             {
                 try { System.IO.File.Delete(path); } catch (System.IO.IOException) { }
             }
+        }
+
+        /// <summary>
+        /// A contour that is tilted with respect to patient z must still read as one plane per
+        /// acquisition slice, and its volume must not depend on the tilt.
+        ///
+        /// This is the defect a clinical MR↔CT pair exposed. The z of a polygon was taken from
+        /// its first vertex, and two polygons counted as the same plane only within 1e-4 mm — a
+        /// tenth of a micron. On an axial series that is exact. On an oblique one, which a brain
+        /// MR routinely is, every polygon landed on its own "plane": the structure came back with
+        /// gaps of 0.22 mm and 6.44 mm where its slices are millimetres apart, the median gap
+        /// that every rasterised volume scales with became meaningless, and the volume came out
+        /// at exactly half Eclipse's figure in one run and 1.22x it in another.
+        /// </summary>
+        private static void ObliqueContoursDoNotShatterIntoPlanes()
+        {
+            const int slices = 8;
+            const double spacing = 2.0;
+            const double radius = 10.0;
+            const double tilt = 0.20;          // z gained per mm of x — about 11 degrees
+
+            var axial = new ContourSet();
+            var oblique = new ContourSet();
+
+            for (int s = 0; s < slices; s++)
+            {
+                double centre = s * spacing;
+                var xs = new List<double>();
+                var ys = new List<double>();
+                var zsFlat = new List<double>();
+                var zsTilted = new List<double>();
+
+                for (int i = 0; i < 32; i++)
+                {
+                    double angle = 2 * Math.PI * i / 32;
+                    double x = radius * Math.Cos(angle);
+                    double y = radius * Math.Sin(angle);
+                    xs.Add(x);
+                    ys.Add(y);
+                    zsFlat.Add(centre);
+                    zsTilted.Add(centre + tilt * x);
+                }
+
+                double spread = zsTilted.Max() - zsTilted.Min();
+                axial.AddPolygon(zsFlat.Average(), xs.ToArray(), ys.ToArray(), 0.0);
+                oblique.AddPolygon(zsTilted.Average(), xs.ToArray(), ys.ToArray(), spread);
+            }
+
+            axial.Finalise();
+            oblique.Finalise();
+
+            Check("an axial structure reads one plane per slice",
+                axial.PlaneCount == slices, axial.PlaneCount + " plane(s)");
+            Check("a tilted structure reads one plane per slice too",
+                oblique.PlaneCount == slices, oblique.PlaneCount + " plane(s)");
+
+            Check("the axial plane spacing is the slice spacing",
+                Near(axial.MedianPlaneSpacingMm, spacing, 1e-9),
+                axial.MedianPlaneSpacingMm.ToString("F4", CultureInfo.InvariantCulture));
+            Check("the tilt does not change the plane spacing",
+                Near(oblique.MedianPlaneSpacingMm, spacing, 1e-9),
+                oblique.MedianPlaneSpacingMm.ToString("F4", CultureInfo.InvariantCulture));
+
+            Check("the tilt is measured and reported, not silently absorbed",
+                oblique.WidestPolygonZSpreadMm > 3.9 && oblique.WidestPolygonZSpreadMm < 4.1,
+                oblique.WidestPolygonZSpreadMm.ToString("F3", CultureInfo.InvariantCulture));
+            Check("an axial structure reports no tilt",
+                oblique.WidestPolygonZSpreadMm > 0 && axial.WidestPolygonZSpreadMm == 0.0);
+
+            Check("the tilted structure's description says the series is not axial",
+                oblique.DescribePlanes().IndexOf("tilted", StringComparison.OrdinalIgnoreCase) >= 0,
+                oblique.DescribePlanes());
+            Check("the axial one does not claim a tilt",
+                axial.DescribePlanes().IndexOf("tilted", StringComparison.OrdinalIgnoreCase) < 0);
+            Check("neither is reported as unevenly spaced",
+                axial.DescribePlanes().IndexOf("NOT evenly", StringComparison.Ordinal) < 0 &&
+                oblique.DescribePlanes().IndexOf("NOT evenly", StringComparison.Ordinal) < 0);
+
+            // The failure mode itself: two polygons a fraction of a millimetre apart in z are one
+            // acquisition slice, not two. At the old 1e-4 tolerance they were two.
+            var jitter = new ContourSet();
+            for (int s = 0; s < slices; s++)
+            {
+                var xs = new List<double> { -5, 5, 5, -5 };
+                var ys = new List<double> { -5, -5, 5, 5 };
+                jitter.AddPolygon(s * spacing, xs.ToArray(), ys.ToArray(), 0.0);
+                jitter.AddPolygon(s * spacing + 0.05, xs.ToArray(), ys.ToArray(), 0.0);
+            }
+            jitter.Finalise();
+
+            Check("two polygons 0.05 mm apart in z are one plane, not two",
+                jitter.PlaneCount == slices, jitter.PlaneCount + " plane(s)");
+            Check("and the spacing survives the jitter",
+                Near(jitter.MedianPlaneSpacingMm, spacing, 1e-9),
+                jitter.MedianPlaneSpacingMm.ToString("F4", CultureInfo.InvariantCulture));
+
+            // The other half of the defect, shown rather than described. ReadContours itself
+            // needs live API objects and cannot run here, but the quantity it was getting wrong
+            // can: the z it handed to AddPolygon. Feeding the first vertex's z of a tilted
+            // contour, which is what it used to do, against the mean of the same vertices.
+            var byFirstVertex = new ContourSet();
+            var byMean = new ContourSet();
+
+            // A gentler tilt than above, chosen so the offset it introduces (0.7 mm) is neither
+            // a multiple of the slice spacing nor small enough to merge. At the steeper tilt the
+            // displaced planes landed exactly on the neighbouring slice and the corruption
+            // cancelled out — which made the check pass for the wrong reason.
+            const double narrowTilt = 0.07;
+
+            for (int s = 0; s < slices; s++)
+            {
+                double centre = s * spacing;
+                var xs = new List<double>();
+                var ys = new List<double>();
+                var zs = new List<double>();
+
+                for (int i = 0; i < 32; i++)
+                {
+                    double angle = 2 * Math.PI * i / 32;
+                    double x = radius * Math.Cos(angle);
+                    xs.Add(x);
+                    ys.Add(radius * Math.Sin(angle));
+                    zs.Add(centre + narrowTilt * x);
+                }
+
+                // Two polygons per slice, as a structure with an inner and an outer contour
+                // would have, starting at different vertices.
+                byFirstVertex.AddPolygon(zs[0], xs.ToArray(), ys.ToArray(), 0.0);
+                byFirstVertex.AddPolygon(zs[8], xs.ToArray(), ys.ToArray(), 0.0);
+                byMean.AddPolygon(zs.Average(), xs.ToArray(), ys.ToArray(), 0.0);
+                byMean.AddPolygon(zs.Average(), xs.ToArray(), ys.ToArray(), 0.0);
+            }
+
+            byFirstVertex.Finalise();
+            byMean.Finalise();
+
+            Check("taking z from the first vertex splits each tilted slice in two",
+                byFirstVertex.PlaneCount > slices,
+                byFirstVertex.PlaneCount + " plane(s) from " + slices + " slices");
+            Check("and corrupts the plane spacing it derives from them",
+                !Near(byFirstVertex.MedianPlaneSpacingMm, spacing, 0.01),
+                byFirstVertex.MedianPlaneSpacingMm.ToString("F4", CultureInfo.InvariantCulture));
+            Check("taking the mean of the vertices keeps one plane per slice",
+                byMean.PlaneCount == slices, byMean.PlaneCount + " plane(s)");
+            Check("and recovers the true spacing",
+                Near(byMean.MedianPlaneSpacingMm, spacing, 1e-9),
+                byMean.MedianPlaneSpacingMm.ToString("F4", CultureInfo.InvariantCulture));
+
+            // What the mean alone still could not fix, and why the slice index is what identifies
+            // a plane. Two disjoint contours on the SAME tilted slice — a structure with two
+            // lobes, or a target plus a satellite — sit at different x, so the tilt gives them
+            // different mean z and z-proximity splits one slice into two. The clinical MR showed
+            // this after the first fix: six planes at gaps 5.17, 0.30, 0.56, 4.73, 5.11 mm, which
+            // are four slices with two of them counted three times.
+            var byProximity = new ContourSet();
+            var byIndex = new ContourSet();
+
+            for (int s = 0; s < slices; s++)
+            {
+                double centre = s * spacing;
+
+                foreach (double lobeX in new[] { -18.0, 18.0 })
+                {
+                    var xs = new List<double>();
+                    var ys = new List<double>();
+                    var zs = new List<double>();
+
+                    for (int i = 0; i < 16; i++)
+                    {
+                        double angle = 2 * Math.PI * i / 16;
+                        double x = lobeX + 4.0 * Math.Cos(angle);
+                        xs.Add(x);
+                        ys.Add(4.0 * Math.Sin(angle));
+                        zs.Add(centre + narrowTilt * x);
+                    }
+
+                    double spread = zs.Max() - zs.Min();
+                    byProximity.AddPolygon(zs.Average(), xs.ToArray(), ys.ToArray(), spread);
+                    byIndex.AddPolygon(s, zs.Average(), xs.ToArray(), ys.ToArray(), spread);
+                }
+            }
+
+            byProximity.Finalise();
+            byIndex.Finalise();
+
+            // The two lobes are 36 mm apart in x, so the tilt separates their mean z by
+            // 36 * 0.07 = 2.52 mm — far beyond any merge tolerance that is safe to use.
+            Check("z proximity splits a two-lobed tilted slice into two planes",
+                byProximity.PlaneCount > slices,
+                byProximity.PlaneCount + " plane(s) from " + slices + " slices");
+            Check("and the spacing it derives is then wrong",
+                !Near(byProximity.MedianPlaneSpacingMm, spacing, 0.01),
+                byProximity.MedianPlaneSpacingMm.ToString("F4", CultureInfo.InvariantCulture));
+
+            Check("the slice index keeps both lobes on one plane",
+                byIndex.PlaneCount == slices, byIndex.PlaneCount + " plane(s)");
+            Check("the spacing is exact regardless of the tilt",
+                Near(byIndex.MedianPlaneSpacingMm, spacing, 1e-9),
+                byIndex.MedianPlaneSpacingMm.ToString("F4", CultureInfo.InvariantCulture));
+            Check("and both lobes are kept, not one discarded",
+                byIndex.PolygonCount == 2 * slices, byIndex.PolygonCount + " polygon(s)");
+            Check("the plane sits between its two lobes, not on whichever arrived first",
+                byIndex.DescribePlanes().IndexOf("NOT evenly", StringComparison.Ordinal) < 0,
+                byIndex.DescribePlanes());
         }
 
         /// <summary>
