@@ -1430,6 +1430,13 @@ namespace ESAPI_RegistrationQA.Services
 
             var gridByStructure = new Dictionary<string, ImageGeometry>(StringComparer.OrdinalIgnoreCase);
 
+            // The largest DSC the volumes permit, per structure. A Dice cannot exceed
+            // 2·min(|A|,|B|)/(|A|+|B|), because the intersection cannot exceed the smaller
+            // volume — so when the same structure is contoured to very different volumes on the
+            // two series, the tolerance can be unreachable before the registration is
+            // considered at all. Recorded here so the DSC row can say so.
+            var dscCeilingByStructure = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+
             foreach (var pair in pairs)
             {
                 // The patient surface outline (DICOM type EXTERNAL, or a near-universal name
@@ -1486,7 +1493,8 @@ namespace ESAPI_RegistrationQA.Services
                           "worst case, reported separately below"
                         : string.Empty));
 
-                LogStructureRasterisation(pair.Item1, pair.Item2, maskSource, maskTarget, grid);
+                dscCeilingByStructure[pair.Item1.Id] =
+                    LogStructureRasterisation(pair.Item1, pair.Item2, maskSource, maskTarget, grid);
 
                 if (isOutline)
                 {
@@ -1570,11 +1578,14 @@ namespace ESAPI_RegistrationQA.Services
             measurements.WorstStructureId = worstDscId;
 
             measurements.Dsc = MeasuredValue.Measured(
-                worstDsc, StructureNote(worstDscId, evaluated, gridByStructure));
+                worstDsc, StructureNote(worstDscId, evaluated, gridByStructure) +
+                          CeilingNote(worstDscId, dscCeilingByStructure));
             measurements.Mda = MeasuredValue.Measured(
                 worstMda, StructureNote(worstMdaId, evaluated, gridByStructure));
             measurements.Hd95 = MeasuredValue.Measured(
                 worstHd95, StructureNote(worstHd95Id, evaluated, gridByStructure));
+
+            LogUnreachableDscIfAny(worstDscId, worstDsc, worstMda, dscCeilingByStructure);
 
             if (evaluated > 1)
             {
@@ -1615,7 +1626,7 @@ namespace ESAPI_RegistrationQA.Services
         /// rasterising at 0.5 mm instead of 2.0 mm moves DSC by under 0.002 on a structure that
         /// size — so the volumes are the next thing to look at, and they were not being reported.
         /// </summary>
-        private void LogStructureRasterisation(
+        private double LogStructureRasterisation(
             StructureRasterizer.NamedStructure source, StructureRasterizer.NamedStructure target,
             bool[] maskSource, bool[] maskTarget, ImageGeometry grid)
         {
@@ -1624,22 +1635,131 @@ namespace ESAPI_RegistrationQA.Services
             for (int i = 0; i < maskTarget.Length; i++) if (maskTarget[i]) inTarget++;
 
             double voxelCm3 = grid.XRes * grid.YRes * grid.ZRes / 1000.0;
+            double sourceCm3 = inSource * voxelCm3;
+            double targetCm3 = inTarget * voxelCm3;
 
-            _log.Info("structures: " + source.Id + ": rasterisation", string.Format(
-                CultureInfo.InvariantCulture,
+            double ceiling = DscCeiling(inSource, inTarget);
+
+            var text = new System.Text.StringBuilder();
+            text.AppendFormat(CultureInfo.InvariantCulture,
                 "source {0:F1} cm3 from {1} contour plane(s) at {2:F2} mm; registered {3:F1} cm3 " +
-                "from {4} plane(s) at {5:F2} mm; both rasterised onto a {6:F2} mm grid. Compare " +
-                "these volumes against the TPS's own structure statistics: matching volumes with a " +
-                "disagreeing DSC puts the difference in the overlap, differing volumes put it in " +
-                "the rasterisation. Where a plane spacing is much coarser than the grid, most of " +
-                "the mask's layers are interpolated between contours rather than drawn.",
-                inSource * voxelCm3,
+                "from {4} plane(s) at {5:F2} mm; both rasterised onto a {6:F2} mm grid. ",
+                sourceCm3,
                 source.Contours != null ? source.Contours.PlaneCount : 0,
                 source.Contours != null ? source.Contours.MedianPlaneSpacingMm : 0.0,
-                inTarget * voxelCm3,
+                targetCm3,
                 target.Contours != null ? target.Contours.PlaneCount : 0,
                 target.Contours != null ? target.Contours.MedianPlaneSpacingMm : 0.0,
-                grid.CoarsestResolution));
+                grid.CoarsestResolution);
+
+            text.Append(
+                "Compare these volumes against the TPS's own structure statistics: matching volumes " +
+                "with a disagreeing DSC puts the difference in the overlap, differing volumes put it " +
+                "in the rasterisation. Where a plane spacing is much coarser than the grid, most of " +
+                "the mask's layers are interpolated between contours rather than drawn. ");
+
+            // The arithmetic ceiling, stated whenever it bites. A Dice cannot exceed
+            // 2·min/(|A|+|B|), so once the two volumes differ by more than about 1.22x the 0.90
+            // tolerance is out of reach however good the registration is, and a red DSC is then
+            // reporting the contouring difference rather than the alignment.
+            if (inSource > 0 && inTarget > 0)
+            {
+                double larger = Math.Max(sourceCm3, targetCm3);
+                double smaller = Math.Min(sourceCm3, targetCm3);
+
+                text.AppendFormat(CultureInfo.InvariantCulture,
+                    "The volumes differ by {0:F1}x, which puts a ceiling of {1:F3} on the DSC: the " +
+                    "intersection cannot exceed the smaller volume, so no registration can do better " +
+                    "than 2*min/(|A|+|B|) here.",
+                    smaller > 0 ? larger / smaller : 0.0, ceiling);
+            }
+
+            _log.Info("structures: " + source.Id + ": rasterisation", text.ToString());
+
+            return ceiling;
+        }
+
+        /// <summary>
+        /// The tightest DSC tolerance any profile applies. Used only to decide whether the
+        /// volume ceiling is worth mentioning — below this the row cannot pass whatever the
+        /// registration does, and the reader needs to know that before acting on a red.
+        /// </summary>
+        private const double TightestDscTolerance = 0.90;
+
+        /// <summary>
+        /// A short clause for the criterion column, present only when the volumes make the
+        /// tolerance unreachable.
+        ///
+        /// Deliberately conditional. On a normal case the two volumes are comparable, the
+        /// ceiling is near 1, and saying so would be noise in a column that has already been
+        /// trimmed once for carrying too much. It appears exactly when it changes what the
+        /// number means.
+        /// </summary>
+        private static string CeilingNote(
+            string structureId, Dictionary<string, double> ceilingByStructure)
+        {
+            double ceiling;
+            if (structureId == null || !ceilingByStructure.TryGetValue(structureId, out ceiling))
+                return string.Empty;
+
+            if (ceiling >= TightestDscTolerance) return string.Empty;
+
+            return string.Format(CultureInfo.InvariantCulture,
+                "; volumes cap DSC at {0:F2}", ceiling);
+        }
+
+        /// <summary>
+        /// Says plainly, once, when a red DSC is arithmetic rather than alignment.
+        ///
+        /// This came out of a clinical MR→CT case where the same target was contoured to 0.9 cm3
+        /// on one series and 2.6 cm3 on the other. DSC read 0.433 and failed the registration,
+        /// while MDA read 1.62 mm and passed comfortably — the two look contradictory until the
+        /// ceiling is computed: 0.514, of which the registration achieved 84 %. The DSC was
+        /// measuring the contouring difference between two readers on two modalities, which is
+        /// not what TG-132's Table III row is about.
+        ///
+        /// The verdict is left alone. Whether a row should gate when its tolerance is
+        /// unreachable is a question about grading, and changing that silently would be the same
+        /// mistake as inventing a tolerance. What the tool can do without deciding anything is
+        /// refuse to let the reader mistake one for the other.
+        /// </summary>
+        private void LogUnreachableDscIfAny(
+            string structureId, double dsc, double mda, Dictionary<string, double> ceilingByStructure)
+        {
+            double ceiling;
+            if (structureId == null || !ceilingByStructure.TryGetValue(structureId, out ceiling))
+                return;
+
+            if (ceiling >= TightestDscTolerance) return;
+
+            _log.Warning("structures: DSC ceiling", string.Format(CultureInfo.InvariantCulture,
+                "the DSC tolerance is out of reach on \"{0}\" before the registration is considered. " +
+                "The two versions of this structure differ enough in volume that the largest possible " +
+                "Dice is {1:F3}, and {2:F3} was measured — {3:F0} % of what the volumes allow. A Dice " +
+                "cannot exceed 2*min(|A|,|B|)/(|A|+|B|), so the 0.90 tolerance needs the two volumes " +
+                "to agree within about 1.22x. Read this row as a statement about the contours, not " +
+                "about the alignment, and weigh MDA ({4:F2} mm) instead: it is expressed in " +
+                "millimetres and does not depend on the volume. The per-structure rasterisation " +
+                "lines above give both volumes and their plane spacing.",
+                structureId, ceiling, dsc, ceiling > 0 ? 100.0 * dsc / ceiling : 0.0, mda));
+        }
+
+        /// <summary>
+        /// The largest Dice the two volumes permit, 2·min/(|A|+|B|), in voxel counts.
+        ///
+        /// Not a property of the registration at all — it is what you would get if the smaller
+        /// structure sat entirely inside the larger one. It matters because the 0.90 tolerance
+        /// becomes unreachable once the volumes differ by more than about 1.22x, and on a real
+        /// MR→CT case the same target was contoured to 0.9 cm3 on one series and 2.6 cm3 on the
+        /// other. The DSC came out at 0.433 against a ceiling of 0.514 — 84 % of everything
+        /// available — and was reported as a breach.
+        /// </summary>
+        private static double DscCeiling(int sourceVoxels, int targetVoxels)
+        {
+            long total = (long)sourceVoxels + targetVoxels;
+            if (total <= 0) return 0.0;
+
+            return 2.0 * Math.Min(sourceVoxels, targetVoxels) / total;
         }
 
         /// <summary>

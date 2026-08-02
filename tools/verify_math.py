@@ -443,6 +443,47 @@ check("a reverse pointing the same way is ~2x the translation away from the true
       abs(same_direction - 2 * math.dist(t1, (0, 0, 0))) < 1.0,
       f"{same_direction:.2f} mm against 2|t| = {2*math.dist(t1,(0,0,0)):.2f} mm")
 
+# --- the DSC ceiling set by the two volumes -------------------------------------------
+# A Dice cannot exceed 2*min/(|A|+|B|), because the intersection cannot exceed the smaller
+# volume. Pinned with a clinical MR->CT case: the same target contoured to 0.9 cm3 on one
+# series and 2.6 cm3 on the other, DSC measured 0.433 and reported as a breach of the 0.90
+# tolerance -- a tolerance that was out of reach before the registration was considered.
+
+def dsc_ceiling(a, b):
+    return 2*min(a, b)/(a + b) if a + b > 0 else 0.0
+
+check("equal volumes place no ceiling on DSC", abs(dsc_ceiling(10.0, 10.0) - 1.0) < 1e-12)
+check("an empty structure gives a ceiling of zero, not a division by zero",
+      dsc_ceiling(0.0, 4.0) == 0.0 and dsc_ceiling(0.0, 0.0) == 0.0)
+check("the ceiling is symmetric in the two volumes",
+      abs(dsc_ceiling(0.9, 2.6) - dsc_ceiling(2.6, 0.9)) < 1e-12)
+
+ceiling_high = dsc_ceiling(0.9, 2.6)
+check("MR->CT PTV_High: the volumes cap DSC at 0.514",
+      abs(ceiling_high - 0.514) < 5e-4, f"{ceiling_high:.4f}")
+check("and the measured 0.433 is 84 % of everything available",
+      abs(100*0.433/ceiling_high - 84.2) < 1.0, f"{100*0.433/ceiling_high:.1f} %")
+
+ceiling_high1 = dsc_ceiling(0.7, 2.3)
+check("MR->CT PTV_High1: the volumes cap DSC at 0.467",
+      abs(ceiling_high1 - 0.467) < 5e-4, f"{ceiling_high1:.4f}")
+
+# The volume ratio at which the tightest tolerance becomes unreachable.
+tol = 0.90
+ratio = (2 - tol)/tol
+check("the 0.90 tolerance needs the volumes to agree within 1.22x",
+      abs(ratio - 1.2222) < 1e-3, f"{ratio:.4f}")
+check("at exactly that ratio the ceiling equals the tolerance",
+      abs(dsc_ceiling(1.0, ratio) - tol) < 1e-12)
+check("just past it the tolerance is unreachable",
+      dsc_ceiling(1.0, ratio*1.01) < tol)
+
+# The ceiling is an upper bound, never something the measurement can exceed.
+for a, b, measured in ((0.9, 2.6, 0.433), (0.7, 2.3, 0.404), (33.3, 33.4, 0.953)):
+    check(f"measured DSC {measured} does not exceed its ceiling",
+          measured <= dsc_ceiling(a, b) + 1e-12,
+          f"ceiling {dsc_ceiling(a,b):.4f}")
+
 print("\n=== Target Registration Error ===")
 
 def tre(mapper_matrix, source_points, target_points):

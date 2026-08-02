@@ -88,6 +88,26 @@ feature list is long. Anyone pooling data across the two needs to know before th
   new `structures: <id>: rasterisation` diagnostic reports each mask's volume, plane count and
   plane spacing so this can be reproduced elsewhere.
 
+### Added after 3.0.0 was tagged
+
+- **The DSC ceiling set by the two volumes.** A Dice cannot exceed 2·min(|A|,|B|)/(|A|+|B|),
+  because the intersection cannot exceed the smaller volume — so the 0.90 tolerance needs the two
+  volumes to agree within about **1.22×**, before the registration is considered at all. On a
+  clinical MR→CT case the same target was contoured to 0.9 cm³ on one series and 2.6 cm³ on the
+  other: DSC read 0.433 and failed the registration while MDA read 1.62 mm and passed
+  comfortably. The two only look contradictory until the ceiling is computed — 0.514, of which
+  the registration achieved 84 %. That row was reporting a contouring difference between two
+  readers on two modalities, not an alignment error.
+
+  The criterion column now carries `volumes cap DSC at 0.51`, but **only when the ceiling falls
+  below the tolerance** — on a normal case the volumes are comparable and saying so would be
+  noise. A `structures: DSC ceiling` warning states it in full and points at MDA instead, which
+  is in millimetres and does not depend on volume. Twelve analytic checks pin the arithmetic.
+
+  **The verdict is unchanged.** Whether a row should gate when its tolerance is unreachable is a
+  question about grading, and changing that silently would be the same mistake as inventing a
+  tolerance.
+
 ### Known, not yet fixed
 
 - **The structure comparison grid is sized from unmapped contour bounds.** It is built from the
