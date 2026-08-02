@@ -417,15 +417,18 @@ declines to grade. **N/A** is the missing value.
   permissive direction.** Until a case with matched slice spacing settles it, treat the DSC row
   as provisional, and treat any DSC across a series pair with very different slice spacing as a
   statement about contouring resolution as much as about registration.
-* **DSC, MDA and HD95 on an oblique series were wrong until after 3.0.0 was tagged.** A brain MR
-  is routinely acquired oblique, so its contours are not planar in patient z — and the plugin
-  assumed they were, taking each polygon's z from its first vertex. Held against Eclipse's own
-  structure statistics on a clinical MR↔CT pair, the axial CT structure came out within 4–10 %
-  while the same structure on the oblique MR came out at exactly half its true volume. **Fixed**
-  (mean vertex z, 0.2 mm plane merge tolerance, tilt reported rather than absorbed), but the fix
-  post-dates the 3.0.0 tag: if you are running 3.0.0 itself, treat those three rows as unreliable
-  on any non-axial series. A `structures: <id>: source planes` diagnostic now prints the plane
-  positions, the gaps and the measured tilt.
+* **A structure with few contour planes is over-measured by roughly a third.** The rasteriser
+  extrudes each contour to the full thickness of its slice rather than interpolating between
+  planes, so a structure four planes deep gets square caps where the anatomy tapers. Against
+  Eclipse's own structure statistics the residual is a consistent **+33 % and +36 %** on
+  four-plane structures against +4 % and +10 % on seventeen-plane ones. It also masks the DSC
+  ceiling: from Eclipse's volumes the largest achievable Dice on that case is 0.837, under the
+  0.90 tolerance, while the inflated volumes put it at 0.960 and the warning stays silent.
+* **DSC, MDA and HD95 on an oblique series were wrong in 3.0.0.** A brain MR is routinely
+  acquired oblique, so its contours are not planar in patient z — and the plugin assumed they
+  were, both in taking a polygon's z from its first vertex and in identifying a contour plane by
+  z at all. The same structure came out at **exactly half** its true volume. **Fixed in 3.0.1**;
+  if you are running 3.0.0, upgrade before trusting those three rows on any non-axial series.
 * **TRE rests on however many landmarks you place, and one is not a measurement.** On a case
   with a single matched marker the criterion column says `1 matched landmark(s) — indicative
   only`. Place several, spread out, or read the row as an anecdote.

@@ -9,6 +9,123 @@ different schema versions must not be concatenated.**
 
 ---
 
+## 3.0.1 — 2026-08-02
+
+A bug-fix release, and the bug was worth one. Three TG-132 Table III rows — DSC, MDA and HD95 —
+were wrong on any series acquired obliquely, which a brain MR routinely is. On a clinical MR↔CT
+pair a structure's rasterised volume came out at **exactly half** Eclipse's own figure. Nothing
+in 3.0.0 warned about it, because the axial CT structure in the same case was accurate throughout.
+
+**If you are running 3.0.0 on anything other than axial series, upgrade.**
+
+### Added
+
+- **The DSC ceiling set by the two volumes.** A Dice cannot exceed 2·min(|A|,|B|)/(|A|+|B|),
+  because the intersection cannot exceed the smaller volume — so the 0.90 tolerance needs the two
+  volumes to agree within about **1.22×**, before the registration is considered at all. On a
+  clinical MR→CT case the same target was contoured to 0.9 cm³ on one series and 2.6 cm³ on the
+  other: DSC read 0.433 and failed the registration while MDA read 1.62 mm and passed
+  comfortably. The two only look contradictory until the ceiling is computed — 0.514, of which
+  the registration achieved 84 %. That row was reporting a contouring difference between two
+  readers on two modalities, not an alignment error.
+
+  The criterion column now carries `volumes cap DSC at 0.51`, but **only when the ceiling falls
+  below the tolerance** — on a normal case the volumes are comparable and saying so would be
+  noise. A `structures: DSC ceiling` warning states it in full and points at MDA instead, which
+  is in millimetres and does not depend on volume. Twelve analytic checks pin the arithmetic.
+
+  **The verdict is unchanged.** Whether a row should gate when its tolerance is unreachable is a
+  question about grading, and changing that silently would be the same mistake as inventing a
+  tolerance.
+
+### Fixed
+
+- **Contours on an oblique series shattered into spurious planes, and every rasterised volume
+  followed.** A brain MR is routinely acquired oblique, so its contours are not planar in patient
+  z. Two things assumed they were: the z of a polygon was taken from its **first vertex**, and two
+  polygons counted as the same contour plane only within **1e-4 mm** — a tenth of a micron.
+
+  On a clinical MR↔CT pair that produced contour "planes" 0.22 mm apart on a structure sliced in
+  millimetres, gaps of 6.44, 5.78 and 4.02 mm where the acquisition is uniform, a median plane
+  spacing that meant nothing, and rasterised volumes of **exactly half** Eclipse's figure in one
+  run and 1.22× it in another. The finely-sliced axial CT structure was accurate throughout,
+  which is why this survived: it only bites when the series is tilted.
+
+  A polygon's z is now the **mean of its own vertices**, which is exact whenever the old reading
+  was right and is the best single z for a tilted contour. The merge tolerance is **0.2 mm** —
+  below any clinical slice spacing, above the numerical noise it exists to absorb. The tilt is
+  measured rather than absorbed: `ContourSet.WidestPolygonZSpreadMm` reports how far a single
+  polygon spans in z, and the plane description says outright that the series is not axial.
+
+  **A contour plane is now identified by its acquisition slice index, not by its z.** That is the
+  root of it, and the mean-z fix above only got halfway. On a tilted slice a polygon's z depends
+  on where it sits in x, so two disjoint contours on the *same* slice — a two-lobed structure, or
+  a target with a satellite — land at different mean z and split into separate planes no matter
+  how the tolerance is set. The clinical MR showed exactly that after the first fix: six planes
+  at gaps of 5.17, 0.30, 0.56, 4.73 and 5.11 mm, which are four slices with two of them counted
+  three times. `GetContoursOnImagePlane` is already called with the slice index; it is now kept.
+  A plane's z is the vertex-weighted mean over every polygon on it, so a slice carrying two
+  contours sits between them rather than on whichever arrived first.
+
+  Twenty-two contract checks cover it, including that taking z from the first vertex splits each
+  tilted slice in two, that z proximity splits a two-lobed tilted slice however the tolerance is
+  chosen, and that the slice index keeps both lobes on one plane with the spacing exact. Every
+  part was confirmed to bite by reverting it — the reverted index check reproduces the field
+  failure's shape exactly, 16 planes from 8 slices with gaps alternating 0.52 and 1.48 mm.
+
+  **Confirmed in Eclipse.** Both structures now read four contour planes with regular gaps, where
+  one previously read six at gaps of 5.17, 0.30, 0.56, 4.73 and 5.11 mm:
+
+  | structure / image | Eclipse | 3.0.0 | mean-z fix | slice-index fix |
+  |---|---|---|---|---|
+  | `PTV_High` / CT — axial | 2.5 cm³ | +4 % | +4 % | +4 % |
+  | `PTV_High` / MR — oblique | 1.8 cm³ | **−50 %** | +33 % | +33 % |
+  | `PTV_High1` / CT — axial | 2.1 cm³ | +10 % | +10 % | +10 % |
+  | `PTV_High1` / MR — oblique | 1.4 cm³ | **−50 %** | −14 % | +36 % |
+
+  `PTV_High1`'s surface metrics moved with it: DSC 0.532 → 0.710, MDA 1.50 → 1.00 mm, HD95
+  4.47 → 2.83 mm, landing beside `PTV_High`'s 0.743 / 0.95 mm / 2.00 mm. Two structures on the
+  same case now behave alike, where before one was erratic.
+
+  **This supersedes what the previous entry recorded as an unexplained instability.** The volumes
+  were not unstable — they were wrong in a way that depended on which structure was read.
+
+- **A deliberate refusal to compute a metric was logged as an API failure.** On a CT–MR pair with
+  different fields of view, the 5.5 % overlap check correctly declined to report intensity
+  metrics, and did so under the heading *"N failure(s) while reading data from the API"*. Nothing
+  had failed and nothing was read wrongly — both volumes loaded and the mapping worked. It is now
+  a warning that says so explicitly. A peer reading the diagnostics should be able to trust that
+  a failure count means something broke.
+
+### Known, not yet fixed
+
+- **A structure with few contour planes is over-measured by roughly a third, because the
+  rasteriser extrudes rather than interpolates.** Each contour is given the full thickness of its
+  slice, so a structure four planes deep gets square caps where the anatomy tapers. After the
+  oblique fixes the residual against Eclipse is a consistent **+33 % and +36 %** on the four-plane
+  MR structures against +4 % and +10 % on the seventeen-plane CT ones — a systematic property of
+  the model, no longer the erratic error it was hiding behind.
+
+  **It has a second-order cost worth knowing about: it masks the DSC ceiling.** From Eclipse's
+  volumes the largest achievable Dice on this case is 0.837 and 0.800, both under the 0.90
+  tolerance, so the ceiling warning should fire. From the inflated volumes it computes as 0.960
+  and 0.905 and stays silent.
+
+  Fixing it means interpolating between contour planes instead of extruding, which changes DSC,
+  MDA and HD95 on every case and is therefore not a silent change.
+
+- **The structure comparison grid is sized from unmapped contour bounds.** It is built from the
+  union of both structures' extents *before* the registration is applied, so on a case with a
+  large translation it spans the separation between them as well as the anatomy: on the head
+  phantom, 207 mm in Z where each structure is 40 mm deep and both land in the same place once
+  mapped. DSC, MDA and HD95 are computed from the masks, so the empty space does not change
+  them — but the grid is capped at 160 samples per axis, and on a large structure the inflated
+  span reaches that cap and coarsens the spacing. `BODY` on that case gets 3.42 mm instead of
+  the 2.66 mm it would get from mapped bounds. Since a coarser grid reads a lower DSC, this
+  makes large structures look slightly worse than they are.
+
+---
+
 ## 3.0.0 — 2026-08-01
 
 A major version because two things stopped being comparable with 2.15, not because the
@@ -88,86 +205,6 @@ feature list is long. Anyone pooling data across the two needs to know before th
   new `structures: <id>: rasterisation` diagnostic reports each mask's volume, plane count and
   plane spacing so this can be reproduced elsewhere.
 
-### Added after 3.0.0 was tagged
-
-- **The DSC ceiling set by the two volumes.** A Dice cannot exceed 2·min(|A|,|B|)/(|A|+|B|),
-  because the intersection cannot exceed the smaller volume — so the 0.90 tolerance needs the two
-  volumes to agree within about **1.22×**, before the registration is considered at all. On a
-  clinical MR→CT case the same target was contoured to 0.9 cm³ on one series and 2.6 cm³ on the
-  other: DSC read 0.433 and failed the registration while MDA read 1.62 mm and passed
-  comfortably. The two only look contradictory until the ceiling is computed — 0.514, of which
-  the registration achieved 84 %. That row was reporting a contouring difference between two
-  readers on two modalities, not an alignment error.
-
-  The criterion column now carries `volumes cap DSC at 0.51`, but **only when the ceiling falls
-  below the tolerance** — on a normal case the volumes are comparable and saying so would be
-  noise. A `structures: DSC ceiling` warning states it in full and points at MDA instead, which
-  is in millimetres and does not depend on volume. Twelve analytic checks pin the arithmetic.
-
-  **The verdict is unchanged.** Whether a row should gate when its tolerance is unreachable is a
-  question about grading, and changing that silently would be the same mistake as inventing a
-  tolerance.
-
-### Fixed after 3.0.0 was tagged
-
-- **Contours on an oblique series shattered into spurious planes, and every rasterised volume
-  followed.** A brain MR is routinely acquired oblique, so its contours are not planar in patient
-  z. Two things assumed they were: the z of a polygon was taken from its **first vertex**, and two
-  polygons counted as the same contour plane only within **1e-4 mm** — a tenth of a micron.
-
-  On a clinical MR↔CT pair that produced contour "planes" 0.22 mm apart on a structure sliced in
-  millimetres, gaps of 6.44, 5.78 and 4.02 mm where the acquisition is uniform, a median plane
-  spacing that meant nothing, and rasterised volumes of **exactly half** Eclipse's figure in one
-  run and 1.22× it in another. The finely-sliced axial CT structure was accurate throughout,
-  which is why this survived: it only bites when the series is tilted.
-
-  A polygon's z is now the **mean of its own vertices**, which is exact whenever the old reading
-  was right and is the best single z for a tilted contour. The merge tolerance is **0.2 mm** —
-  below any clinical slice spacing, above the numerical noise it exists to absorb. The tilt is
-  measured rather than absorbed: `ContourSet.WidestPolygonZSpreadMm` reports how far a single
-  polygon spans in z, and the plane description says outright that the series is not axial.
-
-  **A contour plane is now identified by its acquisition slice index, not by its z.** That is the
-  root of it, and the mean-z fix above only got halfway. On a tilted slice a polygon's z depends
-  on where it sits in x, so two disjoint contours on the *same* slice — a two-lobed structure, or
-  a target with a satellite — land at different mean z and split into separate planes no matter
-  how the tolerance is set. The clinical MR showed exactly that after the first fix: six planes
-  at gaps of 5.17, 0.30, 0.56, 4.73 and 5.11 mm, which are four slices with two of them counted
-  three times. `GetContoursOnImagePlane` is already called with the slice index; it is now kept.
-  A plane's z is the vertex-weighted mean over every polygon on it, so a slice carrying two
-  contours sits between them rather than on whichever arrived first.
-
-  Twenty-two contract checks cover it, including that taking z from the first vertex splits each
-  tilted slice in two, that z proximity splits a two-lobed tilted slice however the tolerance is
-  chosen, and that the slice index keeps both lobes on one plane with the spacing exact. Every
-  part was confirmed to bite by reverting it — the reverted index check reproduces the field
-  failure's shape exactly, 16 planes from 8 slices with gaps alternating 0.52 and 1.48 mm.
-
-  Measured against Eclipse's own volumes on the clinical case, the first fix already moved the
-  oblique structure from **×0.500** to +33 % and −14 %; the axial one was within 4–10 %
-  throughout.
-
-  **This supersedes what the previous entry recorded as an unexplained instability.** The volumes
-  were not unstable — they were wrong in a way that depended on which structure was read.
-
-- **A deliberate refusal to compute a metric was logged as an API failure.** On a CT–MR pair with
-  different fields of view, the 5.5 % overlap check correctly declined to report intensity
-  metrics, and did so under the heading *"N failure(s) while reading data from the API"*. Nothing
-  had failed and nothing was read wrongly — both volumes loaded and the mapping worked. It is now
-  a warning that says so explicitly. A peer reading the diagnostics should be able to trust that
-  a failure count means something broke.
-
-### Known, not yet fixed
-
-- **The structure comparison grid is sized from unmapped contour bounds.** It is built from the
-  union of both structures' extents *before* the registration is applied, so on a case with a
-  large translation it spans the separation between them as well as the anatomy: on the head
-  phantom, 207 mm in Z where each structure is 40 mm deep and both land in the same place once
-  mapped. DSC, MDA and HD95 are computed from the masks, so the empty space does not change
-  them — but the grid is capped at 160 samples per axis, and on a large structure the inflated
-  span reaches that cap and coarsens the spacing. `BODY` on that case gets 3.42 mm instead of
-  the 2.66 mm it would get from mapped bounds. Since a coarser grid reads a lower DSC, this
-  makes large structures look slightly worse than they are.
 
 ---
 
