@@ -431,7 +431,17 @@ namespace ESAPI_RegistrationQA.Services
                 measurements.Nmi = MeasuredValue.Unavailable(pairs.Problem);
                 measurements.Ncc = MeasuredValue.Unavailable(pairs.Problem);
                 measurements.Ssd = MeasuredValue.Unavailable(pairs.Problem);
-                _log.Failure("similarity: pairing", pairs.Problem);
+
+                // A warning, not a failure. Both voxel reads succeeded and the mapping worked —
+                // the tool then declined to compute a metric it judged unrepresentative, which
+                // is it working correctly. Logging that at failure level put it under the
+                // heading "N failure(s) while reading data from the API", where nothing had
+                // failed and nothing was read wrongly. On a CT–MR pair with different fields of
+                // view a small overlap is the expected finding, not a fault to chase.
+                _log.Warning("similarity: pairing", pairs.Problem +
+                    ". Both volumes were read and the mapping succeeded; this is a deliberate " +
+                    "refusal to report a similarity value over a small shared region, not a " +
+                    "failure to obtain one.");
                 return;
             }
 

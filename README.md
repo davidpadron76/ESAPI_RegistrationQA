@@ -417,15 +417,15 @@ declines to grade. **N/A** is the missing value.
   permissive direction.** Until a case with matched slice spacing settles it, treat the DSC row
   as provisional, and treat any DSC across a series pair with very different slice spacing as a
   statement about contouring resolution as much as about registration.
-* **The rasterised volume of a coarsely-contoured structure is wrong, so DSC, MDA and HD95 are
-  unreliable on one.** Held against Eclipse's own structure statistics on a clinical MR↔CT pair,
-  a structure contoured at 1.00 mm came out within 4–10 %, while the same structure copied onto
-  the much coarser MR planes came out at **exactly half** its true volume in one run and 1.22×
-  in another. The volume scales with an estimate of the contour plane spacing, and that estimate
-  is unstable on an unevenly spaced plane set. A `structures: <id>: source planes` diagnostic now
-  prints the plane positions and gaps and warns when they are uneven. **Until this is fixed,
-  treat those three rows as unreliable whenever a structure's contours are sparse relative to its
-  image planes** — the normal state of a structure propagated onto a coarser-sliced series.
+* **DSC, MDA and HD95 on an oblique series were wrong until after 3.0.0 was tagged.** A brain MR
+  is routinely acquired oblique, so its contours are not planar in patient z — and the plugin
+  assumed they were, taking each polygon's z from its first vertex. Held against Eclipse's own
+  structure statistics on a clinical MR↔CT pair, the axial CT structure came out within 4–10 %
+  while the same structure on the oblique MR came out at exactly half its true volume. **Fixed**
+  (mean vertex z, 0.2 mm plane merge tolerance, tilt reported rather than absorbed), but the fix
+  post-dates the 3.0.0 tag: if you are running 3.0.0 itself, treat those three rows as unreliable
+  on any non-axial series. A `structures: <id>: source planes` diagnostic now prints the plane
+  positions, the gaps and the measured tilt.
 * **TRE rests on however many landmarks you place, and one is not a measurement.** On a case
   with a single matched marker the criterion column says `1 matched landmark(s) — indicative
   only`. Place several, spread out, or read the row as an anecdote.

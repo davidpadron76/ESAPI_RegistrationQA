@@ -108,46 +108,40 @@ feature list is long. Anyone pooling data across the two needs to know before th
   question about grading, and changing that silently would be the same mistake as inventing a
   tolerance.
 
+### Fixed after 3.0.0 was tagged
+
+- **Contours on an oblique series shattered into spurious planes, and every rasterised volume
+  followed.** A brain MR is routinely acquired oblique, so its contours are not planar in patient
+  z. Two things assumed they were: the z of a polygon was taken from its **first vertex**, and two
+  polygons counted as the same contour plane only within **1e-4 mm** — a tenth of a micron.
+
+  On a clinical MR↔CT pair that produced contour "planes" 0.22 mm apart on a structure sliced in
+  millimetres, gaps of 6.44, 5.78 and 4.02 mm where the acquisition is uniform, a median plane
+  spacing that meant nothing, and rasterised volumes of **exactly half** Eclipse's figure in one
+  run and 1.22× it in another. The finely-sliced axial CT structure was accurate throughout,
+  which is why this survived: it only bites when the series is tilted.
+
+  A polygon's z is now the **mean of its own vertices**, which is exact whenever the old reading
+  was right and is the best single z for a tilted contour. The merge tolerance is **0.2 mm** —
+  below any clinical slice spacing, above the numerical noise it exists to absorb. The tilt is
+  measured rather than absorbed: `ContourSet.WidestPolygonZSpreadMm` reports how far a single
+  polygon spans in z, and the plane description says outright that the series is not axial.
+
+  Sixteen contract checks cover it, including that taking z from the first vertex splits each
+  tilted slice in two and corrupts the derived spacing, while the mean recovers it exactly. Both
+  halves were confirmed to bite by reverting them.
+
+  **This supersedes what the previous entry recorded as an unexplained instability.** The volumes
+  were not unstable — they were wrong in a way that depended on which structure was read.
+
+- **A deliberate refusal to compute a metric was logged as an API failure.** On a CT–MR pair with
+  different fields of view, the 5.5 % overlap check correctly declined to report intensity
+  metrics, and did so under the heading *"N failure(s) while reading data from the API"*. Nothing
+  had failed and nothing was read wrongly — both volumes loaded and the mapping worked. It is now
+  a warning that says so explicitly. A peer reading the diagnostics should be able to trust that
+  a failure count means something broke.
+
 ### Known, not yet fixed
-
-- **The rasterised volume of a coarsely-contoured structure is wrong, and unstable between
-  runs.** Found by auditing a clinical MR↔CT pair in both directions and holding both against
-  Eclipse's own DICOM structure statistics.
-
-  | structure / image | Eclipse | plugin, forward run | plugin, reverse run |
-  |---|---|---|---|
-  | `PTV_High` / CT_1 — 1.00 mm planes | 2.5 cm³ | 2.6 cm³ (+4 %) | 2.6 cm³ (+4 %) |
-  | `PTV_High` / MR1 — coarse planes | 1.8 cm³ | **0.9 cm³ (×0.500)** | 2.2 cm³ (×1.22) |
-  | `PTV_High1` / CT_1 — 1.00 mm planes | 2.1 cm³ | 2.3 cm³ (+10 %) | 2.3 cm³ (+10 %) |
-  | `PTV_High1` / MR1 — coarse planes | 1.4 cm³ | **0.7 cm³ (×0.500)** | 1.1 cm³ (×0.79) |
-
-  The finely-contoured structure is accurate in both runs. The coarsely-contoured one is out by
-  a factor of exactly **0.500** on both structures in the forward run — too exact to be noise —
-  and by different factors in the reverse run, where the same structure on the same image read
-  as 4 planes at 5.78 mm instead of 4 at 2.90 mm. Contour geometry cannot depend on which
-  registration is open, and 5.78 is 1.99× 2.90.
-
-  The volume tracks the plane-spacing estimate, which localises it to the median gap computed in
-  `ContourSet.Finalise()` and the slab thickness `Contains` derives from it. A median over an
-  unevenly spaced plane set can land on a doubled gap, and every volume derived from it doubles
-  with it. `ContourSet.DescribePlanes()` now logs the plane positions, the full gap list and a
-  warning when the spacing is uneven — unsummarised, because summarising is how this hid.
-
-  **Two earlier conclusions in these notes were wrong and are withdrawn.** The 2.9× volume
-  difference on the MR→CT case was recorded first as a contouring difference between two readers,
-  then as something that could not happen because a rigid registration preserves volume. Neither
-  holds. Eclipse's own table reports a real +0.7 cm³ change on both structures — its resampling of
-  a 1 mm-sliced contour onto the MR's much coarser planes — and on top of that this tool's own
-  volume estimate was out by a factor of two.
-
-  **The DSC ceiling stands but is milder than recorded.** From Eclipse's volumes it is 0.837 and
-  0.800, not the 0.51 computed from the wrong ones — still below the 0.90 gate, so the row is
-  still unreachable, but by less. Eclipse's own Dice of 0.46 and 0.47 is about 57 % of that
-  ceiling, so there is real spatial disagreement here as well as a volume mismatch.
-
-  **DSC, MDA and HD95 are unreliable on any structure whose contours are sparse relative to its
-  image planes** — the normal state of a structure copied onto a coarser-sliced series — until
-  this is fixed.
 
 - **The structure comparison grid is sized from unmapped contour bounds.** It is built from the
   union of both structures' extents *before* the registration is applied, so on a case with a
