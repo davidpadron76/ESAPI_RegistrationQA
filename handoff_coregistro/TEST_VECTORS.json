@@ -1,0 +1,1806 @@
+{
+  "schema": "ESAPI_RegistrationQA handoff test vectors, v1",
+  "generated_from_commit": "324d78f3d8090a3bc91a118a4729bf10af0b22fd",
+  "assembly_version": "3.0.1",
+  "how_generated": "Every expected value below is the return value of the shipping classes in Models/ and Services/, invoked directly by handoff_coregistro/GenerateTestVectors.cs under Mono. No value was computed by hand and no formula was re-implemented. Re-run the commands in that file's header to regenerate.",
+  "cases": [
+    {
+      "id": "dsc_0.95",
+      "description": "DSC (Dice Overlap) = 0.95 under the [Standard treatment] profile",
+      "input": {
+        "metric_key": "DSC",
+        "measured_value": 0.95,
+        "profile": "Standard treatment",
+        "native_voxel_mm": null,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Green",
+        "value": 0.95,
+        "display_value": "0.950",
+        "unit": "",
+        "threshold_criteria": "≥ 0.9 (yellow ≥ 0.8)",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "dsc_0.9",
+      "description": "DSC (Dice Overlap) = 0.9 under the [Standard treatment] profile",
+      "input": {
+        "metric_key": "DSC",
+        "measured_value": 0.9,
+        "profile": "Standard treatment",
+        "native_voxel_mm": null,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Green",
+        "value": 0.9,
+        "display_value": "0.900",
+        "unit": "",
+        "threshold_criteria": "≥ 0.9 (yellow ≥ 0.8)",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "dsc_0.8999",
+      "description": "DSC (Dice Overlap) = 0.8999 under the [Standard treatment] profile",
+      "input": {
+        "metric_key": "DSC",
+        "measured_value": 0.8999,
+        "profile": "Standard treatment",
+        "native_voxel_mm": null,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Yellow",
+        "value": 0.8999,
+        "display_value": "0.900",
+        "unit": "",
+        "threshold_criteria": "≥ 0.9 (yellow ≥ 0.8)",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "dsc_0.85",
+      "description": "DSC (Dice Overlap) = 0.85 under the [Standard treatment] profile",
+      "input": {
+        "metric_key": "DSC",
+        "measured_value": 0.85,
+        "profile": "Standard treatment",
+        "native_voxel_mm": null,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Yellow",
+        "value": 0.85,
+        "display_value": "0.850",
+        "unit": "",
+        "threshold_criteria": "≥ 0.9 (yellow ≥ 0.8)",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "dsc_0.8",
+      "description": "DSC (Dice Overlap) = 0.8 under the [Standard treatment] profile",
+      "input": {
+        "metric_key": "DSC",
+        "measured_value": 0.8,
+        "profile": "Standard treatment",
+        "native_voxel_mm": null,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Yellow",
+        "value": 0.8,
+        "display_value": "0.800",
+        "unit": "",
+        "threshold_criteria": "≥ 0.9 (yellow ≥ 0.8)",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "dsc_0.7999",
+      "description": "DSC (Dice Overlap) = 0.7999 under the [Standard treatment] profile",
+      "input": {
+        "metric_key": "DSC",
+        "measured_value": 0.7999,
+        "profile": "Standard treatment",
+        "native_voxel_mm": null,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Red",
+        "value": 0.7999,
+        "display_value": "0.800",
+        "unit": "",
+        "threshold_criteria": "≥ 0.9 (yellow ≥ 0.8)",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "dsc_0.5",
+      "description": "DSC (Dice Overlap) = 0.5 under the [Standard treatment] profile",
+      "input": {
+        "metric_key": "DSC",
+        "measured_value": 0.5,
+        "profile": "Standard treatment",
+        "native_voxel_mm": null,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Red",
+        "value": 0.5,
+        "display_value": "0.500",
+        "unit": "",
+        "threshold_criteria": "≥ 0.9 (yellow ≥ 0.8)",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "jacneg_0",
+      "description": "Jacobian < 0 = 0 under the [Standard treatment] profile",
+      "input": {
+        "metric_key": "Jacobian_Neg_%",
+        "measured_value": 0,
+        "profile": "Standard treatment",
+        "native_voxel_mm": null,
+        "is_deformable": true
+      },
+      "expected": {
+        "status": "Green",
+        "value": 0,
+        "display_value": "0.000 %",
+        "unit": "%",
+        "threshold_criteria": "≤ 0 %",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "jacneg_0.0001",
+      "description": "Jacobian < 0 = 0.0001 under the [Standard treatment] profile",
+      "input": {
+        "metric_key": "Jacobian_Neg_%",
+        "measured_value": 0.0001,
+        "profile": "Standard treatment",
+        "native_voxel_mm": null,
+        "is_deformable": true
+      },
+      "expected": {
+        "status": "Red",
+        "value": 0.0001,
+        "display_value": "0.000 %",
+        "unit": "%",
+        "threshold_criteria": "≤ 0 %",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "jacneg_0.003",
+      "description": "Jacobian < 0 = 0.003 under the [Standard treatment] profile",
+      "input": {
+        "metric_key": "Jacobian_Neg_%",
+        "measured_value": 0.003,
+        "profile": "Standard treatment",
+        "native_voxel_mm": null,
+        "is_deformable": true
+      },
+      "expected": {
+        "status": "Red",
+        "value": 0.003,
+        "display_value": "0.003 %",
+        "unit": "%",
+        "threshold_criteria": "≤ 0 %",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "jacneg_2.979",
+      "description": "Jacobian < 0 = 2.979 under the [Standard treatment] profile",
+      "input": {
+        "metric_key": "Jacobian_Neg_%",
+        "measured_value": 2.979,
+        "profile": "Standard treatment",
+        "native_voxel_mm": null,
+        "is_deformable": true
+      },
+      "expected": {
+        "status": "Red",
+        "value": 2.979,
+        "display_value": "2.979 %",
+        "unit": "%",
+        "threshold_criteria": "≤ 0 %",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "tremean_1",
+      "description": "TRE (mean) = 1 under the [Standard treatment] profile, native voxel 2.5 mm",
+      "input": {
+        "metric_key": "TRE_Mean",
+        "measured_value": 1,
+        "profile": "Standard treatment",
+        "native_voxel_mm": 2.5,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Green",
+        "value": 1,
+        "display_value": "1.000 mm",
+        "unit": "mm",
+        "threshold_criteria": "≤ 2.5 mm — TG-132, max voxel dimension",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "tremax_1",
+      "description": "TRE (max) = 1 under the [Standard treatment] profile, native voxel 2.5 mm",
+      "input": {
+        "metric_key": "TRE_Max",
+        "measured_value": 1,
+        "profile": "Standard treatment",
+        "native_voxel_mm": 2.5,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Green",
+        "value": 1,
+        "display_value": "1.000 mm",
+        "unit": "mm",
+        "threshold_criteria": "≤ 2.5 mm — TG-132, max voxel dimension",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "mda_1",
+      "description": "MDA (mean surface distance) = 1 under the [Standard treatment] profile, native voxel 2.5 mm",
+      "input": {
+        "metric_key": "MDA",
+        "measured_value": 1,
+        "profile": "Standard treatment",
+        "native_voxel_mm": 2.5,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Green",
+        "value": 1,
+        "display_value": "1.000 mm",
+        "unit": "mm",
+        "threshold_criteria": "≤ 2.5 mm — TG-132, max voxel dimension",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "ic_1",
+      "description": "Inverse consistency = 1 under the [Standard treatment] profile, native voxel 2.5 mm",
+      "input": {
+        "metric_key": "Inverse_Consistency",
+        "measured_value": 1,
+        "profile": "Standard treatment",
+        "native_voxel_mm": 2.5,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Green",
+        "value": 1,
+        "display_value": "1.000 mm",
+        "unit": "mm",
+        "threshold_criteria": "≤ 2.5 mm — TG-132, max voxel dimension",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "tremean_2.5",
+      "description": "TRE (mean) = 2.5 under the [Standard treatment] profile, native voxel 2.5 mm",
+      "input": {
+        "metric_key": "TRE_Mean",
+        "measured_value": 2.5,
+        "profile": "Standard treatment",
+        "native_voxel_mm": 2.5,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Green",
+        "value": 2.5,
+        "display_value": "2.500 mm",
+        "unit": "mm",
+        "threshold_criteria": "≤ 2.5 mm — TG-132, max voxel dimension",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "tremax_2.5",
+      "description": "TRE (max) = 2.5 under the [Standard treatment] profile, native voxel 2.5 mm",
+      "input": {
+        "metric_key": "TRE_Max",
+        "measured_value": 2.5,
+        "profile": "Standard treatment",
+        "native_voxel_mm": 2.5,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Green",
+        "value": 2.5,
+        "display_value": "2.500 mm",
+        "unit": "mm",
+        "threshold_criteria": "≤ 2.5 mm — TG-132, max voxel dimension",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "mda_2.5",
+      "description": "MDA (mean surface distance) = 2.5 under the [Standard treatment] profile, native voxel 2.5 mm",
+      "input": {
+        "metric_key": "MDA",
+        "measured_value": 2.5,
+        "profile": "Standard treatment",
+        "native_voxel_mm": 2.5,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Green",
+        "value": 2.5,
+        "display_value": "2.500 mm",
+        "unit": "mm",
+        "threshold_criteria": "≤ 2.5 mm — TG-132, max voxel dimension",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "ic_2.5",
+      "description": "Inverse consistency = 2.5 under the [Standard treatment] profile, native voxel 2.5 mm",
+      "input": {
+        "metric_key": "Inverse_Consistency",
+        "measured_value": 2.5,
+        "profile": "Standard treatment",
+        "native_voxel_mm": 2.5,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Green",
+        "value": 2.5,
+        "display_value": "2.500 mm",
+        "unit": "mm",
+        "threshold_criteria": "≤ 2.5 mm — TG-132, max voxel dimension",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "tremean_2.5001",
+      "description": "TRE (mean) = 2.5001 under the [Standard treatment] profile, native voxel 2.5 mm",
+      "input": {
+        "metric_key": "TRE_Mean",
+        "measured_value": 2.5001,
+        "profile": "Standard treatment",
+        "native_voxel_mm": 2.5,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Red",
+        "value": 2.5001,
+        "display_value": "2.500 mm",
+        "unit": "mm",
+        "threshold_criteria": "≤ 2.5 mm — TG-132, max voxel dimension",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "tremax_2.5001",
+      "description": "TRE (max) = 2.5001 under the [Standard treatment] profile, native voxel 2.5 mm",
+      "input": {
+        "metric_key": "TRE_Max",
+        "measured_value": 2.5001,
+        "profile": "Standard treatment",
+        "native_voxel_mm": 2.5,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Red",
+        "value": 2.5001,
+        "display_value": "2.500 mm",
+        "unit": "mm",
+        "threshold_criteria": "≤ 2.5 mm — TG-132, max voxel dimension",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "mda_2.5001",
+      "description": "MDA (mean surface distance) = 2.5001 under the [Standard treatment] profile, native voxel 2.5 mm",
+      "input": {
+        "metric_key": "MDA",
+        "measured_value": 2.5001,
+        "profile": "Standard treatment",
+        "native_voxel_mm": 2.5,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Red",
+        "value": 2.5001,
+        "display_value": "2.500 mm",
+        "unit": "mm",
+        "threshold_criteria": "≤ 2.5 mm — TG-132, max voxel dimension",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "ic_2.5001",
+      "description": "Inverse consistency = 2.5001 under the [Standard treatment] profile, native voxel 2.5 mm",
+      "input": {
+        "metric_key": "Inverse_Consistency",
+        "measured_value": 2.5001,
+        "profile": "Standard treatment",
+        "native_voxel_mm": 2.5,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Red",
+        "value": 2.5001,
+        "display_value": "2.500 mm",
+        "unit": "mm",
+        "threshold_criteria": "≤ 2.5 mm — TG-132, max voxel dimension",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "tremean_7",
+      "description": "TRE (mean) = 7 under the [Standard treatment] profile, native voxel 2.5 mm",
+      "input": {
+        "metric_key": "TRE_Mean",
+        "measured_value": 7,
+        "profile": "Standard treatment",
+        "native_voxel_mm": 2.5,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Red",
+        "value": 7,
+        "display_value": "7.000 mm",
+        "unit": "mm",
+        "threshold_criteria": "≤ 2.5 mm — TG-132, max voxel dimension",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "tremax_7",
+      "description": "TRE (max) = 7 under the [Standard treatment] profile, native voxel 2.5 mm",
+      "input": {
+        "metric_key": "TRE_Max",
+        "measured_value": 7,
+        "profile": "Standard treatment",
+        "native_voxel_mm": 2.5,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Red",
+        "value": 7,
+        "display_value": "7.000 mm",
+        "unit": "mm",
+        "threshold_criteria": "≤ 2.5 mm — TG-132, max voxel dimension",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "mda_7",
+      "description": "MDA (mean surface distance) = 7 under the [Standard treatment] profile, native voxel 2.5 mm",
+      "input": {
+        "metric_key": "MDA",
+        "measured_value": 7,
+        "profile": "Standard treatment",
+        "native_voxel_mm": 2.5,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Red",
+        "value": 7,
+        "display_value": "7.000 mm",
+        "unit": "mm",
+        "threshold_criteria": "≤ 2.5 mm — TG-132, max voxel dimension",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "ic_7",
+      "description": "Inverse consistency = 7 under the [Standard treatment] profile, native voxel 2.5 mm",
+      "input": {
+        "metric_key": "Inverse_Consistency",
+        "measured_value": 7,
+        "profile": "Standard treatment",
+        "native_voxel_mm": 2.5,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Red",
+        "value": 7,
+        "display_value": "7.000 mm",
+        "unit": "mm",
+        "threshold_criteria": "≤ 2.5 mm — TG-132, max voxel dimension",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "tremean_srs_0.9",
+      "description": "TRE (mean) = 0.9 under the [Stereotactic (SRS / SBRT)] profile, native voxel 2.5 mm",
+      "input": {
+        "metric_key": "TRE_Mean",
+        "measured_value": 0.9,
+        "profile": "Stereotactic (SRS / SBRT)",
+        "native_voxel_mm": 2.5,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Green",
+        "value": 0.9,
+        "display_value": "0.900 mm",
+        "unit": "mm",
+        "threshold_criteria": "≤ 1 mm — TG-132, stereotactic",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "tremean_srs_1",
+      "description": "TRE (mean) = 1 under the [Stereotactic (SRS / SBRT)] profile, native voxel 2.5 mm",
+      "input": {
+        "metric_key": "TRE_Mean",
+        "measured_value": 1,
+        "profile": "Stereotactic (SRS / SBRT)",
+        "native_voxel_mm": 2.5,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Green",
+        "value": 1,
+        "display_value": "1.000 mm",
+        "unit": "mm",
+        "threshold_criteria": "≤ 1 mm — TG-132, stereotactic",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "tremean_srs_1.0001",
+      "description": "TRE (mean) = 1.0001 under the [Stereotactic (SRS / SBRT)] profile, native voxel 2.5 mm",
+      "input": {
+        "metric_key": "TRE_Mean",
+        "measured_value": 1.0001,
+        "profile": "Stereotactic (SRS / SBRT)",
+        "native_voxel_mm": 2.5,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "Red",
+        "value": 1.0001,
+        "display_value": "1.000 mm",
+        "unit": "mm",
+        "threshold_criteria": "≤ 1 mm — TG-132, stereotactic",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "ncc_extreme_-1",
+      "description": "NCC = -1 under the [Standard treatment] profile",
+      "input": {
+        "metric_key": "NCC",
+        "measured_value": -1,
+        "profile": "Standard treatment",
+        "native_voxel_mm": null,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "INFO",
+        "value": -1,
+        "display_value": "-1.000",
+        "unit": "",
+        "threshold_criteria": "no TG-132 tolerance",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "hd95_extreme_99",
+      "description": "HD95 (Hausdorff) = 99 under the [Standard treatment] profile, native voxel 2.5 mm",
+      "input": {
+        "metric_key": "HD95",
+        "measured_value": 99,
+        "profile": "Standard treatment",
+        "native_voxel_mm": 2.5,
+        "is_deformable": false
+      },
+      "expected": {
+        "status": "INFO",
+        "value": 99,
+        "display_value": "99.000 mm",
+        "unit": "mm",
+        "threshold_criteria": "no TG-132 tolerance",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false
+      }
+    },
+    {
+      "id": "state_unavailable",
+      "description": "DSC attempted and failed; the row stays visible as N/A with the reason",
+      "input": {
+        "metric_key": "DSC",
+        "native_voxel_mm": null,
+        "surface_outline_only": false,
+        "shares_frame_of_reference": null
+      },
+      "expected": {
+        "status": "N/A",
+        "value": null,
+        "display_value": "N/A",
+        "unit": "",
+        "threshold_criteria": "≥ 0.9 (yellow ≥ 0.8)",
+        "unavailable_reason": "synthetic read failure",
+        "measurement_note": null,
+        "is_analytic": false,
+        "row_kept_by_Evaluate": true,
+        "appears_in_NotApplicable_list": false
+      }
+    },
+    {
+      "id": "state_notapplicable",
+      "description": "TRE does not apply (no landmarks). EvaluateOne returns N/A; Evaluate omits the row entirely",
+      "input": {
+        "metric_key": "TRE_Mean",
+        "native_voxel_mm": 2.5,
+        "surface_outline_only": false,
+        "shares_frame_of_reference": null
+      },
+      "expected": {
+        "status": "N/A",
+        "value": null,
+        "display_value": "N/A",
+        "unit": "mm",
+        "threshold_criteria": "≤ 2.5 mm — TG-132, max voxel dimension",
+        "unavailable_reason": "no landmarks on both series",
+        "measurement_note": null,
+        "is_analytic": false,
+        "row_kept_by_Evaluate": false,
+        "appears_in_NotApplicable_list": true
+      }
+    },
+    {
+      "id": "state_analytic_rigid_jacobian",
+      "description": "Jacobian on a rigid transform: measured 0.0 but analytic, so it is excluded from the verdict tally",
+      "input": {
+        "metric_key": "Jacobian_Neg_%",
+        "native_voxel_mm": null,
+        "surface_outline_only": false,
+        "shares_frame_of_reference": null
+      },
+      "expected": {
+        "status": "Green",
+        "value": 0,
+        "display_value": "0.000 %",
+        "unit": "%",
+        "threshold_criteria": "≤ 0 %",
+        "unavailable_reason": null,
+        "measurement_note": "|J| = 1 at every point of a rigid transform",
+        "is_analytic": true,
+        "row_kept_by_Evaluate": true,
+        "appears_in_NotApplicable_list": false
+      }
+    },
+    {
+      "id": "state_voxel_unknown",
+      "description": "TRE measured but the native voxel size could not be read, so it is not graded",
+      "input": {
+        "metric_key": "TRE_Mean",
+        "native_voxel_mm": null,
+        "surface_outline_only": false,
+        "shares_frame_of_reference": null
+      },
+      "expected": {
+        "status": "INFO",
+        "value": 3,
+        "display_value": "3.000 mm",
+        "unit": "mm",
+        "threshold_criteria": "not graded — voxel size unknown",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false,
+        "row_kept_by_Evaluate": true,
+        "appears_in_NotApplicable_list": false
+      }
+    },
+    {
+      "id": "state_outline_only",
+      "description": "DSC measured on the patient surface outline alone, so it is reported ungated",
+      "input": {
+        "metric_key": "DSC",
+        "native_voxel_mm": null,
+        "surface_outline_only": true,
+        "shares_frame_of_reference": null
+      },
+      "expected": {
+        "status": "INFO",
+        "value": 0.4,
+        "display_value": "0.400",
+        "unit": "",
+        "threshold_criteria": "not graded — measured on the patient surface outline only, not an organ",
+        "unavailable_reason": null,
+        "measurement_note": "BODY, worst of 1 matched structure(s)",
+        "is_analytic": false,
+        "row_kept_by_Evaluate": true,
+        "appears_in_NotApplicable_list": false
+      }
+    },
+    {
+      "id": "state_maxdisp_different_for",
+      "description": "Maximum displacement with the two series in different frames of reference",
+      "input": {
+        "metric_key": "Max_Displacement",
+        "native_voxel_mm": null,
+        "surface_outline_only": false,
+        "shares_frame_of_reference": false
+      },
+      "expected": {
+        "status": "INFO",
+        "value": 260.144,
+        "display_value": "260.144 mm",
+        "unit": "mm",
+        "threshold_criteria": "not in TG-132; different frames of reference",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false,
+        "row_kept_by_Evaluate": true,
+        "appears_in_NotApplicable_list": false
+      }
+    },
+    {
+      "id": "state_maxdisp_unknown_for",
+      "description": "Maximum displacement with at least one frame-of-reference UID unreadable",
+      "input": {
+        "metric_key": "Max_Displacement",
+        "native_voxel_mm": null,
+        "surface_outline_only": false,
+        "shares_frame_of_reference": null
+      },
+      "expected": {
+        "status": "INFO",
+        "value": 260.144,
+        "display_value": "260.144 mm",
+        "unit": "mm",
+        "threshold_criteria": "not in TG-132; frame of reference unknown",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false,
+        "row_kept_by_Evaluate": true,
+        "appears_in_NotApplicable_list": false
+      }
+    },
+    {
+      "id": "state_nan_value",
+      "description": "A metric handed NaN: Measured() converts it to Unavailable with a fixed reason",
+      "input": {
+        "metric_key": "DSC",
+        "native_voxel_mm": null,
+        "surface_outline_only": false,
+        "shares_frame_of_reference": null
+      },
+      "expected": {
+        "status": "N/A",
+        "value": null,
+        "display_value": "N/A",
+        "unit": "",
+        "threshold_criteria": "≥ 0.9 (yellow ≥ 0.8)",
+        "unavailable_reason": "the computation produced a non-finite value",
+        "measurement_note": null,
+        "is_analytic": false,
+        "row_kept_by_Evaluate": true,
+        "appears_in_NotApplicable_list": false
+      }
+    },
+    {
+      "id": "state_infinity_value",
+      "description": "A metric handed +Infinity: same conversion as NaN",
+      "input": {
+        "metric_key": "MDA",
+        "native_voxel_mm": 2.5,
+        "surface_outline_only": false,
+        "shares_frame_of_reference": null
+      },
+      "expected": {
+        "status": "N/A",
+        "value": null,
+        "display_value": "N/A",
+        "unit": "mm",
+        "threshold_criteria": "≤ 2.5 mm — TG-132, max voxel dimension",
+        "unavailable_reason": "the computation produced a non-finite value",
+        "measurement_note": null,
+        "is_analytic": false,
+        "row_kept_by_Evaluate": true,
+        "appears_in_NotApplicable_list": false
+      }
+    },
+    {
+      "id": "state_zero_value",
+      "description": "A metric measured as exactly zero: a real value, not an absence",
+      "input": {
+        "metric_key": "TRE_Mean",
+        "native_voxel_mm": 2.5,
+        "surface_outline_only": false,
+        "shares_frame_of_reference": null
+      },
+      "expected": {
+        "status": "Green",
+        "value": 0,
+        "display_value": "0.000 mm",
+        "unit": "mm",
+        "threshold_criteria": "≤ 2.5 mm — TG-132, max voxel dimension",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false,
+        "row_kept_by_Evaluate": true,
+        "appears_in_NotApplicable_list": false
+      }
+    },
+    {
+      "id": "state_maxdisp_same_for",
+      "description": "Maximum displacement with both series in the same frame of reference",
+      "input": {
+        "metric_key": "Max_Displacement",
+        "native_voxel_mm": null,
+        "surface_outline_only": false,
+        "shares_frame_of_reference": true
+      },
+      "expected": {
+        "status": "INFO",
+        "value": 12.5,
+        "display_value": "12.500 mm",
+        "unit": "mm",
+        "threshold_criteria": "no TG-132 tolerance",
+        "unavailable_reason": null,
+        "measurement_note": "synthetic",
+        "is_analytic": false,
+        "row_kept_by_Evaluate": true,
+        "appears_in_NotApplicable_list": false
+      }
+    },
+    {
+      "id": "matrix_column_convention",
+      "description": "Rigid, rotation + translation, translation in the last column (P' = M.P)",
+      "input": {
+        "raw_matrix_4x4_row_major": [
+          [0.999993146, -0.002530224, 0.002702901, -4.84],
+          [0.002617982, 0.999452788, -0.032973778, 10.28],
+          [-0.002617991, 0.032980628, 0.999452562, -122.47],
+          [0, 0, 0, 1]
+        ]
+      },
+      "expected": {
+        "accepted": true,
+        "convention_note": "translation in the last column (P' = M·P)",
+        "translation_x_lr_mm": -4.84,
+        "translation_y_ap_mm": 10.28,
+        "translation_z_cc_mm": -122.47,
+        "translation_magnitude_mm": 122.995954812,
+        "rotation_pitch_x_deg": 1.89,
+        "rotation_roll_y_deg": 0.15,
+        "rotation_yaw_z_deg": 0.15,
+        "gimbal_lock": false,
+        "is_identity": false,
+        "max_displacement_over_300mm_box_mm": 123.845796942,
+        "invertible": true,
+        "inverse_translation_x_mm": 4.492428629,
+        "inverse_translation_y_mm": -6.247483449,
+        "inverse_translation_z_mm": 122.755007782
+      }
+    },
+    {
+      "id": "matrix_row_convention",
+      "description": "The same transform with the translation in the last row (P' = P.M); must be transposed back",
+      "input": {
+        "raw_matrix_4x4_row_major": [
+          [0.999993146, 0.002617982, -0.002617991, 0],
+          [-0.002530224, 0.999452788, 0.032980628, 0],
+          [0.002702901, -0.032973778, 0.999452562, 0],
+          [-4.84, 10.28, -122.47, 1]
+        ]
+      },
+      "expected": {
+        "accepted": true,
+        "convention_note": "translation in the last row (P' = P·M); matrix transposed to the internal convention",
+        "translation_x_lr_mm": -4.84,
+        "translation_y_ap_mm": 10.28,
+        "translation_z_cc_mm": -122.47,
+        "translation_magnitude_mm": 122.995954812,
+        "rotation_pitch_x_deg": 1.89,
+        "rotation_roll_y_deg": 0.15,
+        "rotation_yaw_z_deg": 0.15,
+        "gimbal_lock": false,
+        "is_identity": false,
+        "max_displacement_over_300mm_box_mm": 123.845796942,
+        "invertible": true,
+        "inverse_translation_x_mm": 4.492428629,
+        "inverse_translation_y_mm": -6.247483449,
+        "inverse_translation_z_mm": 122.755007782
+      }
+    },
+    {
+      "id": "matrix_pure_rotation_ambiguous",
+      "description": "Pure rotation with zero translation: last row and last column are both homogeneous",
+      "input": {
+        "raw_matrix_4x4_row_major": [
+          [0.866025404, -0.5, 0, 0],
+          [0.5, 0.866025404, 0, 0],
+          [0, 0, 1, 0],
+          [0, 0, 0, 1]
+        ]
+      },
+      "expected": {
+        "accepted": true,
+        "convention_note": "zero translation; assuming the P' = M·P convention (pure rotation, sense not verifiable)",
+        "translation_x_lr_mm": 0,
+        "translation_y_ap_mm": 0,
+        "translation_z_cc_mm": 0,
+        "translation_magnitude_mm": 0,
+        "rotation_pitch_x_deg": 0,
+        "rotation_roll_y_deg": 0,
+        "rotation_yaw_z_deg": 30,
+        "gimbal_lock": false,
+        "is_identity": false,
+        "max_displacement_over_300mm_box_mm": 219.615242271,
+        "invertible": true,
+        "inverse_translation_x_mm": 0,
+        "inverse_translation_y_mm": 0,
+        "inverse_translation_z_mm": 0
+      }
+    },
+    {
+      "id": "matrix_identity",
+      "description": "Exact identity: the registration moves nothing",
+      "input": {
+        "raw_matrix_4x4_row_major": [
+          [1, 0, 0, 0],
+          [0, 1, 0, 0],
+          [0, 0, 1, 0],
+          [0, 0, 0, 1]
+        ]
+      },
+      "expected": {
+        "accepted": true,
+        "convention_note": "zero translation; assuming the P' = M·P convention (pure rotation, sense not verifiable)",
+        "translation_x_lr_mm": 0,
+        "translation_y_ap_mm": 0,
+        "translation_z_cc_mm": 0,
+        "translation_magnitude_mm": 0,
+        "rotation_pitch_x_deg": 0,
+        "rotation_roll_y_deg": 0,
+        "rotation_yaw_z_deg": 0,
+        "gimbal_lock": false,
+        "is_identity": true,
+        "max_displacement_over_300mm_box_mm": 0,
+        "invertible": true,
+        "inverse_translation_x_mm": 0,
+        "inverse_translation_y_mm": 0,
+        "inverse_translation_z_mm": 0
+      }
+    },
+    {
+      "id": "matrix_scaled_degenerate",
+      "description": "5 % uniform scaling: the rotation submatrix is not orthonormal",
+      "input": {
+        "raw_matrix_4x4_row_major": [
+          [1.05, 0, 0, 5],
+          [0, 1.05, 0, 0],
+          [0, 0, 1.05, 0],
+          [0, 0, 0, 1]
+        ]
+      },
+      "expected": {
+        "accepted": false,
+        "convention_note": "the rotation submatrix is not orthonormal (det = 1.1576); the transform includes scaling, shear or reflection"
+      }
+    },
+    {
+      "id": "matrix_reflection_degenerate",
+      "description": "Reflection through the X axis: determinant -1",
+      "input": {
+        "raw_matrix_4x4_row_major": [
+          [-1, 0, 0, 0],
+          [0, 1, 0, 0],
+          [0, 0, 1, 0],
+          [0, 0, 0, 1]
+        ]
+      },
+      "expected": {
+        "accepted": false,
+        "convention_note": "the rotation submatrix is not orthonormal (det = -1.0000); the transform includes scaling, shear or reflection"
+      }
+    },
+    {
+      "id": "matrix_no_convention",
+      "description": "Neither the last row nor the last column is homogeneous: the convention cannot be determined",
+      "input": {
+        "raw_matrix_4x4_row_major": [
+          [1, 0, 0, 3],
+          [0, 1, 0, 4],
+          [0, 0, 1, 5],
+          [0.5, 0, 0, 1]
+        ]
+      },
+      "expected": {
+        "accepted": false,
+        "convention_note": "could not determine the matrix convention: neither the last row nor the last column is homogeneous"
+      }
+    },
+    {
+      "id": "matrix_nan",
+      "description": "The matrix contains a non-finite value",
+      "input": {
+        "raw_matrix_4x4_row_major": [
+          [1, 0, 0, 1],
+          [0, "NaN", 0, 2],
+          [0, 0, 1, 3],
+          [0, 0, 0, 1]
+        ]
+      },
+      "expected": {
+        "accepted": false,
+        "convention_note": "the matrix contains non-finite values"
+      }
+    },
+    {
+      "id": "matrix_gimbal_lock",
+      "description": "Roll = +90 degrees: the Euler decomposition is degenerate, yaw is pinned to 0",
+      "input": {
+        "raw_matrix_4x4_row_major": [
+          [0, -0.342020143, 0.939692621, 0],
+          [0, 0.939692621, 0.342020143, 0],
+          [-1, 0, 0, 0],
+          [0, 0, 0, 1]
+        ]
+      },
+      "expected": {
+        "accepted": true,
+        "convention_note": "zero translation; assuming the P' = M·P convention (pure rotation, sense not verifiable)",
+        "translation_x_lr_mm": 0,
+        "translation_y_ap_mm": 0,
+        "translation_z_cc_mm": 0,
+        "translation_magnitude_mm": 0,
+        "rotation_pitch_x_deg": -20,
+        "rotation_roll_y_deg": 90,
+        "rotation_yaw_z_deg": 0,
+        "gimbal_lock": true,
+        "is_identity": false,
+        "max_displacement_over_300mm_box_mm": 617.827367893,
+        "invertible": true,
+        "inverse_translation_x_mm": 0,
+        "inverse_translation_y_mm": 0,
+        "inverse_translation_z_mm": 0
+      }
+    },
+    {
+      "id": "surface_identical",
+      "description": "Two identical 10x10x10 voxel cubes",
+      "input": {
+        "grid": "40x40x40 at 1 mm isotropic",
+        "mask_a_voxels_set": 1000,
+        "mask_b_voxels_set": 1000,
+        "construction": "axis-aligned cubes; see GenerateTestVectors.Cube(size, lo, hi)"
+      },
+      "expected": {
+        "problem": null,
+        "dsc": 1,
+        "mda_mm": 0,
+        "hd95_mm": 0,
+        "voxels_a": 1000,
+        "voxels_b": 1000,
+        "surface_voxels_a": 488,
+        "surface_voxels_b": 488
+      }
+    },
+    {
+      "id": "surface_shift_2vox",
+      "description": "The same cube shifted 2 voxels (2 mm) along X",
+      "input": {
+        "grid": "40x40x40 at 1 mm isotropic",
+        "mask_a_voxels_set": 1000,
+        "mask_b_voxels_set": 1000,
+        "construction": "axis-aligned cubes; see GenerateTestVectors.Cube(size, lo, hi)"
+      },
+      "expected": {
+        "problem": null,
+        "dsc": 0.512,
+        "mda_mm": 1.734157224,
+        "hd95_mm": 2.828427125,
+        "voxels_a": 1000,
+        "voxels_b": 1000,
+        "surface_voxels_a": 488,
+        "surface_voxels_b": 488
+      }
+    },
+    {
+      "id": "surface_disjoint",
+      "description": "Two cubes that do not intersect at all",
+      "input": {
+        "grid": "40x40x40 at 1 mm isotropic",
+        "mask_a_voxels_set": 216,
+        "mask_b_voxels_set": 216,
+        "construction": "axis-aligned cubes; see GenerateTestVectors.Cube(size, lo, hi)"
+      },
+      "expected": {
+        "problem": null,
+        "dsc": 0,
+        "mda_mm": 44.249193056,
+        "hd95_mm": 47.349762407,
+        "voxels_a": 216,
+        "voxels_b": 216,
+        "surface_voxels_a": 152,
+        "surface_voxels_b": 152
+      }
+    },
+    {
+      "id": "surface_one_empty",
+      "description": "One structure produced no voxel on the grid",
+      "input": {
+        "grid": "40x40x40 at 1 mm isotropic",
+        "mask_a_voxels_set": 1000,
+        "mask_b_voxels_set": 0,
+        "construction": "axis-aligned cubes; see GenerateTestVectors.Cube(size, lo, hi)"
+      },
+      "expected": {
+        "problem": "one of the structures produced no voxel on the sampling grid; it may be smaller than the grid spacing or lie outside the shared field of view"
+      }
+    },
+    {
+      "id": "surface_both_empty",
+      "description": "Neither structure produced any voxel",
+      "input": {
+        "grid": "40x40x40 at 1 mm isotropic",
+        "mask_a_voxels_set": 0,
+        "mask_b_voxels_set": 0,
+        "construction": "axis-aligned cubes; see GenerateTestVectors.Cube(size, lo, hi)"
+      },
+      "expected": {
+        "problem": "neither structure produced any voxel on the sampling grid"
+      }
+    },
+    {
+      "id": "surface_nested",
+      "description": "A small cube entirely inside a larger one (DSC ceiling case)",
+      "input": {
+        "grid": "40x40x40 at 1 mm isotropic",
+        "mask_a_voxels_set": 64,
+        "mask_b_voxels_set": 1000,
+        "construction": "axis-aligned cubes; see GenerateTestVectors.Cube(size, lo, hi)"
+      },
+      "expected": {
+        "problem": null,
+        "dsc": 0.120300752,
+        "mda_mm": 3.540926815,
+        "hd95_mm": 4.69041576,
+        "voxels_a": 64,
+        "voxels_b": 1000,
+        "surface_voxels_a": 56,
+        "surface_voxels_b": 488
+      }
+    },
+    {
+      "id": "similarity_identical",
+      "description": "Both vectors identical",
+      "input": {
+        "count": 5000,
+        "construction": "fixed[i] = Random(seed 20260801).NextDouble()*1000 as float, i = 0..4999; see GenerateTestVectors.SimilarityVectors for each moving vector",
+        "chosen_bin_count_for_count": 16
+      },
+      "expected": {
+        "problem": null,
+        "sample_count": 5000,
+        "ncc": 1,
+        "ssd": 0,
+        "nmi": 2,
+        "histogram_bins": 16
+      }
+    },
+    {
+      "id": "similarity_affine",
+      "description": "Moving = 2*fixed + 50 (perfect linear relation)",
+      "input": {
+        "count": 5000,
+        "construction": "fixed[i] = Random(seed 20260801).NextDouble()*1000 as float, i = 0..4999; see GenerateTestVectors.SimilarityVectors for each moving vector",
+        "chosen_bin_count_for_count": 16
+      },
+      "expected": {
+        "problem": null,
+        "sample_count": 5000,
+        "ncc": 1,
+        "ssd": 0.399811427,
+        "nmi": 2,
+        "histogram_bins": 16
+      }
+    },
+    {
+      "id": "similarity_inverted",
+      "description": "Moving = 1000 - fixed (perfect negative correlation)",
+      "input": {
+        "count": 5000,
+        "construction": "fixed[i] = Random(seed 20260801).NextDouble()*1000 as float, i = 0..4999; see GenerateTestVectors.SimilarityVectors for each moving vector",
+        "chosen_bin_count_for_count": 16
+      },
+      "expected": {
+        "problem": null,
+        "sample_count": 5000,
+        "ncc": -1,
+        "ssd": 0.352446374,
+        "nmi": 1.99537056,
+        "histogram_bins": 16
+      }
+    },
+    {
+      "id": "similarity_constant_moving",
+      "description": "The moving vector is constant (zero variance)",
+      "input": {
+        "count": 5000,
+        "construction": "fixed[i] = Random(seed 20260801).NextDouble()*1000 as float, i = 0..4999; see GenerateTestVectors.SimilarityVectors for each moving vector",
+        "chosen_bin_count_for_count": 16
+      },
+      "expected": {
+        "problem": "one of the images is constant over the overlapping region (zero variance)",
+        "sample_count": 5000
+      }
+    },
+    {
+      "id": "similarity_too_few",
+      "description": "Below the 1000-pair minimum",
+      "input": {
+        "count": 999,
+        "construction": "fixed[i] = Random(seed 20260801).NextDouble()*1000 as float, i = 0..4999; see GenerateTestVectors.SimilarityVectors for each moving vector",
+        "chosen_bin_count_for_count": 16
+      },
+      "expected": {
+        "problem": "only 999 overlapping voxel pairs; at least 1000 are required for a stable estimate",
+        "sample_count": 999
+      }
+    },
+    {
+      "id": "dsc_ceiling_1000_1000",
+      "description": "Largest Dice the two rasterised volumes permit, 2*min/(|A|+|B|)",
+      "input": {
+        "voxels_a": 1000,
+        "voxels_b": 1000
+      },
+      "expected": {
+        "dsc_ceiling": 1,
+        "below_0_90_tolerance": false
+      }
+    },
+    {
+      "id": "dsc_ceiling_900_2600",
+      "description": "Largest Dice the two rasterised volumes permit, 2*min/(|A|+|B|)",
+      "input": {
+        "voxels_a": 900,
+        "voxels_b": 2600
+      },
+      "expected": {
+        "dsc_ceiling": 0.514285714,
+        "below_0_90_tolerance": true
+      }
+    },
+    {
+      "id": "dsc_ceiling_700_2300",
+      "description": "Largest Dice the two rasterised volumes permit, 2*min/(|A|+|B|)",
+      "input": {
+        "voxels_a": 700,
+        "voxels_b": 2300
+      },
+      "expected": {
+        "dsc_ceiling": 0.466666667,
+        "below_0_90_tolerance": true
+      }
+    },
+    {
+      "id": "dsc_ceiling_1000_1222",
+      "description": "Largest Dice the two rasterised volumes permit, 2*min/(|A|+|B|)",
+      "input": {
+        "voxels_a": 1000,
+        "voxels_b": 1222
+      },
+      "expected": {
+        "dsc_ceiling": 0.900090009,
+        "below_0_90_tolerance": false
+      }
+    },
+    {
+      "id": "dsc_ceiling_0_500",
+      "description": "Largest Dice the two rasterised volumes permit, 2*min/(|A|+|B|)",
+      "input": {
+        "voxels_a": 0,
+        "voxels_b": 500
+      },
+      "expected": {
+        "dsc_ceiling": 0,
+        "below_0_90_tolerance": true
+      }
+    },
+    {
+      "id": "verdict_all_green",
+      "description": "Every gating metric inside tolerance",
+      "input": {
+        "setup": "see GenerateTestVectors.VerdictVectors, case verdict_all_green"
+      },
+      "expected": {
+        "overall_severity": "Warning",
+        "overall_semaphore": "Yellow",
+        "overall_status_text": "PARTIALLY COMPLIANT — The 5 evaluated metric(s) of registration 'SYNTHETIC' meet the [Standard treatment] profile, but 5 could not be measured. Verification is not complete.",
+        "metric_rows": [
+          { "metric_key": "NMI", "status": "N/A", "value": null },
+          { "metric_key": "NCC", "status": "N/A", "value": null },
+          { "metric_key": "SSD", "status": "N/A", "value": null },
+          { "metric_key": "Jacobian_Neg_%", "status": "Green", "value": 0 },
+          { "metric_key": "Jacobian_Departure", "status": "N/A", "value": null },
+          { "metric_key": "Max_Displacement", "status": "INFO", "value": 10 },
+          { "metric_key": "Smoothness", "status": "INFO", "value": 1 },
+          { "metric_key": "DVF_Gradient_Max", "status": "N/A", "value": null },
+          { "metric_key": "TRE_Mean", "status": "Green", "value": 0.5 },
+          { "metric_key": "TRE_Max", "status": "Green", "value": 0.6 },
+          { "metric_key": "Inverse_Consistency", "status": "Green", "value": 0.3 },
+          { "metric_key": "DSC", "status": "Green", "value": 0.95 },
+          { "metric_key": "MDA", "status": "Green", "value": 0.7 },
+          { "metric_key": "HD95", "status": "INFO", "value": 2 }
+        ],
+        "advisories": [
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "NMI could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "NCC could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "SSD could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Jacobian departure from 1 could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "DVF Gradient (max) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "TOLERANCE BASIS", "message": "TRE, MDA and consistency are held to 2.50 mm on this case. TG-132 Table III sets the tolerance at the maximum voxel dimension of the images being registered, which is what this figure is. The DSC band comes from Table III's 0.80-0.90 range, and the report notes it depends on the volume of the structure: 0.85 does not mean the same thing on a parotid as on a whole lung." },
+          { "severity": "REVIEW", "category": "TRANSFORM", "message": "The registration matrix could not be read from the API, so no translation, rotation or displacement is reported, and every metric that requires mapping a point through the registration is unavailable. Nothing has been estimated in their place. The property holding the matrix varies between Eclipse versions: the diagnostics tab lists what this registration object does expose." }
+        ]
+      }
+    },
+    {
+      "id": "verdict_fully_compliant",
+      "description": "Every metric either measured and in tolerance or not applicable: the only route to COMPLIANT",
+      "input": {
+        "setup": "see GenerateTestVectors.VerdictVectors, case verdict_fully_compliant"
+      },
+      "expected": {
+        "overall_severity": "Ok",
+        "overall_semaphore": "Green",
+        "overall_status_text": "COMPLIANT — All 5 evaluated metrics of registration 'SYNTHETIC' satisfy the tolerances of the [Standard treatment] profile. A further 5 metric(s) were measured for information only.",
+        "metric_rows": [
+          { "metric_key": "NMI", "status": "INFO", "value": 1.35 },
+          { "metric_key": "NCC", "status": "INFO", "value": 0.97 },
+          { "metric_key": "SSD", "status": "INFO", "value": 0.004 },
+          { "metric_key": "Jacobian_Neg_%", "status": "Green", "value": 0 },
+          { "metric_key": "Jacobian_Departure", "status": "INFO", "value": 0 },
+          { "metric_key": "Max_Displacement", "status": "INFO", "value": 12 },
+          { "metric_key": "Smoothness", "status": "INFO", "value": 1 },
+          { "metric_key": "TRE_Mean", "status": "Green", "value": 0.5 },
+          { "metric_key": "TRE_Max", "status": "Green", "value": 0.6 },
+          { "metric_key": "Inverse_Consistency", "status": "Green", "value": 0.3 },
+          { "metric_key": "DSC", "status": "Green", "value": 0.95 },
+          { "metric_key": "MDA", "status": "Green", "value": 0.7 },
+          { "metric_key": "HD95", "status": "INFO", "value": 2 }
+        ],
+        "advisories": [
+          { "severity": "INFO", "category": "SCOPE OF SIMILARITY METRICS", "message": "TG-132 §4.C.3 admits SSD, CC and MI for assessing a registration only if the metric was not the one optimised by the registration algorithm itself; otherwise the assessment is circular. Confirm which metric drives your TPS registration. TG-132 also notes these metrics are difficult to convert into a measure of spatial accuracy: a compliant value does not establish millimetric accuracy. For that, Table III lists TRE, MDA, DSC, the Jacobian determinant and consistency." },
+          { "severity": "INFO", "category": "TOLERANCE BASIS", "message": "TRE, MDA and consistency are held to 2.50 mm on this case. TG-132 Table III sets the tolerance at the maximum voxel dimension of the images being registered, which is what this figure is. The DSC band comes from Table III's 0.80-0.90 range, and the report notes it depends on the volume of the structure: 0.85 does not mean the same thing on a parotid as on a whole lung." },
+          { "severity": "REVIEW", "category": "TRANSFORM", "message": "The registration matrix could not be read from the API, so no translation, rotation or displacement is reported, and every metric that requires mapping a point through the registration is unavailable. Nothing has been estimated in their place. The property holding the matrix varies between Eclipse versions: the diagnostics tab lists what this registration object does expose." },
+          { "severity": "OK", "category": "STATUS", "message": "All measured metrics fall within the quality thresholds of the active profile." }
+        ]
+      }
+    },
+    {
+      "id": "verdict_one_red",
+      "description": "One gating metric breached (DSC), everything else green",
+      "input": {
+        "setup": "see GenerateTestVectors.VerdictVectors, case verdict_one_red"
+      },
+      "expected": {
+        "overall_severity": "Critical",
+        "overall_semaphore": "Red",
+        "overall_status_text": "NOT COMPLIANT — Registration 'SYNTHETIC' breaches 1 criterion(s) of the [Standard treatment] profile. 0 metric(s) in the attention zone, 9 unevaluated, 0 for information only.",
+        "metric_rows": [
+          { "metric_key": "NMI", "status": "N/A", "value": null },
+          { "metric_key": "NCC", "status": "N/A", "value": null },
+          { "metric_key": "SSD", "status": "N/A", "value": null },
+          { "metric_key": "Jacobian_Neg_%", "status": "N/A", "value": null },
+          { "metric_key": "Jacobian_Departure", "status": "N/A", "value": null },
+          { "metric_key": "Max_Displacement", "status": "N/A", "value": null },
+          { "metric_key": "Smoothness", "status": "N/A", "value": null },
+          { "metric_key": "DVF_Gradient_Max", "status": "N/A", "value": null },
+          { "metric_key": "TRE_Mean", "status": "Green", "value": 0.5 },
+          { "metric_key": "TRE_Max", "status": "Green", "value": 0.6 },
+          { "metric_key": "Inverse_Consistency", "status": "Green", "value": 0.3 },
+          { "metric_key": "DSC", "status": "Red", "value": 0.5 },
+          { "metric_key": "MDA", "status": "Green", "value": 0.7 },
+          { "metric_key": "HD95", "status": "N/A", "value": null }
+        ],
+        "advisories": [
+          { "severity": "CRITICAL", "category": "OUT OF TOLERANCE", "message": "DSC (Dice Overlap) = 0.500 against the 0.9 criterion of the [Standard treatment] profile (≥ 0.9 (yellow ≥ 0.8)). Anatomical overlap is out of tolerance. Slice-by-slice verification and manual adjustment of the propagated contours are recommended." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "NMI could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "NCC could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "SSD could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Jacobian < 0 could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Jacobian departure from 1 could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Max Displacement could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Smoothness could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "DVF Gradient (max) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "HD95 (Hausdorff) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "TOLERANCE BASIS", "message": "TRE, MDA and consistency are held to 2.50 mm on this case. TG-132 Table III sets the tolerance at the maximum voxel dimension of the images being registered, which is what this figure is. The DSC band comes from Table III's 0.80-0.90 range, and the report notes it depends on the volume of the structure: 0.85 does not mean the same thing on a parotid as on a whole lung." },
+          { "severity": "REVIEW", "category": "TRANSFORM", "message": "The registration matrix could not be read from the API, so no translation, rotation or displacement is reported, and every metric that requires mapping a point through the registration is unavailable. Nothing has been estimated in their place. The property holding the matrix varies between Eclipse versions: the diagnostics tab lists what this registration object does expose." }
+        ]
+      }
+    },
+    {
+      "id": "verdict_one_yellow",
+      "description": "One gating metric in the attention zone (DSC 0.85), none red",
+      "input": {
+        "setup": "see GenerateTestVectors.VerdictVectors, case verdict_one_yellow"
+      },
+      "expected": {
+        "overall_severity": "Warning",
+        "overall_semaphore": "Yellow",
+        "overall_status_text": "REVIEW REQUIRED — Registration 'SYNTHETIC' has 1 metric(s) in the attention zone of the [Standard treatment] profile. 12 unevaluated, 0 for information only.",
+        "metric_rows": [
+          { "metric_key": "NMI", "status": "N/A", "value": null },
+          { "metric_key": "NCC", "status": "N/A", "value": null },
+          { "metric_key": "SSD", "status": "N/A", "value": null },
+          { "metric_key": "Jacobian_Neg_%", "status": "N/A", "value": null },
+          { "metric_key": "Jacobian_Departure", "status": "N/A", "value": null },
+          { "metric_key": "Max_Displacement", "status": "N/A", "value": null },
+          { "metric_key": "Smoothness", "status": "N/A", "value": null },
+          { "metric_key": "DVF_Gradient_Max", "status": "N/A", "value": null },
+          { "metric_key": "TRE_Mean", "status": "Green", "value": 0.5 },
+          { "metric_key": "TRE_Max", "status": "N/A", "value": null },
+          { "metric_key": "Inverse_Consistency", "status": "N/A", "value": null },
+          { "metric_key": "DSC", "status": "Yellow", "value": 0.85 },
+          { "metric_key": "MDA", "status": "N/A", "value": null },
+          { "metric_key": "HD95", "status": "N/A", "value": null }
+        ],
+        "advisories": [
+          { "severity": "REVIEW", "category": "IN ATTENTION ZONE", "message": "DSC (Dice Overlap) = 0.850 against the 0.9 criterion of the [Standard treatment] profile (≥ 0.9 (yellow ≥ 0.8)). Anatomical overlap is out of tolerance. Slice-by-slice verification and manual adjustment of the propagated contours are recommended." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "NMI could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "NCC could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "SSD could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Jacobian < 0 could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Jacobian departure from 1 could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Max Displacement could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Smoothness could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "DVF Gradient (max) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "TRE (max) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Inverse consistency could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "MDA (mean surface distance) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "HD95 (Hausdorff) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "TOLERANCE BASIS", "message": "TRE, MDA and consistency are held to 2.50 mm on this case. TG-132 Table III sets the tolerance at the maximum voxel dimension of the images being registered, which is what this figure is. The DSC band comes from Table III's 0.80-0.90 range, and the report notes it depends on the volume of the structure: 0.85 does not mean the same thing on a parotid as on a whole lung." },
+          { "severity": "REVIEW", "category": "TRANSFORM", "message": "The registration matrix could not be read from the API, so no translation, rotation or displacement is reported, and every metric that requires mapping a point through the registration is unavailable. Nothing has been estimated in their place. The property holding the matrix varies between Eclipse versions: the diagnostics tab lists what this registration object does expose." }
+        ]
+      }
+    },
+    {
+      "id": "verdict_red_beats_yellow",
+      "description": "One red and one yellow at the same time: red takes precedence",
+      "input": {
+        "setup": "see GenerateTestVectors.VerdictVectors, case verdict_red_beats_yellow"
+      },
+      "expected": {
+        "overall_severity": "Critical",
+        "overall_semaphore": "Red",
+        "overall_status_text": "NOT COMPLIANT — Registration 'SYNTHETIC' breaches 1 criterion(s) of the [Standard treatment] profile. 1 metric(s) in the attention zone, 12 unevaluated, 0 for information only.",
+        "metric_rows": [
+          { "metric_key": "NMI", "status": "N/A", "value": null },
+          { "metric_key": "NCC", "status": "N/A", "value": null },
+          { "metric_key": "SSD", "status": "N/A", "value": null },
+          { "metric_key": "Jacobian_Neg_%", "status": "N/A", "value": null },
+          { "metric_key": "Jacobian_Departure", "status": "N/A", "value": null },
+          { "metric_key": "Max_Displacement", "status": "N/A", "value": null },
+          { "metric_key": "Smoothness", "status": "N/A", "value": null },
+          { "metric_key": "DVF_Gradient_Max", "status": "N/A", "value": null },
+          { "metric_key": "TRE_Mean", "status": "Red", "value": 9 },
+          { "metric_key": "TRE_Max", "status": "N/A", "value": null },
+          { "metric_key": "Inverse_Consistency", "status": "N/A", "value": null },
+          { "metric_key": "DSC", "status": "Yellow", "value": 0.85 },
+          { "metric_key": "MDA", "status": "N/A", "value": null },
+          { "metric_key": "HD95", "status": "N/A", "value": null }
+        ],
+        "advisories": [
+          { "severity": "CRITICAL", "category": "OUT OF TOLERANCE", "message": "TRE (mean) = 9.000 mm against the 2.5 mm criterion of the [Standard treatment] profile (≤ 2.5 mm — TG-132, max voxel dimension). Landmark residual exceeds tolerance. TG-132 Table III sets this at the maximum voxel dimension. This is a direct measure of spatial error, so it carries more weight than any of the intensity metrics." },
+          { "severity": "REVIEW", "category": "IN ATTENTION ZONE", "message": "DSC (Dice Overlap) = 0.850 against the 0.9 criterion of the [Standard treatment] profile (≥ 0.9 (yellow ≥ 0.8)). Anatomical overlap is out of tolerance. Slice-by-slice verification and manual adjustment of the propagated contours are recommended." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "NMI could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "NCC could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "SSD could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Jacobian < 0 could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Jacobian departure from 1 could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Max Displacement could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Smoothness could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "DVF Gradient (max) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "TRE (max) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Inverse consistency could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "MDA (mean surface distance) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "HD95 (Hausdorff) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "TOLERANCE BASIS", "message": "TRE, MDA and consistency are held to 2.50 mm on this case. TG-132 Table III sets the tolerance at the maximum voxel dimension of the images being registered, which is what this figure is. The DSC band comes from Table III's 0.80-0.90 range, and the report notes it depends on the volume of the structure: 0.85 does not mean the same thing on a parotid as on a whole lung." },
+          { "severity": "REVIEW", "category": "TRANSFORM", "message": "The registration matrix could not be read from the API, so no translation, rotation or displacement is reported, and every metric that requires mapping a point through the registration is unavailable. Nothing has been estimated in their place. The property holding the matrix varies between Eclipse versions: the diagnostics tab lists what this registration object does expose." }
+        ]
+      }
+    },
+    {
+      "id": "verdict_partially_compliant",
+      "description": "All measured gating metrics green, but one was attempted and failed",
+      "input": {
+        "setup": "see GenerateTestVectors.VerdictVectors, case verdict_partially_compliant"
+      },
+      "expected": {
+        "overall_severity": "Warning",
+        "overall_semaphore": "Yellow",
+        "overall_status_text": "PARTIALLY COMPLIANT — The 1 evaluated metric(s) of registration 'SYNTHETIC' meet the [Standard treatment] profile, but 13 could not be measured. Verification is not complete.",
+        "metric_rows": [
+          { "metric_key": "NMI", "status": "N/A", "value": null },
+          { "metric_key": "NCC", "status": "N/A", "value": null },
+          { "metric_key": "SSD", "status": "N/A", "value": null },
+          { "metric_key": "Jacobian_Neg_%", "status": "N/A", "value": null },
+          { "metric_key": "Jacobian_Departure", "status": "N/A", "value": null },
+          { "metric_key": "Max_Displacement", "status": "N/A", "value": null },
+          { "metric_key": "Smoothness", "status": "N/A", "value": null },
+          { "metric_key": "DVF_Gradient_Max", "status": "N/A", "value": null },
+          { "metric_key": "TRE_Mean", "status": "N/A", "value": null },
+          { "metric_key": "TRE_Max", "status": "N/A", "value": null },
+          { "metric_key": "Inverse_Consistency", "status": "N/A", "value": null },
+          { "metric_key": "DSC", "status": "Green", "value": 0.95 },
+          { "metric_key": "MDA", "status": "N/A", "value": null },
+          { "metric_key": "HD95", "status": "N/A", "value": null }
+        ],
+        "advisories": [
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "NMI could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "NCC could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "SSD could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Jacobian < 0 could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Jacobian departure from 1 could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Max Displacement could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Smoothness could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "DVF Gradient (max) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "TRE (mean) could not be measured: synthetic read failure This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "TRE (max) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Inverse consistency could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "MDA (mean surface distance) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "HD95 (Hausdorff) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "TOLERANCE BASIS", "message": "TRE, MDA and consistency are held to 2.50 mm on this case. TG-132 Table III sets the tolerance at the maximum voxel dimension of the images being registered, which is what this figure is. The DSC band comes from Table III's 0.80-0.90 range, and the report notes it depends on the volume of the structure: 0.85 does not mean the same thing on a parotid as on a whole lung." },
+          { "severity": "REVIEW", "category": "TRANSFORM", "message": "The registration matrix could not be read from the API, so no translation, rotation or displacement is reported, and every metric that requires mapping a point through the registration is unavailable. Nothing has been estimated in their place. The property holding the matrix varies between Eclipse versions: the diagnostics tab lists what this registration object does expose." }
+        ]
+      }
+    },
+    {
+      "id": "verdict_not_verified",
+      "description": "Only ungated metrics were measured: nothing can establish compliance",
+      "input": {
+        "setup": "see GenerateTestVectors.VerdictVectors, case verdict_not_verified"
+      },
+      "expected": {
+        "overall_severity": "Warning",
+        "overall_semaphore": "Yellow",
+        "overall_status_text": "NOT VERIFIED — 3 metric(s) of registration 'SYNTHETIC' were measured, but none of them carries a tolerance that can establish compliance, and 11 could not be measured. The metrics that can verify a registration are TRE, MDA, DSC and consistency: placing matched landmarks, or contouring the same structure on both series, is what enables them.",
+        "metric_rows": [
+          { "metric_key": "NMI", "status": "INFO", "value": 1.3 },
+          { "metric_key": "NCC", "status": "INFO", "value": 0.97 },
+          { "metric_key": "SSD", "status": "INFO", "value": 0.004 },
+          { "metric_key": "Jacobian_Neg_%", "status": "N/A", "value": null },
+          { "metric_key": "Jacobian_Departure", "status": "N/A", "value": null },
+          { "metric_key": "Max_Displacement", "status": "N/A", "value": null },
+          { "metric_key": "Smoothness", "status": "N/A", "value": null },
+          { "metric_key": "DVF_Gradient_Max", "status": "N/A", "value": null },
+          { "metric_key": "TRE_Mean", "status": "N/A", "value": null },
+          { "metric_key": "TRE_Max", "status": "N/A", "value": null },
+          { "metric_key": "Inverse_Consistency", "status": "N/A", "value": null },
+          { "metric_key": "DSC", "status": "N/A", "value": null },
+          { "metric_key": "MDA", "status": "N/A", "value": null },
+          { "metric_key": "HD95", "status": "N/A", "value": null }
+        ],
+        "advisories": [
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Jacobian < 0 could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Jacobian departure from 1 could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Max Displacement could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Smoothness could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "DVF Gradient (max) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "TRE (mean) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "TRE (max) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Inverse consistency could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "DSC (Dice Overlap) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "MDA (mean surface distance) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "HD95 (Hausdorff) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "SCOPE OF SIMILARITY METRICS", "message": "TG-132 §4.C.3 admits SSD, CC and MI for assessing a registration only if the metric was not the one optimised by the registration algorithm itself; otherwise the assessment is circular. Confirm which metric drives your TPS registration. TG-132 also notes these metrics are difficult to convert into a measure of spatial accuracy: a compliant value does not establish millimetric accuracy. For that, Table III lists TRE, MDA, DSC, the Jacobian determinant and consistency." },
+          { "severity": "REVIEW", "category": "TOLERANCE BASIS", "message": "TRE, MDA and consistency are not classified on this case: TG-132 ties their tolerance to the maximum voxel dimension of the images, and that could not be read. The values are still measured and exported." },
+          { "severity": "REVIEW", "category": "TRANSFORM", "message": "The registration matrix could not be read from the API, so no translation, rotation or displacement is reported, and every metric that requires mapping a point through the registration is unavailable. Nothing has been estimated in their place. The property holding the matrix varies between Eclipse versions: the diagnostics tab lists what this registration object does expose." }
+        ]
+      }
+    },
+    {
+      "id": "verdict_no_evidence",
+      "description": "Nothing measured at all",
+      "input": {
+        "setup": "see GenerateTestVectors.VerdictVectors, case verdict_no_evidence"
+      },
+      "expected": {
+        "overall_severity": "Warning",
+        "overall_semaphore": "Yellow",
+        "overall_status_text": "NO EVIDENCE — No metric of registration 'SYNTHETIC' could be evaluated. See the diagnostics tab for what failed.",
+        "metric_rows": [
+          { "metric_key": "NMI", "status": "N/A", "value": null },
+          { "metric_key": "NCC", "status": "N/A", "value": null },
+          { "metric_key": "SSD", "status": "N/A", "value": null },
+          { "metric_key": "Jacobian_Neg_%", "status": "N/A", "value": null },
+          { "metric_key": "Jacobian_Departure", "status": "N/A", "value": null },
+          { "metric_key": "Max_Displacement", "status": "N/A", "value": null },
+          { "metric_key": "Smoothness", "status": "N/A", "value": null },
+          { "metric_key": "DVF_Gradient_Max", "status": "N/A", "value": null },
+          { "metric_key": "TRE_Mean", "status": "N/A", "value": null },
+          { "metric_key": "TRE_Max", "status": "N/A", "value": null },
+          { "metric_key": "Inverse_Consistency", "status": "N/A", "value": null },
+          { "metric_key": "DSC", "status": "N/A", "value": null },
+          { "metric_key": "MDA", "status": "N/A", "value": null },
+          { "metric_key": "HD95", "status": "N/A", "value": null }
+        ],
+        "advisories": [
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "NMI could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "NCC could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "SSD could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Jacobian < 0 could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Jacobian departure from 1 could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Max Displacement could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Smoothness could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "DVF Gradient (max) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "TRE (mean) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "TRE (max) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Inverse consistency could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "DSC (Dice Overlap) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "MDA (mean surface distance) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "HD95 (Hausdorff) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "REVIEW", "category": "TOLERANCE BASIS", "message": "TRE, MDA and consistency are not classified on this case: TG-132 ties their tolerance to the maximum voxel dimension of the images, and that could not be read. The values are still measured and exported." },
+          { "severity": "REVIEW", "category": "TRANSFORM", "message": "The registration matrix could not be read from the API, so no translation, rotation or displacement is reported, and every metric that requires mapping a point through the registration is unavailable. Nothing has been estimated in their place. The property holding the matrix varies between Eclipse versions: the diagnostics tab lists what this registration object does expose." }
+        ]
+      }
+    },
+    {
+      "id": "verdict_analytic_only",
+      "description": "Only the tautological rigid values are present: they must not establish compliance",
+      "input": {
+        "setup": "see GenerateTestVectors.VerdictVectors, case verdict_analytic_only"
+      },
+      "expected": {
+        "overall_severity": "Warning",
+        "overall_semaphore": "Yellow",
+        "overall_status_text": "NO EVIDENCE — No metric of registration 'SYNTHETIC' could be evaluated. See the diagnostics tab for what failed. The 2 metric(s) shown with a value are exact by definition for this kind of transform and would read the same on any registration, so they verify nothing.",
+        "metric_rows": [
+          { "metric_key": "NMI", "status": "N/A", "value": null },
+          { "metric_key": "NCC", "status": "N/A", "value": null },
+          { "metric_key": "SSD", "status": "N/A", "value": null },
+          { "metric_key": "Jacobian_Neg_%", "status": "Green", "value": 0 },
+          { "metric_key": "Jacobian_Departure", "status": "N/A", "value": null },
+          { "metric_key": "Max_Displacement", "status": "N/A", "value": null },
+          { "metric_key": "Smoothness", "status": "INFO", "value": 1 },
+          { "metric_key": "DVF_Gradient_Max", "status": "N/A", "value": null },
+          { "metric_key": "TRE_Mean", "status": "N/A", "value": null },
+          { "metric_key": "TRE_Max", "status": "N/A", "value": null },
+          { "metric_key": "Inverse_Consistency", "status": "N/A", "value": null },
+          { "metric_key": "DSC", "status": "N/A", "value": null },
+          { "metric_key": "MDA", "status": "N/A", "value": null },
+          { "metric_key": "HD95", "status": "N/A", "value": null }
+        ],
+        "advisories": [
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "NMI could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "NCC could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "SSD could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Jacobian departure from 1 could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Max Displacement could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "DVF Gradient (max) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "TRE (mean) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "TRE (max) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Inverse consistency could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "DSC (Dice Overlap) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "MDA (mean surface distance) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "HD95 (Hausdorff) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "REVIEW", "category": "TOLERANCE BASIS", "message": "TRE, MDA and consistency are not classified on this case: TG-132 ties their tolerance to the maximum voxel dimension of the images, and that could not be read. The values are still measured and exported." },
+          { "severity": "REVIEW", "category": "TRANSFORM", "message": "The registration matrix could not be read from the API, so no translation, rotation or displacement is reported, and every metric that requires mapping a point through the registration is unavailable. Nothing has been estimated in their place. The property holding the matrix varies between Eclipse versions: the diagnostics tab lists what this registration object does expose." }
+        ]
+      }
+    },
+    {
+      "id": "verdict_empty_registration_unapproved",
+      "description": "Identity transform on an unapproved registration",
+      "input": {
+        "setup": "see GenerateTestVectors.VerdictVectors, case verdict_empty_registration_unapproved"
+      },
+      "expected": {
+        "overall_severity": "Warning",
+        "overall_semaphore": "Yellow",
+        "overall_status_text": "PARTIALLY COMPLIANT — The 1 evaluated metric(s) of registration 'SYNTHETIC' meet the [Standard treatment] profile, but 13 could not be measured. Verification is not complete.",
+        "metric_rows": [
+          { "metric_key": "NMI", "status": "N/A", "value": null },
+          { "metric_key": "NCC", "status": "N/A", "value": null },
+          { "metric_key": "SSD", "status": "N/A", "value": null },
+          { "metric_key": "Jacobian_Neg_%", "status": "N/A", "value": null },
+          { "metric_key": "Jacobian_Departure", "status": "N/A", "value": null },
+          { "metric_key": "Max_Displacement", "status": "N/A", "value": null },
+          { "metric_key": "Smoothness", "status": "N/A", "value": null },
+          { "metric_key": "DVF_Gradient_Max", "status": "N/A", "value": null },
+          { "metric_key": "TRE_Mean", "status": "N/A", "value": null },
+          { "metric_key": "TRE_Max", "status": "N/A", "value": null },
+          { "metric_key": "Inverse_Consistency", "status": "N/A", "value": null },
+          { "metric_key": "DSC", "status": "Green", "value": 0.95 },
+          { "metric_key": "MDA", "status": "N/A", "value": null },
+          { "metric_key": "HD95", "status": "N/A", "value": null }
+        ],
+        "advisories": [
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "NMI could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "NCC could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "SSD could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Jacobian < 0 could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Jacobian departure from 1 could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Max Displacement could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Smoothness could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "DVF Gradient (max) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "TRE (mean) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "TRE (max) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "Inverse consistency could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "MDA (mean surface distance) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "METRIC NOT EVALUATED", "message": "HD95 (Hausdorff) could not be measured: not measured This metric neither supports nor contradicts acceptance of the registration." },
+          { "severity": "INFO", "category": "TOLERANCE BASIS", "message": "TRE, MDA and consistency are held to 2.50 mm on this case. TG-132 Table III sets the tolerance at the maximum voxel dimension of the images being registered, which is what this figure is. The DSC band comes from Table III's 0.80-0.90 range, and the report notes it depends on the volume of the structure: 0.85 does not mean the same thing on a parotid as on a whole lung." },
+          { "severity": "REVIEW", "category": "EMPTY REGISTRATION", "message": "The transform is exactly the identity: this registration moves nothing. Its status is Unapproved. An unapproved registration with an identity transform is almost always one that was created and never executed. Run the registration, then audit it — the metrics below describe the alignment of the two series as acquired, not the work of any registration." }
+        ]
+      }
+    }
+  ]
+}
